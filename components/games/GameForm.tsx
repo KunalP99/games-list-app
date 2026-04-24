@@ -64,15 +64,12 @@ export default function GameForm({ game }: { game?: Game }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Year</label>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Release Date</label>
             <input
-              name="year_developed"
-              type="number"
-              min={1950}
-              max={2100}
-              defaultValue={game?.year_developed ?? ''}
+              name="release_date"
+              type="date"
+              defaultValue={game?.release_date ?? ''}
               className={input}
-              placeholder="e.g. 2015"
             />
           </div>
         </div>
@@ -119,8 +116,8 @@ export default function GameForm({ game }: { game?: Game }) {
             type="number"
             min={0}
             max={100}
-            step={0.1}
-            defaultValue={game?.achievement_progress ?? ''}
+            step={1}
+            defaultValue={game?.achievement_progress != null ? Math.round(game.achievement_progress) : ''}
             className={input}
             placeholder="e.g. 75"
           />
@@ -128,75 +125,58 @@ export default function GameForm({ game }: { game?: Game }) {
 
         {/* Completion fields — only shown when status is completed */}
         {status === 'completed' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-zinc-100">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Completion Date</label>
-              <input
-                name="completion_date"
-                type="date"
-                defaultValue={game?.completion_date ?? ''}
-                className={input}
-              />
+          <div className="space-y-4 pt-2 border-t border-zinc-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Completion Date</label>
+                <input
+                  name="completion_date"
+                  type="date"
+                  defaultValue={game?.completion_date ?? ''}
+                  className={input}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Rating (1–10)</label>
+                <input
+                  name="rating"
+                  type="number"
+                  min={1}
+                  max={10}
+                  defaultValue={game?.rating ?? ''}
+                  className={input}
+                  placeholder="e.g. 9"
+                />
+              </div>
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Rating (1–10)</label>
-              <input
-                name="rating"
-                type="number"
-                min={1}
-                max={10}
-                defaultValue={game?.rating ?? ''}
+              <label className="block text-sm font-medium text-zinc-700 mb-1">Review</label>
+              <textarea
+                name="review"
+                rows={4}
+                defaultValue={game?.review ?? ''}
                 className={input}
-                placeholder="e.g. 9"
+                placeholder="What did you think?"
               />
             </div>
           </div>
         )}
       </section>
 
-      {/* Review & Notes */}
-      <section className="bg-white border border-zinc-200 rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Review & Notes</h2>
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">Review</label>
-          <textarea
-            name="review"
-            rows={4}
-            defaultValue={game?.review ?? ''}
-            className={input}
-            placeholder="What did you think?"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Notes <span className="text-xs text-zinc-400">(private)</span>
-          </label>
-          <textarea
-            name="notes"
-            rows={3}
-            defaultValue={game?.notes ?? ''}
-            className={input}
-            placeholder="Personal reminders, tips, etc."
-          />
-        </div>
-      </section>
-
-      {/* Wheel */}
+      {/* Notes — always visible, private */}
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            name="in_wheel"
-            type="checkbox"
-            defaultChecked={game?.in_wheel ?? false}
-            className="w-4 h-4 rounded accent-violet-600"
-          />
-          <span>
-            <span className="text-sm font-medium text-zinc-700">Include in wheel</span>
-            <span className="block text-xs text-zinc-400">This game can be selected when spinning</span>
-          </span>
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Notes</h2>
+        <label className="block text-sm font-medium text-zinc-700 mb-1">
+          Personal notes <span className="text-xs text-zinc-400">(private)</span>
         </label>
+        <textarea
+          name="notes"
+          rows={3}
+          defaultValue={game?.notes ?? ''}
+          className={input}
+          placeholder="Personal reminders, tips, etc."
+        />
       </section>
 
       {error && (

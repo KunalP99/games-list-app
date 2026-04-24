@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import type { Profile } from '@/lib/types'
+import type { Profile, Game } from '@/lib/types'
 import Link from 'next/link'
+import StatusBadge from '@/components/games/StatusBadge'
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -15,12 +16,29 @@ export default async function DashboardPage() {
     .eq('id', user!.id)
     .single() as { data: Profile | null; error: unknown }
 
-  const { data: games } = await supabase
+  const { data: allGames } = await supabase
     .from('games')
     .select('hours_played')
     .eq('user_id', user!.id) as { data: { hours_played: number | null }[] | null; error: unknown }
 
-  const totalHours = games?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
+  const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
+
+  const { data: playingGames } = await supabase
+    .from('games')
+    .select('id, title, status, hours_played, achievement_progress, rating, completion_date')
+    .eq('user_id', user!.id)
+    .eq('status', 'playing')
+    .order('created_at', { ascending: false }) as { data: Game[] | null; error: unknown }
+
+  const { data: completedGames } = await supabase
+    .from('games')
+    .select('id, title, status, hours_played, achievement_progress, rating, completion_date')
+    .eq('user_id', user!.id)
+    .eq('status', 'completed')
+    .order('completion_date', { ascending: false, nullsFirst: false })
+    .limit(10) as { data: Game[] | null; error: unknown }
+
+  const recentGames = [...(playingGames ?? []), ...(completedGames ?? [])]
 
   return (
     <div className="space-y-8">
@@ -53,6 +71,76 @@ export default async function DashboardPage() {
           <QuickAction href="/tickets" label="Ticket History" icon="🎟️" />
         </div>
       </div>
+
+      {/* Recent games table */}
+      {recentGames.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+            Recent Activity
+          </h2>
+          <div className="w-full bg-white border border-zinc-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 bg-zinc-50">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Title</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Status</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden md:table-cell">Hours</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden md:table-cell">Achievements</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden md:table-cell">Rating</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wider hidden lg:table-cell">Completed</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {recentGames.map(game => (
+                  <tr key={game.id} className="hover:bg-zinc-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/games/${game.id}`}
+                        className="font-medium text-zinc-900 hover:text-violet-600 transition-colors"
+                      >
+                        {game.title}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={game.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right text-zinc-600 hidden md:table-cell">
+                      {game.hours_played != null ? `${game.hours_played}h` : <span className="text-zinc-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {game.achievement_progress != null ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-zinc-600 text-xs">{Math.round(game.achievement_progress)}%</span>
+                          <div className="w-20 h-1.5 bg-zinc-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${colorGradient(Math.round(game.achievement_progress))}`}
+                              style={{ width: `${game.achievement_progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-right"><span className="text-zinc-300">—</span></div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right hidden md:table-cell">
+                      {game.rating != null ? (
+                        <span className="text-zinc-600">{game.rating}<span className="text-zinc-400">/10</span></span>
+                      ) : (
+                        <span className="text-zinc-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right text-zinc-500 hidden lg:table-cell">
+                      {game.completion_date
+                        ? new Date(game.completion_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : <span className="text-zinc-300">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -91,6 +179,14 @@ function QuickAction({ href, label, icon }: { href: string; label: string; icon:
       {label}
     </Link>
   )
+}
+
+function colorGradient(pct: number): string {
+  if (pct === 100) return 'bg-gradient-to-r from-emerald-400 to-teal-500'
+  if (pct >= 75)   return 'bg-gradient-to-r from-green-400 to-emerald-500'
+  if (pct >= 50)   return 'bg-gradient-to-r from-amber-400 to-orange-400'
+  if (pct >= 20)   return 'bg-gradient-to-r from-orange-400 to-red-400'
+  return                  'bg-gradient-to-r from-red-500 to-rose-600'
 }
 
 function formatTurn(turn: string): string {

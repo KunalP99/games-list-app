@@ -50,7 +50,7 @@ export type Database = {
           user_id: string
           title: string
           developer: string | null
-          year_developed: number | null
+          release_date: string | null
           status: 'playing' | 'completed' | 'backlog'
           hours_played: number | null
           completion_date: string | null

@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
 const STATUS_TABS = [
-  { value: '', label: 'All' },
+  { value: 'all', label: 'All' },
   { value: 'backlog', label: 'Backlog' },
   { value: 'playing', label: 'Playing' },
   { value: 'completed', label: 'Completed' },
@@ -21,13 +21,12 @@ export default function GameFilters() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const activeStatus = searchParams.get('status') ?? ''
+  const activeStatus = searchParams.get('status') ?? 'all'
   const activeSort = searchParams.get('sort') ?? 'created_at'
 
   function update(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString())
-    if (value) params.set(key, value)
-    else params.delete(key)
+    params.set(key, value)
     router.push(`${pathname}?${params.toString()}`)
   }
 

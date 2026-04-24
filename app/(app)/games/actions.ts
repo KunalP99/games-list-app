@@ -15,7 +15,7 @@ export async function createGame(formData: FormData) {
     user_id: user.id,
     title: (formData.get('title') as string).trim(),
     developer: (formData.get('developer') as string)?.trim() || null,
-    year_developed: formData.get('year_developed') ? Number(formData.get('year_developed')) : null,
+    release_date: formData.get('release_date') || null,
     status,
     hours_played: formData.get('hours_played') ? Number(formData.get('hours_played')) : null,
     completion_date: status === 'completed' && formData.get('completion_date') ? formData.get('completion_date') as string : null,
@@ -23,7 +23,7 @@ export async function createGame(formData: FormData) {
     achievement_progress: formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null,
     review: (formData.get('review') as string)?.trim() || null,
     notes: (formData.get('notes') as string)?.trim() || null,
-    in_wheel: formData.get('in_wheel') === 'on',
+    in_wheel: false,
   }).select('id').single()
 
   if (error) return { error: error.message }
@@ -43,7 +43,7 @@ export async function updateGame(id: string, formData: FormData) {
   const { error } = await (supabase.from('games') as any).update({
     title: (formData.get('title') as string).trim(),
     developer: (formData.get('developer') as string)?.trim() || null,
-    year_developed: formData.get('year_developed') ? Number(formData.get('year_developed')) : null,
+    release_date: formData.get('release_date') || null,
     status,
     hours_played: formData.get('hours_played') ? Number(formData.get('hours_played')) : null,
     completion_date: status === 'completed' && formData.get('completion_date') ? formData.get('completion_date') as string : null,
@@ -51,7 +51,7 @@ export async function updateGame(id: string, formData: FormData) {
     achievement_progress: formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null,
     review: (formData.get('review') as string)?.trim() || null,
     notes: (formData.get('notes') as string)?.trim() || null,
-    in_wheel: formData.get('in_wheel') === 'on',
+    in_wheel: false,
   }).eq('id', id).eq('user_id', user.id)
 
   if (error) return { error: error.message }

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
 import GameCard from '@/components/games/GameCard'
@@ -10,10 +11,12 @@ export default async function GamesPage({
 }: {
   searchParams: { status?: string; sort?: string }
 }) {
+  if (!searchParams.status) redirect('/games?status=completed')
+
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const status = searchParams.status
+  const status = searchParams.status === 'all' ? undefined : searchParams.status
   const sort = searchParams.sort ?? 'created_at'
   const sortAsc = sort === 'title'
 
@@ -21,7 +24,7 @@ export default async function GamesPage({
     .from('games')
     .select('*')
     .eq('user_id', user!.id)
-    .order(sort, { ascending: sortAsc })
+    .order(sort, { ascending: sortAsc, nullsFirst: false })
 
   if (status) query = query.eq('status', status)
 

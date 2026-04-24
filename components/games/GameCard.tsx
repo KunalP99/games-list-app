@@ -31,9 +31,6 @@ export default function GameCard({ game }: { game: Game }) {
         {game.achievement_progress != null && (
           <span>{game.achievement_progress}% achievements</span>
         )}
-        {game.in_wheel && (
-          <span className="text-violet-500">🎡 In wheel</span>
-        )}
       </div>
     </Link>
   )

@@ -29,7 +29,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
             <StatusBadge status={game.status} />
           </div>
           <p className="text-zinc-500 text-sm">
-            {[game.developer, game.year_developed].filter(Boolean).join(' · ')}
+            {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null].filter(Boolean).join(' · ')}
           </p>
         </div>
         {isOwner && (
@@ -46,11 +46,10 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Stat label="Hours Played" value={game.hours_played != null ? `${game.hours_played}h` : '—'} />
-        <Stat label="Rating" value={game.rating != null ? `${game.rating}/10` : '—'} />
-        <Stat label="Achievements" value={game.achievement_progress != null ? `${game.achievement_progress}%` : '—'} />
-        <Stat label="In Wheel" value={game.in_wheel ? 'Yes' : 'No'} />
+        <RatingStat rating={game.rating} />
+        <AchievementStat progress={game.achievement_progress} />
       </div>
 
       {/* Completion date */}
@@ -95,6 +94,65 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="bg-white border border-zinc-200 rounded-xl p-4">
       <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">{label}</p>
       <p className="mt-1 text-lg font-bold text-zinc-900">{value}</p>
+    </div>
+  )
+}
+
+function colorGradient(value: number, max: number): string {
+  const pct = (value / max) * 100
+  if (pct === 100) return 'bg-gradient-to-br from-emerald-400 to-teal-500'
+  if (pct >= 75)   return 'bg-gradient-to-br from-green-400 to-emerald-500'
+  if (pct >= 50)   return 'bg-gradient-to-br from-amber-400 to-orange-400'
+  if (pct >= 20)   return 'bg-gradient-to-br from-orange-400 to-red-400'
+  return                  'bg-gradient-to-br from-red-500 to-rose-600'
+}
+
+function RatingStat({ rating }: { rating: number | null }) {
+  if (rating == null) {
+    return (
+      <div className="bg-white border border-zinc-200 rounded-xl p-4">
+        <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Rating</p>
+        <p className="mt-1 text-lg font-bold text-zinc-900">—</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${colorGradient(rating, 10)} rounded-xl p-4`}>
+      <p className="text-xs text-white/80 font-medium uppercase tracking-wider">Rating</p>
+      <p className="mt-1 text-lg font-bold text-white">{rating}/10</p>
+    </div>
+  )
+}
+
+function AchievementStat({ progress }: { progress: number | null }) {
+  if (progress == null) {
+    return (
+      <div className="bg-white border border-zinc-200 rounded-xl p-4">
+        <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Achievements</p>
+        <p className="mt-1 text-lg font-bold text-zinc-900">—</p>
+      </div>
+    )
+  }
+
+  const is100 = progress === 100
+
+  return (
+    <div className="relative">
+      {is100 && (
+        <>
+          <span className="absolute -top-3 left-0 text-yellow-300 text-base leading-none select-none">✦</span>
+          <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-yellow-200 text-xs leading-none select-none">✦</span>
+          <span className="absolute -top-3 right-0 text-yellow-300 text-base leading-none select-none">✦</span>
+          <span className="absolute -bottom-3 left-0 text-yellow-300 text-sm leading-none select-none">✦</span>
+          <span className="absolute -bottom-3 right-0 text-yellow-300 text-sm leading-none select-none">✦</span>
+        </>
+      )}
+      <div className={`${colorGradient(progress, 100)} rounded-xl p-4 ${is100 ? 'ring-2 ring-emerald-300 ring-offset-1' : ''}`}>
+        <p className="text-xs text-white/80 font-medium uppercase tracking-wider">Achievements</p>
+        <p className="mt-1 text-lg font-bold text-white">{Math.round(progress)}%</p>
+        {is100 && <p className="text-xs text-white/80 mt-0.5">Complete ✓</p>}
+      </div>
     </div>
   )
 }
