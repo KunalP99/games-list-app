@@ -58,6 +58,10 @@ export type Database = {
           achievement_progress: number | null
           review: string | null
           notes: string | null
+          image_url: string | null
+          platform: string | null
+          is_favourite: boolean
+          is_replay: boolean
           in_wheel: boolean
           assigned_by: string | null
           created_at: string
@@ -76,6 +80,10 @@ export type Database = {
           achievement_progress?: number | null
           review?: string | null
           notes?: string | null
+          image_url?: string | null
+          platform?: string | null
+          is_favourite?: boolean
+          is_replay?: boolean
           in_wheel?: boolean
           assigned_by?: string | null
           created_at?: string
@@ -94,6 +102,10 @@ export type Database = {
           achievement_progress?: number | null
           review?: string | null
           notes?: string | null
+          image_url?: string | null
+          platform?: string | null
+          is_favourite?: boolean
+          is_replay?: boolean
           in_wheel?: boolean
           assigned_by?: string | null
           created_at?: string

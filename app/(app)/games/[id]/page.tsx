@@ -19,18 +19,41 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
   const isOwner = game.user_id === user?.id
 
+  const { data: sameGames } = await supabase
+    .from('games')
+    .select('id, created_at')
+    .eq('user_id', game.user_id)
+    .ilike('title', game.title)
+    .order('created_at', { ascending: true }) as { data: { id: string; created_at: string }[] | null }
+
+  const totalPlaythroughs = sameGames?.length ?? 1
+  const playthroughNumber = (sameGames?.findIndex(g => g.id === game.id) ?? 0) + 1
+
   return (
     <div className="max-w-2xl space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex items-center gap-3 mb-1 flex-wrap">
             <h1 className="text-2xl font-bold text-zinc-900">{game.title}</h1>
+            {game.is_favourite && (
+              <span className="text-amber-400 text-xl leading-none" title="Favourite">★</span>
+            )}
             <StatusBadge status={game.status} />
+            {game.is_replay && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
+                ↩ Replay
+              </span>
+            )}
           </div>
           <p className="text-zinc-500 text-sm">
-            {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null].filter(Boolean).join(' · ')}
+            {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).join(' · ')}
           </p>
+          {totalPlaythroughs > 1 && (
+            <p className="text-xs text-zinc-400 mt-1">
+              Playthrough {playthroughNumber} of {totalPlaythroughs}
+            </p>
+          )}
         </div>
         {isOwner && (
           <div className="flex items-center gap-2 flex-shrink-0">

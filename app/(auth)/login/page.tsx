@@ -29,7 +29,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo / Title */}
         <div className="mb-10 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-violet-600">GamesList</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-brand-600">GamesList</h1>
           <p className="mt-2 text-sm text-zinc-500">Track games. Earn tickets. Spin the wheel.</p>
         </div>
 
@@ -40,7 +40,7 @@ export default function LoginPage() {
             onClick={() => { setMode('signin'); setError(null); setMessage(null) }}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
               mode === 'signin'
-                ? 'bg-violet-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'text-zinc-500 hover:text-zinc-900'
             }`}
           >
@@ -51,7 +51,7 @@ export default function LoginPage() {
             onClick={() => { setMode('signup'); setError(null); setMessage(null) }}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
               mode === 'signup'
-                ? 'bg-violet-600 text-white'
+                ? 'bg-brand-600 text-white'
                 : 'text-zinc-500 hover:text-zinc-900'
             }`}
           >
@@ -72,7 +72,7 @@ export default function LoginPage() {
                 type="text"
                 required
                 autoComplete="name"
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="Your name"
               />
             </div>
@@ -88,7 +88,7 @@ export default function LoginPage() {
               type="email"
               required
               autoComplete="email"
-              className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               placeholder="you@example.com"
             />
           </div>
@@ -104,7 +104,7 @@ export default function LoginPage() {
               required
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               minLength={6}
-              className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               placeholder="••••••••"
             />
           </div>
@@ -124,7 +124,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2.5 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading
               ? mode === 'signin' ? 'Signing in…' : 'Creating account…'

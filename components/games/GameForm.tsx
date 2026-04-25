@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createGame, updateGame } from '@/app/(app)/games/actions'
+import { createClient } from '@/lib/supabase/client'
+import PlatformSelect from './PlatformSelect'
 import type { Game } from '@/lib/types'
 
 const STATUS_OPTIONS = [
@@ -14,9 +16,49 @@ const STATUS_OPTIONS = [
 export default function GameForm({ game }: { game?: Game }) {
   const isEdit = !!game
   const router = useRouter()
+  const [title, setTitle] = useState(game?.title ?? '')
   const [status, setStatus] = useState(game?.status ?? 'backlog')
+  const [isFavourite, setIsFavourite] = useState(game?.is_favourite ?? false)
+  const [isReplay, setIsReplay] = useState(game?.is_replay ?? false)
+  const [replayDetected, setReplayDetected] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Debounced title lookup — only runs on Add form
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (isEdit || title.trim().length < 2) {
+      setReplayDetected(false)
+      setIsReplay(false)
+      return
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('games')
+        .select('id')
+        .eq('user_id', user.id)
+        .ilike('title', title.trim())
+        .limit(1)
+
+      if (data && data.length > 0) {
+        setReplayDetected(true)
+        setIsReplay(true)
+      } else {
+        setReplayDetected(false)
+      }
+    }, 500)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [title, isEdit])
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -47,13 +89,20 @@ export default function GameForm({ game }: { game?: Game }) {
           <input
             name="title"
             required
-            defaultValue={game?.title}
+            value={title}
+            onChange={e => setTitle(e.target.value)}
             className={input}
             placeholder="e.g. The Witcher 3"
           />
+          {!isEdit && replayDetected && (
+            <p className="mt-2 flex items-center gap-2 text-sm text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
+              <span>↩</span>
+              You&apos;ve already added this game — we&apos;ve marked it as a replay.
+            </p>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-zinc-700 mb-1">Developer</label>
             <input
@@ -72,6 +121,28 @@ export default function GameForm({ game }: { game?: Game }) {
               className={input}
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Platform</label>
+            <PlatformSelect defaultValue={game?.platform} />
+          </div>
+        </div>
+      </section>
+
+      {/* Cover Image */}
+      <section className="bg-white border border-zinc-200 rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Cover Image</h2>
+        <div>
+          <label className="block text-sm font-medium text-zinc-700 mb-1">
+            Image URL{' '}
+            <span className="text-xs text-zinc-400 font-normal">(optional — recommended size: 460×215px)</span>
+          </label>
+          <input
+            name="image_url"
+            type="url"
+            defaultValue={game?.image_url ?? ''}
+            className={input}
+            placeholder="https://example.com/cover.jpg"
+          />
         </div>
       </section>
 
@@ -164,6 +235,37 @@ export default function GameForm({ game }: { game?: Game }) {
         )}
       </section>
 
+      {/* Flags */}
+      <section className="bg-white border border-zinc-200 rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Flags</h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setIsFavourite(f => !f)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              isFavourite
+                ? 'bg-amber-50 border-amber-300 text-amber-700'
+                : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700'
+            }`}
+          >
+            <span>★</span> Favourite
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsReplay(r => !r)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              isReplay
+                ? 'bg-brand-50 border-brand-300 text-brand-700'
+                : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700'
+            }`}
+          >
+            <span>↩</span> Replay
+          </button>
+        </div>
+        {isFavourite && <input type="hidden" name="is_favourite" value="on" />}
+        {isReplay && <input type="hidden" name="is_replay" value="on" />}
+      </section>
+
       {/* Notes — always visible, private */}
       <section className="bg-white border border-zinc-200 rounded-xl p-6">
         <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Notes</h2>
@@ -189,7 +291,7 @@ export default function GameForm({ game }: { game?: Game }) {
         <button
           type="submit"
           disabled={loading}
-          className="px-5 py-2.5 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50"
+          className="px-5 py-2.5 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
         >
           {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Game'}
         </button>
@@ -205,4 +307,4 @@ export default function GameForm({ game }: { game?: Game }) {
   )
 }
 
-const input = 'w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white'
+const input = 'w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-white'

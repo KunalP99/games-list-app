@@ -56,7 +56,7 @@ export default async function DashboardPage() {
           label="Current Turn"
           value={formatTurn(profile?.wheel_turn ?? 'spin')}
         />
-        <StatCard label="Games" value="—" href="/games" linkLabel="View list" />
+        <StatCard label="Games" value={String(allGames?.length ?? 0)} href="/games" linkLabel="View list" />
         <StatCard label="Total Hours" value={`${totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}h`} />
       </div>
 
@@ -96,7 +96,7 @@ export default async function DashboardPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/games/${game.id}`}
-                        className="font-medium text-zinc-900 hover:text-violet-600 transition-colors"
+                        className="font-medium text-zinc-900 hover:text-brand-600 transition-colors"
                       >
                         {game.title}
                       </Link>
@@ -161,7 +161,7 @@ function StatCard({
       <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">{label}</p>
       <p className="mt-1 text-xl font-bold text-zinc-900">{value}</p>
       {href && linkLabel && (
-        <Link href={href} className="mt-2 text-xs text-violet-600 hover:text-violet-800 transition-colors">
+        <Link href={href} className="mt-2 text-xs text-brand-600 hover:text-brand-800 transition-colors">
           {linkLabel} →
         </Link>
       )}
@@ -173,7 +173,7 @@ function QuickAction({ href, label, icon }: { href: string; label: string; icon:
   return (
     <Link
       href={href}
-      className="flex items-center gap-2 bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition-colors"
+      className="flex items-center gap-2 bg-white border border-zinc-200 rounded-xl px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-brand-50 hover:border-brand-200 hover:text-brand-700 transition-colors"
     >
       <span className="text-base">{icon}</span>
       {label}

@@ -23,6 +23,10 @@ export async function createGame(formData: FormData) {
     achievement_progress: formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null,
     review: (formData.get('review') as string)?.trim() || null,
     notes: (formData.get('notes') as string)?.trim() || null,
+    image_url: (formData.get('image_url') as string)?.trim() || null,
+    platform: (formData.get('platform') as string) || null,
+    is_favourite: formData.get('is_favourite') === 'on',
+    is_replay: formData.get('is_replay') === 'on',
     in_wheel: false,
   }).select('id').single()
 
@@ -51,6 +55,10 @@ export async function updateGame(id: string, formData: FormData) {
     achievement_progress: formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null,
     review: (formData.get('review') as string)?.trim() || null,
     notes: (formData.get('notes') as string)?.trim() || null,
+    image_url: (formData.get('image_url') as string)?.trim() || null,
+    platform: (formData.get('platform') as string) || null,
+    is_favourite: formData.get('is_favourite') === 'on',
+    is_replay: formData.get('is_replay') === 'on',
     in_wheel: false,
   }).eq('id', id).eq('user_id', user.id)
 

@@ -55,7 +55,7 @@ export default function GameFilters() {
         <select
           value={activeSort}
           onChange={e => update('sort', e.target.value)}
-          className="border border-zinc-200 rounded-lg px-2 py-1.5 text-sm text-zinc-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="border border-zinc-200 rounded-lg px-2 py-1.5 text-sm text-zinc-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
         >
           {SORT_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>

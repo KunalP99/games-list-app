@@ -39,7 +39,7 @@ export default async function GamesPage({
         </div>
         <Link
           href="/games/new"
-          className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+          className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
         >
           + Add Game
         </Link>
@@ -65,7 +65,7 @@ export default async function GamesPage({
           {!status && (
             <Link
               href="/games/new"
-              className="inline-block mt-4 px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 transition-colors"
+              className="inline-block mt-4 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
             >
               Add a Game
             </Link>
