@@ -19,8 +19,8 @@ export default async function EditGamePage({ params }: { params: { id: string } 
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Edit Game</h1>
-        <p className="text-sm text-zinc-500 mt-0.5">{game.title}</p>
+        <h1 className="text-2xl font-bold text-fg-base">Edit Game</h1>
+        <p className="text-sm text-fg-muted mt-0.5">{game.title}</p>
       </div>
       <GameForm game={game} />
     </div>

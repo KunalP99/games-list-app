@@ -25,23 +25,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen bg-surface-page flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
         {/* Logo / Title */}
         <div className="mb-10 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-brand-600">GamesList</h1>
-          <p className="mt-2 text-sm text-zinc-500">Track games. Earn tickets. Spin the wheel.</p>
+          <p className="mt-2 text-sm text-fg-muted">Track games. Earn tickets. Spin the wheel.</p>
         </div>
 
         {/* Tab toggle */}
-        <div className="flex border border-zinc-200 rounded-lg p-1 mb-6">
+        <div className="flex border border-edge-base rounded-lg p-1 mb-6">
           <button
             type="button"
             onClick={() => { setMode('signin'); setError(null); setMessage(null) }}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
               mode === 'signin'
                 ? 'bg-brand-600 text-white'
-                : 'text-zinc-500 hover:text-zinc-900'
+                : 'text-fg-muted hover:text-fg-base'
             }`}
           >
             Sign In
@@ -52,7 +52,7 @@ export default function LoginPage() {
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
               mode === 'signup'
                 ? 'bg-brand-600 text-white'
-                : 'text-zinc-500 hover:text-zinc-900'
+                : 'text-fg-muted hover:text-fg-base'
             }`}
           >
             Create Account
@@ -63,7 +63,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'signup' && (
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-zinc-700 mb-1">
+              <label htmlFor="name" className="block text-sm font-medium text-fg-secondary mb-1">
                 Name
               </label>
               <input
@@ -72,14 +72,14 @@ export default function LoginPage() {
                 type="text"
                 required
                 autoComplete="name"
-                className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input"
                 placeholder="Your name"
               />
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-fg-secondary mb-1">
               Email
             </label>
             <input
@@ -88,13 +88,13 @@ export default function LoginPage() {
               type="email"
               required
               autoComplete="email"
-              className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-fg-secondary mb-1">
               Password
             </label>
             <input
@@ -104,7 +104,7 @@ export default function LoginPage() {
               required
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
               minLength={6}
-              className="w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input"
               placeholder="••••••••"
             />
           </div>
@@ -133,8 +133,8 @@ export default function LoginPage() {
         </form>
 
         {mode === 'signup' && (
-          <p className="mt-4 text-xs text-zinc-400 text-center">
-            You&apos;ll receive a confirmation email. Minimum 6 character password.
+          <p className="mt-4 text-xs text-fg-subtle text-center">
+            Minimum 6 character password.
           </p>
         )}
       </div>

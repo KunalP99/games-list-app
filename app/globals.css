@@ -2,10 +2,104 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Semantic color tokens ─────────────────────────────────────────────
+   All neutral colors are defined here as CSS custom properties.
+   To retheme the app, only edit the values in :root and html.dark below.
+   Brand accent colors live in tailwind.config.ts > theme.extend.colors.brand.
+   Status colors (blue/green/red/amber) are intentional and left as-is.
+──────────────────────────────────────────────────────────────────────── */
+
 :root {
   --font-geist-sans: 'Geist Sans', sans-serif;
+
+  /* ── Surfaces — background layers, outermost to innermost ── */
+  --color-surface-page:     theme('colors.zinc.50');   /* App shell / outermost page background */
+  --color-surface-elevated: theme('colors.white');     /* Navbar and header bar */
+  --color-surface-base:     theme('colors.white');     /* Cards, panels, modals */
+  --color-surface-sunken:   theme('colors.zinc.50');   /* Table headers, inset / code block backgrounds */
+  --color-surface-input:    theme('colors.white');     /* Text inputs, textareas, selects */
+  --color-surface-hover:    theme('colors.zinc.50');   /* Row and item hover highlight */
+  --color-surface-active:   theme('colors.zinc.100');  /* Active tab, selected badge background */
+
+  /* ── Foreground — text hierarchy, most to least prominent ── */
+  --color-fg-base:          theme('colors.zinc.900');  /* Primary headings and body text */
+  --color-fg-secondary:     theme('colors.zinc.700');  /* Button labels, table cell data */
+  --color-fg-muted:         theme('colors.zinc.500');  /* Labels, captions, sub-info text */
+  --color-fg-subtle:        theme('colors.zinc.400');  /* Hints, timestamps, input placeholders */
+
+  /* ── Edges — borders and dividers ── */
+  --color-edge-base:        theme('colors.zinc.200');  /* Standard card and panel borders */
+  --color-edge-input:       theme('colors.zinc.200');  /* Form input borders */
+  --color-edge-subtle:      theme('colors.zinc.100');  /* Inner dividers and table row separators */
+}
+
+html.dark {
+  /* Surfaces */
+  --color-surface-page:     #181818;
+  --color-surface-elevated: #1f1f1f;
+  --color-surface-base:     #242424;
+  --color-surface-sunken:   #1c1c1c;
+  --color-surface-input:    #2a2a2a;
+  --color-surface-hover:    #2a2a2a;
+  --color-surface-active:   #333333;
+
+  /* Foreground */
+  --color-fg-base:          #F7F7F7;
+  --color-fg-secondary:     #D4D4D4;
+  --color-fg-muted:         #A3A3A3;
+  --color-fg-subtle:        #737373;
+
+  /* Edges */
+  --color-edge-base:        #333333;
+  --color-edge-input:       #3d3d3d;
+  --color-edge-subtle:      #252525;
+}
+
+@layer base {
+  /* html.dark variables take over automatically — no extra dark: classes needed here */
+  html { @apply bg-surface-page text-fg-base; }
 }
 
 body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@keyframes ticket-gain {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.35); box-shadow: 0 0 0 4px rgba(255, 87, 34, 0.2); }
+  60%  { transform: scale(0.95); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+.animate-ticket-gain {
+  animation: ticket-gain 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes ticket-spend {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  15%  { opacity: 1; transform: translateY(-3px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-22px) scale(0.85); }
+}
+
+.animate-ticket-spend {
+  animation: ticket-spend 0.85s ease-out forwards;
+}
+
+@property --rare-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rare-border-spin {
+  to { --rare-angle: 360deg; }
+}
+
+.rare-achievement-border {
+  background: conic-gradient(from var(--rare-angle), #f59e0b, #fde68a, #f97316, #ef4444, #a855f7, #f59e0b);
+  animation: rare-border-spin 2s linear infinite;
+}
+
+.uncommon-achievement-border {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4);
 }

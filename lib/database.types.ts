@@ -19,6 +19,7 @@ export type Database = {
           display_name: string | null
           avatar_url: string | null
           ticket_balance: number
+          tickets_earned_total: number
           wheel_turn: 'spin' | 'spin_reroll' | 'choose'
           created_at: string
           updated_at: string
@@ -29,6 +30,7 @@ export type Database = {
           display_name?: string | null
           avatar_url?: string | null
           ticket_balance?: number
+          tickets_earned_total?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           created_at?: string
           updated_at?: string
@@ -39,6 +41,7 @@ export type Database = {
           display_name?: string | null
           avatar_url?: string | null
           ticket_balance?: number
+          tickets_earned_total?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           created_at?: string
           updated_at?: string
@@ -51,7 +54,7 @@ export type Database = {
           title: string
           developer: string | null
           release_date: string | null
-          status: 'playing' | 'completed' | 'backlog'
+          status: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played: number | null
           completion_date: string | null
           rating: number | null
@@ -59,9 +62,13 @@ export type Database = {
           review: string | null
           notes: string | null
           image_url: string | null
+          rawg_id: number | null
+          description: string | null
+          genres: string[] | null
           platform: string | null
           is_favourite: boolean
           is_replay: boolean
+          is_sequel: boolean
           in_wheel: boolean
           assigned_by: string | null
           created_at: string
@@ -73,7 +80,7 @@ export type Database = {
           title: string
           developer?: string | null
           year_developed?: number | null
-          status?: 'playing' | 'completed' | 'backlog'
+          status?: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played?: number | null
           completion_date?: string | null
           rating?: number | null
@@ -81,9 +88,13 @@ export type Database = {
           review?: string | null
           notes?: string | null
           image_url?: string | null
+          rawg_id?: number | null
+          description?: string | null
+          genres?: string[] | null
           platform?: string | null
           is_favourite?: boolean
           is_replay?: boolean
+          is_sequel?: boolean
           in_wheel?: boolean
           assigned_by?: string | null
           created_at?: string
@@ -95,7 +106,7 @@ export type Database = {
           title?: string
           developer?: string | null
           year_developed?: number | null
-          status?: 'playing' | 'completed' | 'backlog'
+          status?: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played?: number | null
           completion_date?: string | null
           rating?: number | null
@@ -103,9 +114,13 @@ export type Database = {
           review?: string | null
           notes?: string | null
           image_url?: string | null
+          rawg_id?: number | null
+          description?: string | null
+          genres?: string[] | null
           platform?: string | null
           is_favourite?: boolean
           is_replay?: boolean
+          is_sequel?: boolean
           in_wheel?: boolean
           assigned_by?: string | null
           created_at?: string
@@ -155,30 +170,30 @@ export type Database = {
           id: string
           user_id: string
           spin_type: 'spin' | 'spin_reroll' | 'choose'
-          game_id_result: string | null
-          game_id_option_a: string | null
-          game_id_option_b: string | null
-          ticket_transaction_id: string | null
+          spin_mode: 'elimination' | 'first_land' | null
+          result_name: string | null
+          option_a_name: string | null
+          option_b_name: string | null
           created_at: string
         }
         Insert: {
           id?: string
           user_id: string
           spin_type: 'spin' | 'spin_reroll' | 'choose'
-          game_id_result?: string | null
-          game_id_option_a?: string | null
-          game_id_option_b?: string | null
-          ticket_transaction_id?: string | null
+          spin_mode?: 'elimination' | 'first_land' | null
+          result_name?: string | null
+          option_a_name?: string | null
+          option_b_name?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           user_id?: string
           spin_type?: 'spin' | 'spin_reroll' | 'choose'
-          game_id_result?: string | null
-          game_id_option_a?: string | null
-          game_id_option_b?: string | null
-          ticket_transaction_id?: string | null
+          spin_mode?: 'elimination' | 'first_land' | null
+          result_name?: string | null
+          option_a_name?: string | null
+          option_b_name?: string | null
           created_at?: string
         }
       }
@@ -222,6 +237,13 @@ export type Database = {
           p_reason: string
           p_game_id?: string
           p_note?: string
+        }
+        Returns: void
+      }
+      reverse_game_completion_tickets: {
+        Args: {
+          p_user_id: string
+          p_game_id: string
         }
         Returns: void
       }

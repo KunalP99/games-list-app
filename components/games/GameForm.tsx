@@ -6,26 +6,71 @@ import { createGame, updateGame } from '@/app/(app)/games/actions'
 import { createClient } from '@/lib/supabase/client'
 import PlatformSelect from './PlatformSelect'
 import type { Game } from '@/lib/types'
+import type { RawgSearchResult } from '@/lib/rawg'
 
 const STATUS_OPTIONS = [
-  { value: 'backlog', label: 'Backlog' },
   { value: 'playing', label: 'Playing' },
   { value: 'completed', label: 'Completed' },
+  { value: 'backlog', label: 'Backlog' },
+  { value: 'dnf', label: 'Did Not Finish (DNF)' },
 ]
 
 export default function GameForm({ game }: { game?: Game }) {
   const isEdit = !!game
   const router = useRouter()
   const [title, setTitle] = useState(game?.title ?? '')
-  const [status, setStatus] = useState(game?.status ?? 'backlog')
+  const [developer, setDeveloper] = useState(game?.developer ?? '')
+  const [releaseDate, setReleaseDate] = useState(game?.release_date ?? '')
+  const [imageUrl, setImageUrl] = useState(game?.image_url ?? '')
+  const [rawgId, setRawgId] = useState<number | null>(game?.rawg_id ?? null)
+  const [status, setStatus] = useState(game?.status ?? 'playing')
   const [isFavourite, setIsFavourite] = useState(game?.is_favourite ?? false)
   const [isReplay, setIsReplay] = useState(game?.is_replay ?? false)
   const [replayDetected, setReplayDetected] = useState(false)
+  const [isSequel, setIsSequel] = useState(game?.is_sequel ?? false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Debounced title lookup — only runs on Add form
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // RAWG autocomplete state
+  const [suggestions, setSuggestions] = useState<RawgSearchResult[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const replayDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rawgDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // RAWG search debounce — fires at 300ms on title change
+  useEffect(() => {
+    if (rawgDebounceRef.current) clearTimeout(rawgDebounceRef.current)
+
+    if (title.trim().length < 2) {
+      setSuggestions([])
+      setShowDropdown(false)
+      return
+    }
+
+    rawgDebounceRef.current = setTimeout(async () => {
+      setSearchLoading(true)
+      try {
+        const res = await fetch(`/api/rawg/search?q=${encodeURIComponent(title.trim())}`)
+        const { results } = await res.json()
+        setSuggestions(results ?? [])
+        setShowDropdown((results ?? []).length > 0)
+      } catch {
+        setSuggestions([])
+        setShowDropdown(false)
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 300)
+
+    return () => {
+      if (rawgDebounceRef.current) clearTimeout(rawgDebounceRef.current)
+    }
+  }, [title])
+
+  // Supabase replay detection — fires at 500ms, only on new game form
   useEffect(() => {
     if (isEdit || title.trim().length < 2) {
       setReplayDetected(false)
@@ -33,9 +78,9 @@ export default function GameForm({ game }: { game?: Game }) {
       return
     }
 
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (replayDebounceRef.current) clearTimeout(replayDebounceRef.current)
 
-    debounceRef.current = setTimeout(async () => {
+    replayDebounceRef.current = setTimeout(async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -56,9 +101,43 @@ export default function GameForm({ game }: { game?: Game }) {
     }, 500)
 
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
+      if (replayDebounceRef.current) clearTimeout(replayDebounceRef.current)
     }
   }, [title, isEdit])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [])
+
+  async function handleRawgSelect(result: RawgSearchResult) {
+    setTitle(result.name)
+    setReleaseDate(result.released ?? '')
+    setImageUrl(result.background_image ?? '')
+    setRawgId(result.id)
+    setSuggestions([])
+    setShowDropdown(false)
+
+    // Fetch full detail to get developer (not included in search results)
+    try {
+      const res = await fetch(`/api/rawg/detail/${result.id}`)
+      const detail = await res.json()
+      if (detail?.developers?.[0]?.name) {
+        setDeveloper(detail.developers[0].name)
+      }
+      if (detail?.released) {
+        setReleaseDate(detail.released)
+      }
+    } catch {
+      // silently ignore — user can fill manually
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -79,23 +158,62 @@ export default function GameForm({ game }: { game?: Game }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Basic Info */}
-      <section className="bg-white border border-zinc-200 rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Basic Info</h2>
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Basic Info</h2>
 
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
+        <div className="relative" ref={dropdownRef}>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">
             Title <span className="text-red-500">*</span>
           </label>
-          <input
-            name="title"
-            required
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className={input}
-            placeholder="e.g. The Witcher 3"
-          />
+          <div className="relative">
+            <input
+              name="title"
+              required
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
+              className={input}
+              placeholder="e.g. The Witcher 3"
+              autoComplete="off"
+            />
+            {searchLoading && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                Searching…
+              </span>
+            )}
+          </div>
+
+          {showDropdown && (
+            <div className="absolute z-20 mt-1 w-full bg-surface-base border border-edge-base rounded-lg shadow-lg overflow-hidden">
+              {suggestions.map(result => (
+                <button
+                  key={result.id}
+                  type="button"
+                  onMouseDown={() => handleRawgSelect(result)}
+                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-surface-hover text-left border-b border-edge-subtle last:border-0"
+                >
+                  {result.background_image ? (
+                    <img
+                      src={result.background_image}
+                      alt=""
+                      className="w-12 h-8 object-cover rounded shrink-0 bg-surface-active"
+                    />
+                  ) : (
+                    <div className="w-12 h-8 rounded bg-surface-active shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
+                    {result.released && (
+                      <p className="text-xs text-fg-subtle">{result.released.slice(0, 4)}</p>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
           {!isEdit && replayDetected && (
-            <p className="mt-2 flex items-center gap-2 text-sm text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
+            <p className="mt-2 flex items-center gap-2 text-sm text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300">
               <span>↩</span>
               You&apos;ve already added this game — we&apos;ve marked it as a replay.
             </p>
@@ -104,59 +222,73 @@ export default function GameForm({ game }: { game?: Game }) {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Developer</label>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">Developer</label>
             <input
               name="developer"
-              defaultValue={game?.developer ?? ''}
+              value={developer}
+              onChange={e => setDeveloper(e.target.value)}
               className={input}
               placeholder="e.g. CD Projekt Red"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Release Date</label>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">Release Date</label>
             <input
               name="release_date"
               type="date"
-              defaultValue={game?.release_date ?? ''}
+              value={releaseDate}
+              onChange={e => setReleaseDate(e.target.value)}
               className={input}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Platform</label>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">Platform</label>
             <PlatformSelect defaultValue={game?.platform} />
           </div>
         </div>
       </section>
 
       {/* Cover Image */}
-      <section className="bg-white border border-zinc-200 rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Cover Image</h2>
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
-            Image URL{' '}
-            <span className="text-xs text-zinc-400 font-normal">(optional — recommended size: 460×215px)</span>
-          </label>
-          <input
-            name="image_url"
-            type="url"
-            defaultValue={game?.image_url ?? ''}
-            className={input}
-            placeholder="https://example.com/cover.jpg"
-          />
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Cover Image</h2>
+        <div className="flex gap-3 items-start">
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt="Cover preview"
+              className="w-20 h-14 object-cover rounded-lg border border-edge-base shrink-0 bg-surface-active"
+            />
+          )}
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-fg-secondary mb-1">
+              Image URL{' '}
+              <span className="text-xs text-fg-subtle font-normal">
+                (auto-filled from RAWG, or paste your own)
+              </span>
+            </label>
+            <input
+              name="image_url"
+              type="url"
+              value={imageUrl}
+              onChange={e => setImageUrl(e.target.value)}
+              className={input}
+              placeholder="https://example.com/cover.jpg"
+            />
+          </div>
         </div>
       </section>
 
       {/* Status & Progress */}
-      <section className="bg-white border border-zinc-200 rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Status & Progress</h2>
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Status & Progress</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Status</label>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">Status</label>
             <select
               name="status"
               value={status}
-              onChange={e => setStatus(e.target.value as 'backlog' | 'playing' | 'completed')}
+              onChange={e => setStatus(e.target.value as 'backlog' | 'playing' | 'completed' | 'dnf')}
               className={input}
             >
               {STATUS_OPTIONS.map(o => (
@@ -165,12 +297,12 @@ export default function GameForm({ game }: { game?: Game }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Hours Played</label>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">Hours Played</label>
             <input
               name="hours_played"
               type="number"
               min={0}
-              step={0.5}
+              step={0.1}
               defaultValue={game?.hours_played ?? ''}
               className={input}
               placeholder="e.g. 42"
@@ -179,7 +311,7 @@ export default function GameForm({ game }: { game?: Game }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-700 mb-1">
+          <label className="block text-sm font-medium text-fg-secondary mb-1">
             Achievement Progress (%)
           </label>
           <input
@@ -196,10 +328,10 @@ export default function GameForm({ game }: { game?: Game }) {
 
         {/* Completion fields — only shown when status is completed */}
         {status === 'completed' && (
-          <div className="space-y-4 pt-2 border-t border-zinc-100">
+          <div className="space-y-4 pt-2 border-t border-edge-subtle">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Completion Date</label>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Completion Date</label>
                 <input
                   name="completion_date"
                   type="date"
@@ -208,21 +340,22 @@ export default function GameForm({ game }: { game?: Game }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Rating (1–10)</label>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Rating (1–5)</label>
                 <input
                   name="rating"
                   type="number"
                   min={1}
-                  max={10}
+                  max={5}
+                  step={0.5}
                   defaultValue={game?.rating ?? ''}
                   className={input}
-                  placeholder="e.g. 9"
+                  placeholder="e.g. 3.5"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1">Review</label>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Review</label>
               <textarea
                 name="review"
                 rows={4}
@@ -233,11 +366,55 @@ export default function GameForm({ game }: { game?: Game }) {
             </div>
           </div>
         )}
+
+        {/* DNF fields — only shown when status is dnf */}
+        {status === 'dnf' && (
+          <div className="space-y-4 pt-2 border-t border-edge-subtle">
+            <p className="text-xs text-red-500 font-medium">
+              Did Not Finish — mark games you started but decided to stop playing.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Date Dropped</label>
+                <input
+                  name="completion_date"
+                  type="date"
+                  defaultValue={game?.completion_date ?? ''}
+                  className={input}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Rating (1–5) <span className="text-xs text-fg-subtle font-normal">optional</span></label>
+                <input
+                  name="rating"
+                  type="number"
+                  min={1}
+                  max={5}
+                  step={0.5}
+                  defaultValue={game?.rating ?? ''}
+                  className={input}
+                  placeholder="e.g. 2.5"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Reason <span className="text-xs text-fg-subtle font-normal">optional</span></label>
+              <textarea
+                name="review"
+                rows={3}
+                defaultValue={game?.review ?? ''}
+                className={input}
+                placeholder="Why did you stop playing?"
+              />
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Flags */}
-      <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Flags</h2>
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-4">Flags</h2>
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
@@ -245,7 +422,7 @@ export default function GameForm({ game }: { game?: Game }) {
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
               isFavourite
                 ? 'bg-amber-50 border-amber-300 text-amber-700'
-                : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700'
+                : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
             }`}
           >
             <span>★</span> Favourite
@@ -255,22 +432,40 @@ export default function GameForm({ game }: { game?: Game }) {
             onClick={() => setIsReplay(r => !r)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
               isReplay
-                ? 'bg-brand-50 border-brand-300 text-brand-700'
-                : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-700'
+                ? 'bg-brand-50 border-brand-300 text-brand-700 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300'
+                : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
             }`}
           >
             <span>↩</span> Replay
           </button>
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setIsSequel(s => !s)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                isSequel
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
+              }`}
+            >
+              <span>🔗</span> Sequel
+            </button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 px-3 py-2 bg-zinc-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 text-center leading-relaxed">
+              Only tick this if the last game you completed was a direct prequel to this one. You&apos;ll earn a bonus ticket when you complete it.
+            </div>
+          </div>
         </div>
         {isFavourite && <input type="hidden" name="is_favourite" value="on" />}
         {isReplay && <input type="hidden" name="is_replay" value="on" />}
+        {isSequel && <input type="hidden" name="is_sequel" value="on" />}
+        {rawgId !== null && <input type="hidden" name="rawg_id" value={rawgId} />}
       </section>
 
       {/* Notes — always visible, private */}
-      <section className="bg-white border border-zinc-200 rounded-xl p-6">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Notes</h2>
-        <label className="block text-sm font-medium text-zinc-700 mb-1">
-          Personal notes <span className="text-xs text-zinc-400">(private)</span>
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-4">Notes</h2>
+        <label className="block text-sm font-medium text-fg-secondary mb-1">
+          Personal notes <span className="text-xs text-fg-subtle">(private)</span>
         </label>
         <textarea
           name="notes"
@@ -298,7 +493,7 @@ export default function GameForm({ game }: { game?: Game }) {
         <button
           type="button"
           onClick={() => router.back()}
-          className="px-5 py-2.5 border border-zinc-200 text-zinc-600 text-sm font-medium rounded-lg hover:bg-zinc-50 transition-colors"
+          className="px-5 py-2.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
         >
           Cancel
         </button>
@@ -307,4 +502,4 @@ export default function GameForm({ game }: { game?: Game }) {
   )
 }
 
-const input = 'w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-white'
+const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'

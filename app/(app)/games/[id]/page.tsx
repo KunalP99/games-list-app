@@ -1,9 +1,14 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
+import { getRawgScreenshots, getRawgAchievements } from '@/lib/rawg'
+import type { RawgScreenshot, RawgAchievement } from '@/lib/rawg'
 import StatusBadge from '@/components/games/StatusBadge'
 import DeleteGameButton from '@/components/games/DeleteGameButton'
+import MarkCompletedButton from '@/components/games/MarkCompletedButton'
+import AchievementGrid from '@/components/games/AchievementGrid'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -19,54 +24,140 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
   const isOwner = game.user_id === user?.id
 
-  const { data: sameGames } = await supabase
-    .from('games')
-    .select('id, created_at')
-    .eq('user_id', game.user_id)
-    .ilike('title', game.title)
-    .order('created_at', { ascending: true }) as { data: { id: string; created_at: string }[] | null }
+  const [{ data: sameGames }, screenshots, achievements] = await Promise.all([
+    supabase
+      .from('games')
+      .select('id, created_at')
+      .eq('user_id', game.user_id)
+      .ilike('title', game.title)
+      .order('created_at', { ascending: true }) as unknown as Promise<{ data: { id: string; created_at: string }[] | null }>,
+    game.rawg_id ? getRawgScreenshots(game.rawg_id) : Promise.resolve([] as RawgScreenshot[]),
+    game.rawg_id ? getRawgAchievements(game.rawg_id) : Promise.resolve([] as RawgAchievement[]),
+  ])
 
   const totalPlaythroughs = sameGames?.length ?? 1
   const playthroughNumber = (sameGames?.findIndex(g => g.id === game.id) ?? 0) + 1
 
   return (
     <div className="max-w-2xl space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1 flex-wrap">
-            <h1 className="text-2xl font-bold text-zinc-900">{game.title}</h1>
-            {game.is_favourite && (
-              <span className="text-amber-400 text-xl leading-none" title="Favourite">★</span>
+      {/* Hero — banner with overlay when image exists, plain header otherwise */}
+      {game.image_url ? (
+        <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-md">
+          <img
+            src={game.image_url}
+            alt={game.title}
+            className="w-full h-full object-cover object-center"
+          />
+          {/* Strong gradient so text is always readable */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
+
+          {/* Owner actions — top right */}
+          {isOwner && (
+            <div className="absolute top-3 right-3 flex items-center gap-2">
+              {game.status === 'playing' && (
+                <MarkCompletedButton gameId={game.id} variant="detail" />
+              )}
+              <Link
+                href={`/games/${game.id}/edit`}
+                className="px-2.5 py-1 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-xs font-medium rounded-lg hover:bg-black/60 transition-colors"
+              >
+                Edit
+              </Link>
+              <DeleteGameButton id={game.id} variant="overlay" />
+            </div>
+          )}
+
+          {/* Title and metadata — bottom */}
+          <div className="absolute bottom-0 left-0 right-0 p-5">
+            <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+              <h1 className="text-2xl font-bold text-white leading-tight">{game.title}</h1>
+              {game.is_favourite && (
+                <span className="text-amber-400 text-xl leading-none" title="Favourite">★</span>
+              )}
+              <StatusBadge status={game.status} />
+              {game.is_replay && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white border border-white/25">
+                  ↩ Replay
+                </span>
+              )}
+            </div>
+            {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).length > 0 && (
+              <p className="text-white/70 text-sm mb-2">
+                {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).join(' · ')}
+              </p>
             )}
-            <StatusBadge status={game.status} />
-            {game.is_replay && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200">
-                ↩ Replay
-              </span>
+            {game.genres && game.genres.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {game.genres.map(genre => (
+                  <span
+                    key={genre}
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white/90 border border-white/20"
+                  >
+                    {genre}
+                  </span>
+                ))}
+              </div>
+            )}
+            {totalPlaythroughs > 1 && (
+              <p className="text-xs text-white/50 mt-1.5">
+                Playthrough {playthroughNumber} of {totalPlaythroughs}
+              </p>
             )}
           </div>
-          <p className="text-zinc-500 text-sm">
-            {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).join(' · ')}
-          </p>
-          {totalPlaythroughs > 1 && (
-            <p className="text-xs text-zinc-400 mt-1">
-              Playthrough {playthroughNumber} of {totalPlaythroughs}
+        </div>
+      ) : (
+        /* Fallback plain header for games without an image */
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
+              <h1 className="text-2xl font-bold text-fg-base">{game.title}</h1>
+              {game.is_favourite && (
+                <span className="text-amber-400 text-xl leading-none" title="Favourite">★</span>
+              )}
+              <StatusBadge status={game.status} />
+              {game.is_replay && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 border border-brand-200 dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-700">
+                  ↩ Replay
+                </span>
+              )}
+            </div>
+            <p className="text-fg-muted text-sm">
+              {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).join(' · ')}
             </p>
+            {game.genres && game.genres.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {game.genres.map(genre => (
+                  <span
+                    key={genre}
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-surface-active text-fg-secondary border border-edge-base"
+                  >
+                    {genre}
+                  </span>
+                ))}
+              </div>
+            )}
+            {totalPlaythroughs > 1 && (
+              <p className="text-xs text-fg-subtle mt-1">
+                Playthrough {playthroughNumber} of {totalPlaythroughs}
+              </p>
+            )}
+          </div>
+          {isOwner && (
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+              {game.status === 'playing' && (
+                <MarkCompletedButton gameId={game.id} variant="detail" />
+              )}
+              <Link
+                href={`/games/${game.id}/edit`}
+                className="px-3 py-1.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
+              >
+                Edit
+              </Link>
+              <DeleteGameButton id={game.id} />
+            </div>
           )}
         </div>
-        {isOwner && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <Link
-              href={`/games/${game.id}/edit`}
-              className="px-3 py-1.5 border border-zinc-200 text-zinc-600 text-sm font-medium rounded-lg hover:bg-zinc-50 transition-colors"
-            >
-              Edit
-            </Link>
-            <DeleteGameButton id={game.id} />
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -77,9 +168,11 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
       {/* Completion date */}
       {game.completion_date && (
-        <div className="bg-white border border-zinc-200 rounded-xl p-4">
-          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-1">Completed</p>
-          <p className="text-zinc-900 text-sm">
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">
+            {game.status === 'dnf' ? 'Date Dropped' : 'Completed'}
+          </p>
+          <p className="text-fg-base text-sm">
             {new Date(game.completion_date).toLocaleDateString('en-GB', {
               day: 'numeric', month: 'long', year: 'numeric',
             })}
@@ -89,23 +182,64 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
       {/* Review */}
       {game.review && (
-        <div className="bg-white border border-zinc-200 rounded-xl p-4">
-          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-2">Review</p>
-          <p className="text-zinc-700 text-sm leading-relaxed whitespace-pre-wrap">{game.review}</p>
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">
+            {game.status === 'dnf' ? 'Reason' : 'Review'}
+          </p>
+          <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.review}</p>
         </div>
       )}
 
       {/* Notes — only visible to owner */}
       {isOwner && game.notes && (
-        <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4">
-          <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-2">
+        <div className="bg-surface-sunken border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">
             Notes <span className="normal-case font-normal">(private)</span>
           </p>
-          <p className="text-zinc-700 text-sm leading-relaxed whitespace-pre-wrap">{game.notes}</p>
+          <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.notes}</p>
         </div>
       )}
 
-      <Link href="/games" className="inline-block text-sm text-zinc-400 hover:text-zinc-700 transition-colors">
+      {/* About — from RAWG description stored at save time */}
+      {game.description && (
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
+          <p className="text-fg-secondary text-sm leading-relaxed line-clamp-6">{game.description}</p>
+        </div>
+      )}
+
+      {/* Achievements — fetched live from RAWG */}
+      {achievements.length > 0 && (
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Achievements</p>
+            <span className="text-xs text-fg-subtle">{achievements.length} total</span>
+          </div>
+          <AchievementGrid achievements={achievements} />
+        </div>
+      )}
+
+      {/* Screenshots — fetched live from RAWG */}
+      {screenshots.length > 0 && (
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-3">Screenshots</p>
+          <div className="grid grid-cols-2 gap-2">
+            {screenshots.map((shot: RawgScreenshot) => (
+              <div key={shot.id} className="relative aspect-video rounded-lg overflow-hidden bg-surface-active">
+                <Image
+                  src={shot.image}
+                  alt="Screenshot"
+                  fill
+                  sizes="(max-width: 640px) 50vw, 280px"
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <Link href="/games" className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
         ← Back to My Games
       </Link>
     </div>
@@ -114,9 +248,9 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-white border border-zinc-200 rounded-xl p-4">
-      <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">{label}</p>
-      <p className="mt-1 text-lg font-bold text-zinc-900">{value}</p>
+    <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+      <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">{label}</p>
+      <p className="mt-1 text-lg font-bold text-fg-base">{value}</p>
     </div>
   )
 }
@@ -133,17 +267,17 @@ function colorGradient(value: number, max: number): string {
 function RatingStat({ rating }: { rating: number | null }) {
   if (rating == null) {
     return (
-      <div className="bg-white border border-zinc-200 rounded-xl p-4">
-        <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Rating</p>
-        <p className="mt-1 text-lg font-bold text-zinc-900">—</p>
+      <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+        <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Rating</p>
+        <p className="mt-1 text-lg font-bold text-fg-base">—</p>
       </div>
     )
   }
 
   return (
-    <div className={`${colorGradient(rating, 10)} rounded-xl p-4`}>
+    <div className={`${colorGradient(rating, 5)} rounded-xl p-4`}>
       <p className="text-xs text-white/80 font-medium uppercase tracking-wider">Rating</p>
-      <p className="mt-1 text-lg font-bold text-white">{rating}/10</p>
+      <p className="mt-1 text-lg font-bold text-white">{rating}/5</p>
     </div>
   )
 }
@@ -151,9 +285,9 @@ function RatingStat({ rating }: { rating: number | null }) {
 function AchievementStat({ progress }: { progress: number | null }) {
   if (progress == null) {
     return (
-      <div className="bg-white border border-zinc-200 rounded-xl p-4">
-        <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider">Achievements</p>
-        <p className="mt-1 text-lg font-bold text-zinc-900">—</p>
+      <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+        <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Achievements</p>
+        <p className="mt-1 text-lg font-bold text-fg-base">—</p>
       </div>
     )
   }
@@ -171,7 +305,7 @@ function AchievementStat({ progress }: { progress: number | null }) {
           <span className="absolute -bottom-3 right-0 text-yellow-300 text-sm leading-none select-none">✦</span>
         </>
       )}
-      <div className={`${colorGradient(progress, 100)} rounded-xl p-4 ${is100 ? 'ring-2 ring-emerald-300 ring-offset-1' : ''}`}>
+      <div className={`${colorGradient(progress, 100)} rounded-xl p-4 ${is100 ? 'ring-2 ring-emerald-300 ring-offset-1 dark:ring-offset-zinc-900' : ''}`}>
         <p className="text-xs text-white/80 font-medium uppercase tracking-wider">Achievements</p>
         <p className="mt-1 text-lg font-bold text-white">{Math.round(progress)}%</p>
         {is100 && <p className="text-xs text-white/80 mt-0.5">Complete ✓</p>}

@@ -1,9 +1,10 @@
-export const GAME_STATUSES = ['backlog', 'playing', 'completed'] as const
+export const GAME_STATUSES = ['backlog', 'playing', 'completed', 'dnf'] as const
 
 export const STATUS_LABELS: Record<string, string> = {
   backlog: 'Backlog',
   playing: 'Playing',
   completed: 'Completed',
+  dnf: 'Did Not Finish',
 }
 
 export const WHEEL_TURNS = ['spin', 'spin_reroll', 'choose'] as const

@@ -20,17 +20,18 @@ export async function signUp(formData: FormData) {
   const password = formData.get('password') as string
   const name = (formData.get('name') as string).trim()
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: { display_name: name },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/callback`,
-    },
+    options: { data: { display_name: name } },
   })
 
   if (error) return { error: error.message }
 
+  // If confirmation is disabled, a session is returned immediately
+  if (data.session) redirect('/dashboard')
+
+  // Fallback if confirmation is still enabled
   return { success: 'Check your email to confirm your account.' }
 }
 
