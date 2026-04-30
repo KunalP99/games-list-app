@@ -13,6 +13,7 @@ const navItems = [
   { href: '/users', label: 'Friends' },
   { href: '/tickets', label: 'Tickets' },
   { href: '/wheel', label: 'Wheel' },
+  { href: '/achievements', label: 'Achievements' },
 ]
 
 export default function Nav({ profile }: { profile: Profile }) {
@@ -62,8 +63,21 @@ export default function Nav({ profile }: { profile: Profile }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <Link href="/dashboard" className="text-sm font-bold tracking-tight text-brand-600 shrink-0">
-              GamesList
+            <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-brand-500 to-violet-700 flex items-center justify-center shadow-sm shadow-brand-500/20">
+                <svg viewBox="0 0 16 12" fill="white" className="w-4 h-3">
+                  <rect x="1" y="4.75" width="4.5" height="1.5" rx=".4"/>
+                  <rect x="2.75" y="3" width="1.5" height="5" rx=".4"/>
+                  <circle cx="8" cy="6" r="0.9" fillOpacity="0.6"/>
+                  <circle cx="11" cy="3.5" r="1"/>
+                  <circle cx="13" cy="6" r="1"/>
+                  <circle cx="11" cy="8.5" r="1"/>
+                  <circle cx="9" cy="6" r="1"/>
+                </svg>
+              </div>
+              <span className="font-orbitron text-sm font-bold tracking-tight">
+                <span className="text-fg-base">Games</span><span className="text-brand-600 dark:text-brand-400">List</span>
+              </span>
             </Link>
           </div>
 
@@ -123,8 +137,21 @@ export default function Nav({ profile }: { profile: Profile }) {
       >
         {/* Sidebar header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-edge-subtle">
-          <Link href="/dashboard" className="text-lg font-bold tracking-tight text-brand-600">
-            GamesList
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-violet-700 flex items-center justify-center shadow-sm shadow-brand-500/20">
+              <svg viewBox="0 0 16 12" fill="white" className="w-4 h-3">
+                <rect x="1" y="4.75" width="4.5" height="1.5" rx=".4"/>
+                <rect x="2.75" y="3" width="1.5" height="5" rx=".4"/>
+                <circle cx="8" cy="6" r="0.9" fillOpacity="0.6"/>
+                <circle cx="11" cy="3.5" r="1"/>
+                <circle cx="13" cy="6" r="1"/>
+                <circle cx="11" cy="8.5" r="1"/>
+                <circle cx="9" cy="6" r="1"/>
+              </svg>
+            </div>
+            <span className="font-orbitron text-base font-bold tracking-tight">
+              <span className="text-fg-base">Games</span><span className="text-brand-600 dark:text-brand-400">List</span>
+            </span>
           </Link>
           <button
             className="p-1.5 rounded-md text-fg-subtle hover:text-fg-secondary hover:bg-surface-active transition-colors"

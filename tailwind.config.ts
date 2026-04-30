@@ -11,6 +11,7 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
+        orbitron: ['var(--font-orbitron)', 'sans-serif'],
       },
       colors: {
         brand: {

@@ -20,6 +20,7 @@ export type Database = {
           avatar_url: string | null
           ticket_balance: number
           tickets_earned_total: number
+          xp: number
           wheel_turn: 'spin' | 'spin_reroll' | 'choose'
           created_at: string
           updated_at: string
@@ -31,6 +32,7 @@ export type Database = {
           avatar_url?: string | null
           ticket_balance?: number
           tickets_earned_total?: number
+          xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           created_at?: string
           updated_at?: string
@@ -42,9 +44,30 @@ export type Database = {
           avatar_url?: string | null
           ticket_balance?: number
           tickets_earned_total?: number
+          xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           created_at?: string
           updated_at?: string
+        }
+      }
+      user_achievements: {
+        Row: {
+          id: string
+          user_id: string
+          achievement_id: string
+          unlocked_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          achievement_id: string
+          unlocked_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          achievement_id?: string
+          unlocked_at?: string
         }
       }
       games: {
@@ -244,6 +267,13 @@ export type Database = {
         Args: {
           p_user_id: string
           p_game_id: string
+        }
+        Returns: void
+      }
+      award_xp: {
+        Args: {
+          p_user_id: string
+          p_amount: number
         }
         Returns: void
       }

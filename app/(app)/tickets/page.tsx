@@ -151,7 +151,7 @@ export default async function TicketsPage({
                   return (
                     <tr
                       key={group.key}
-                      className={`hover:bg-surface-hover transition-colors ${isCurrentUser ? 'bg-brand-50/30 dark:bg-brand-900/20' : ''}`}
+                      className={`hover:bg-surface-hover transition-colors ${isCurrentUser ? 'bg-amber-50/60 dark:bg-amber-900/20' : ''}`}
                     >
                       <td className="px-4 py-3 text-fg-muted whitespace-nowrap">
                         {new Date(group.latestDate).toLocaleDateString('en-GB', {
@@ -159,7 +159,7 @@ export default async function TicketsPage({
                         })}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`font-medium ${isCurrentUser ? 'text-brand-700 dark:text-brand-300' : 'text-fg-secondary'}`}>
+                        <span className={`font-medium ${isCurrentUser ? 'text-amber-700 dark:text-amber-400' : 'text-fg-secondary'}`}>
                           {displayName}
                         </span>
                       </td>

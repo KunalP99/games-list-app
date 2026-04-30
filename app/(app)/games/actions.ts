@@ -4,6 +4,19 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/lib/tickets'
+import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
+
+async function awardGameCompletionXp(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  hours: number | null,
+  achievementProgress: number | null,
+) {
+  const xp = gameCompletionXp(hours, achievementProgress)
+  if (xp > 0) {
+    await (supabase.rpc as any)('award_xp', { p_user_id: userId, p_amount: xp })
+  }
+}
 
 async function reverseGameCompletionTickets(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, gameId: string) {
   await (supabase.rpc as any)('reverse_game_completion_tickets', {
@@ -59,13 +72,17 @@ export async function createGame(formData: FormData) {
 
   if (status === 'completed') {
     await awardCompletionTickets(supabase, user.id, game.id, hours, achievementProgress)
+    await awardGameCompletionXp(supabase, user.id, hours, achievementProgress)
   } else if (status === 'dnf') {
     await applyDnfPenalty(supabase, user.id, game.id)
   }
 
+  await checkAndAwardAchievements(supabase, user.id)
+
   revalidatePath('/games')
   revalidatePath('/dashboard')
   revalidatePath('/tickets')
+  revalidatePath('/achievements')
   redirect(`/games/${game.id}`)
 }
 
@@ -134,6 +151,7 @@ export async function updateGame(id: string, formData: FormData) {
     // Newly completed — award tickets; also reverse any DNF penalty if coming from DNF
     if (wasDnf) await reverseDnfPenalty(supabase, user.id, id)
     await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
+    await awardGameCompletionXp(supabase, user.id, hours, achievementProgress)
   } else if (wasCompleted && !isCompleted) {
     // Un-completing — reverse completion awards; apply DNF penalty if moving to DNF
     await reverseGameCompletionTickets(supabase, user.id, id)
@@ -146,10 +164,13 @@ export async function updateGame(id: string, formData: FormData) {
     await reverseDnfPenalty(supabase, user.id, id)
   }
 
+  await checkAndAwardAchievements(supabase, user.id)
+
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
   revalidatePath('/dashboard')
   revalidatePath('/tickets')
+  revalidatePath('/achievements')
   redirect(`/games/${id}`)
 }
 
@@ -175,12 +196,16 @@ export async function markAsCompleted(id: string) {
 
   if (game) {
     await awardCompletionTickets(supabase, user.id, id, game.hours_played, game.achievement_progress)
+    await awardGameCompletionXp(supabase, user.id, game.hours_played, game.achievement_progress)
   }
+
+  await checkAndAwardAchievements(supabase, user.id)
 
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
   revalidatePath('/dashboard')
   revalidatePath('/tickets')
+  revalidatePath('/achievements')
 }
 
 export async function deleteGame(id: string) {

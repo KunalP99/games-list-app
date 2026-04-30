@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import { nextWheelTurn, pickWinner } from '@/lib/wheel'
 import type { WheelTurn } from '@/lib/types'
+import { checkAndAwardAchievements } from '@/lib/achievements'
 
 async function advanceTurn(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -63,7 +64,9 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
     result_name: resultName,
   })
   await advanceTurn(supabase, user.id, turn)
+  await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
+  revalidatePath('/achievements')
   return { success: true }
 }
 
@@ -153,7 +156,9 @@ export async function finalizeUpgradeChoice(
     result_name: chosen,
   })
   await advanceTurn(supabase, user.id, turn)
+  await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
+  revalidatePath('/achievements')
   return { success: true }
 }
 
@@ -187,7 +192,9 @@ export async function payChooseAnyGame(gameName: string) {
   })
 
   await advanceTurn(supabase, user.id, turn)
+  await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
+  revalidatePath('/achievements')
   return { success: true }
 }
 
@@ -228,7 +235,9 @@ export async function finalizeSpinReroll(
   })
 
   await advanceTurn(supabase, user.id, 'spin_reroll')
+  await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
+  revalidatePath('/achievements')
   return { success: true }
 }
 
@@ -251,7 +260,9 @@ export async function chooseGame(gameName: string) {
   })
 
   await advanceTurn(supabase, user.id, 'choose')
+  await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
+  revalidatePath('/achievements')
   return { success: true }
 }
 
@@ -269,7 +280,13 @@ export async function skipChooseTurn() {
     p_reason: 'turn_skipped',
   })
 
+  await (supabase.from('wheel_spins') as any).insert({
+    user_id: user.id,
+    spin_type: 'choose_skip',
+  })
+
   await advanceTurn(supabase, user.id, 'choose')
+  await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   return { success: true }
 }

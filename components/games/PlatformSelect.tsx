@@ -58,7 +58,7 @@ const PLATFORM_GROUPS = [
 
 const ALL_PLATFORMS = PLATFORM_GROUPS.flatMap(g => g.platforms)
 
-const input = 'w-full px-3 py-2 border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-white'
+const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
 
 export default function PlatformSelect({ defaultValue }: { defaultValue?: string | null }) {
   const [query, setQuery] = useState(defaultValue ?? '')
@@ -109,7 +109,7 @@ export default function PlatformSelect({ defaultValue }: { defaultValue?: string
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 text-lg leading-none"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg-secondary text-lg leading-none"
             tabIndex={-1}
           >
             ×
@@ -120,7 +120,7 @@ export default function PlatformSelect({ defaultValue }: { defaultValue?: string
       <input type="hidden" name="platform" value={selected} />
 
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-zinc-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-surface-base border border-edge-base rounded-lg shadow-lg max-h-64 overflow-y-auto">
           {isSearching ? (
             filtered && filtered.length > 0 ? (
               filtered.map(platform => (
@@ -130,20 +130,20 @@ export default function PlatformSelect({ defaultValue }: { defaultValue?: string
                   onMouseDown={e => { e.preventDefault(); pick(platform) }}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                     platform === selected
-                      ? 'bg-brand-50 text-brand-700 font-medium'
-                      : 'text-zinc-700 hover:bg-zinc-50'
+                      ? 'bg-brand-50 text-brand-700 font-medium dark:bg-brand-900/30 dark:text-brand-300'
+                      : 'text-fg-secondary hover:bg-surface-hover'
                   }`}
                 >
                   {platform}
                 </button>
               ))
             ) : (
-              <p className="px-3 py-2 text-sm text-zinc-400">No platforms found</p>
+              <p className="px-3 py-2 text-sm text-fg-subtle">No platforms found</p>
             )
           ) : (
             PLATFORM_GROUPS.map(group => (
               <div key={group.label}>
-                <p className="px-3 pt-2.5 pb-1 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                <p className="px-3 pt-2.5 pb-1 text-xs font-semibold text-fg-muted uppercase tracking-wider">
                   {group.label}
                 </p>
                 {group.platforms.map(platform => (
@@ -153,8 +153,8 @@ export default function PlatformSelect({ defaultValue }: { defaultValue?: string
                     onMouseDown={e => { e.preventDefault(); pick(platform) }}
                     className={`w-full text-left px-3 py-2 text-sm transition-colors ${
                       platform === selected
-                        ? 'bg-brand-50 text-brand-700 font-medium'
-                        : 'text-zinc-700 hover:bg-zinc-50'
+                        ? 'bg-brand-50 text-brand-700 font-medium dark:bg-brand-900/30 dark:text-brand-300'
+                        : 'text-fg-secondary hover:bg-surface-hover'
                     }`}
                   >
                     {platform}
