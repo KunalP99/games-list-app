@@ -7,6 +7,28 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- User dropdown on the navbar — clicking the avatar circle opens a panel with user info, Settings link, theme toggle, and sign out
+- `/settings` page with three sections: Profile (display name), Security (password change), and Appearance (theme preference + accent colour picker)
+- `ThemeInitialiser` component — applies the user's saved theme preference from the database on every page load, keeping localStorage in sync
+- Accent colour persisted in `profiles.accent_colour` — used for the avatar circle in the dropdown and as a tinted row highlight on the Ticket History page
+- Dynamic brand palette — the entire `brand-*` Tailwind colour scale (buttons, badges, focus rings, gradients, text) now adapts to the user's saved accent colour via CSS custom properties; the Settings colour picker shows a live preview as you drag
+- 23 new achievements across all categories: completion milestones up to 500 games, 100% completions up to 100 games, replays up to 30, hours up to 2,500, 10-platform variety, library size up to 1,000 games, and several dedication/misc additions
+- Mark as Completed modal on the game detail page — prompts for hours, star rating (half-star support), achievement progress, and completion date before saving; star fill uses the user's accent colour gradient
+- Dashboard bar chart and radar chart now use the user's accent colour instead of the hardcoded orange
+- Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
+
+### Changed
+- Nav logo icon replaced with an abstract play-triangle + list-bars mark (unique, abstract, reads clearly at small sizes)
+- Desktop navbar right section replaced: ThemeToggle + username span + sign-out form → compact `UserDropdown` component
+- Mobile sidebar footer now includes a Settings link alongside sign out
+- Ticket History current-user row highlight uses the user's accent colour (at 10% opacity) when set; falls back to `bg-surface-active`
+- 100% achievement badge restyled with a darker emerald→teal→cyan gradient, drop shadow, and glass ring
+
+---
+
+## 2026-04-30 — Polish, Testing & Changelog
+
+### Added
 - Logo icon mark — gradient violet rounded square with an inline SVG game controller (d-pad + four face buttons)
 - Orbitron gaming font (via `next/font/google`) scoped to the logo wordmark only
 - Vitest test suite — 45 tests across three files covering core logic:

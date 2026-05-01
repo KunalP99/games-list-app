@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import type { UnlockedAchievement, AchievementRarity } from '@/lib/achievements'
 
 const EXIT_DURATION_MS = 350
@@ -108,11 +109,18 @@ function AchievementToast({
   onDismiss: () => void
 }) {
   const styles = RARITY_STYLES[achievement.rarity]
+  const router = useRouter()
+
+  function handleClick() {
+    onDismiss()
+    router.push(`/achievements#achievement-${achievement.id}`)
+  }
 
   return (
     <button
       type="button"
-      onClick={onDismiss}
+      onClick={handleClick}
+      title="View achievement"
       className={`pointer-events-auto group relative flex items-stretch gap-3 bg-surface-base border border-edge-base rounded-xl shadow-lg overflow-hidden text-left hover:bg-surface-hover transition-colors w-[320px] ${
         exiting ? 'animate-achievement-dismiss' : 'animate-achievement-pop'
       }`}
@@ -131,8 +139,9 @@ function AchievementToast({
           <p className="text-sm font-semibold text-fg-base truncate">{achievement.name}</p>
           <p className="text-xs text-fg-muted truncate">{achievement.description}</p>
         </div>
-        <div className="shrink-0 text-xs font-bold text-brand-600 dark:text-brand-400 tabular-nums">
-          +{achievement.xp} XP
+        <div className="flex flex-col items-end justify-between shrink-0 gap-1">
+          <span className="text-xs font-bold text-brand-600 dark:text-brand-400 tabular-nums">+{achievement.xp} XP</span>
+          <span className="text-[10px] text-fg-subtle group-hover:text-fg-muted transition-colors">View →</span>
         </div>
       </div>
     </button>

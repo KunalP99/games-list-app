@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
-import ThemeToggle from '@/components/layout/ThemeToggle'
+import UserDropdown from '@/components/layout/UserDropdown'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -64,15 +64,12 @@ export default function Nav({ profile }: { profile: Profile }) {
               </svg>
             </button>
             <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-brand-500 to-violet-700 flex items-center justify-center shadow-sm shadow-brand-500/20">
-                <svg viewBox="0 0 16 12" fill="white" className="w-4 h-3">
-                  <rect x="1" y="4.75" width="4.5" height="1.5" rx=".4"/>
-                  <rect x="2.75" y="3" width="1.5" height="5" rx=".4"/>
-                  <circle cx="8" cy="6" r="0.9" fillOpacity="0.6"/>
-                  <circle cx="11" cy="3.5" r="1"/>
-                  <circle cx="13" cy="6" r="1"/>
-                  <circle cx="11" cy="8.5" r="1"/>
-                  <circle cx="9" cy="6" r="1"/>
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-sm shadow-brand-500/20">
+                <svg viewBox="0 0 16 16" fill="white" className="w-3.5 h-3.5">
+                  <polygon points="1.5,3.5 1.5,12.5 8.5,8"/>
+                  <rect x="10.5" y="3.5" width="4.5" height="2" rx="0.6"/>
+                  <rect x="10.5" y="7" width="4.5" height="2" rx="0.6"/>
+                  <rect x="10.5" y="10.5" width="4.5" height="2" rx="0.6"/>
                 </svg>
               </div>
               <span className="font-orbitron text-sm font-bold tracking-tight">
@@ -101,21 +98,12 @@ export default function Nav({ profile }: { profile: Profile }) {
             })}
           </nav>
 
-          {/* Right: theme toggle + ticket balance + username + sign out */}
+          {/* Right: ticket balance + user dropdown */}
           <div className="flex items-center gap-2.5">
-            <ThemeToggle />
             <span className={`hidden sm:flex items-center gap-1 text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300 ${ticketAnimating ? 'animate-ticket-gain' : ''}`}>
               🎟️ {profile.ticket_balance}
             </span>
-            <span className="hidden lg:block text-xs text-fg-muted shrink-0">{profile.display_name ?? profile.username}</span>
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="text-xs text-fg-subtle hover:text-fg-secondary transition-colors"
-              >
-                Sign out
-              </button>
-            </form>
+            <UserDropdown profile={profile} />
           </div>
         </header>
       </div>
@@ -138,7 +126,7 @@ export default function Nav({ profile }: { profile: Profile }) {
         {/* Sidebar header */}
         <div className="h-14 flex items-center justify-between px-4 border-b border-edge-subtle">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-violet-700 flex items-center justify-center shadow-sm shadow-brand-500/20">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-400 to-brand-700 flex items-center justify-center shadow-sm shadow-brand-500/20">
               <svg viewBox="0 0 16 12" fill="white" className="w-4 h-3">
                 <rect x="1" y="4.75" width="4.5" height="1.5" rx=".4"/>
                 <rect x="2.75" y="3" width="1.5" height="5" rx=".4"/>
@@ -184,7 +172,7 @@ export default function Nav({ profile }: { profile: Profile }) {
           })}
         </nav>
 
-        {/* Sidebar footer: theme + user info + sign out */}
+        {/* Sidebar footer: user info + settings + sign out */}
         <div className="border-t border-edge-subtle px-4 py-4 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-fg-secondary font-medium">
@@ -194,14 +182,16 @@ export default function Nav({ profile }: { profile: Profile }) {
               🎟️ {profile.ticket_balance}
             </span>
           </div>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="text-xs text-fg-subtle hover:text-fg-secondary transition-colors"
-            >
-              Sign out
-            </button>
-          </form>
+          <div className="flex items-center gap-4">
+            <Link href="/settings" className="text-xs text-fg-subtle hover:text-fg-secondary transition-colors">
+              Settings
+            </Link>
+            <form action={signOut}>
+              <button type="submit" className="text-xs text-fg-subtle hover:text-fg-secondary transition-colors">
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
     </>

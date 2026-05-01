@@ -134,8 +134,9 @@ function AchievementCard({
 }) {
   return (
     <div
+      id={`achievement-${achievement.id}`}
       className={`
-        relative bg-surface-base border rounded-xl p-4 flex gap-3 transition-all
+        relative bg-surface-base border rounded-xl p-4 flex gap-3 transition-all scroll-mt-24
         ${unlocked ? RARITY_TINT[achievement.rarity] : 'border-edge-subtle opacity-55 grayscale'}
       `}
     >

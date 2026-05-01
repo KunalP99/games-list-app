@@ -174,31 +174,52 @@ export async function updateGame(id: string, formData: FormData) {
   redirect(`/games/${id}`)
 }
 
-export async function markAsCompleted(id: string) {
+export async function markAsCompleted(
+  id: string,
+  details?: {
+    hours: number | null
+    rating: number | null
+    achievementProgress: number | null
+    completionDate: string
+  },
+) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: game } = await (supabase.from('games') as any)
-    .select('hours_played, achievement_progress')
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single() as { data: { hours_played: number | null; achievement_progress: number | null } | null }
+  let hours: number | null
+  let achievementProgress: number | null
+  const update: Record<string, unknown> = { status: 'completed' }
 
-  const today = new Date().toISOString().split('T')[0]
+  if (details) {
+    // Modal path — write everything the user supplied
+    hours = details.hours
+    achievementProgress = details.achievementProgress
+    update.hours_played = hours
+    update.rating = details.rating
+    update.achievement_progress = achievementProgress
+    update.completion_date = details.completionDate
+  } else {
+    // Card quick-complete — read existing values for ticket calculation only
+    const { data: game } = await (supabase.from('games') as any)
+      .select('hours_played, achievement_progress')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single() as { data: { hours_played: number | null; achievement_progress: number | null } | null }
+    hours = game?.hours_played ?? null
+    achievementProgress = game?.achievement_progress ?? null
+    update.completion_date = new Date().toISOString().split('T')[0]
+  }
 
   const { error } = await (supabase.from('games') as any)
-    .update({ status: 'completed', completion_date: today })
+    .update(update)
     .eq('id', id)
     .eq('user_id', user.id)
 
   if (error) return { error: error.message }
 
-  if (game) {
-    await awardCompletionTickets(supabase, user.id, id, game.hours_played, game.achievement_progress)
-    await awardGameCompletionXp(supabase, user.id, game.hours_played, game.achievement_progress)
-  }
-
+  await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
+  await awardGameCompletionXp(supabase, user.id, hours, achievementProgress)
   await checkAndAwardAchievements(supabase, user.id)
 
   revalidatePath('/games')

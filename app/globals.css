@@ -12,6 +12,19 @@
 :root {
   --font-geist-sans: 'Geist Sans', sans-serif;
 
+  /* ── Brand palette — defaults to orange #e84410; overridden per user accent colour ── */
+  --brand-50:  255 243 239;
+  --brand-100: 255 228 217;
+  --brand-200: 255 196 172;
+  --brand-300: 255 157 122;
+  --brand-400: 255 115 71;
+  --brand-500: 255 87 34;
+  --brand-600: 232 68 16;
+  --brand-700: 194 50 11;
+  --brand-800: 154 39 9;
+  --brand-900: 124 31 7;
+  --brand-950: 67 15 3;
+
   /* ── Surfaces — background layers, outermost to innermost ── */
   --color-surface-page:     theme('colors.zinc.50');   /* App shell / outermost page background */
   --color-surface-elevated: theme('colors.white');     /* Navbar and header bar */

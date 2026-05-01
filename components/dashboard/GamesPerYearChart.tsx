@@ -61,7 +61,7 @@ export default function GamesPerYearChart({ data }: { data: YearData[] }) {
             content={<CustomTooltip />}
             cursor={{ fill: 'var(--color-surface-hover)' }}
           />
-          <Bar dataKey="count" fill="#ff5722" radius={[4, 4, 0, 0]} maxBarSize={48} />
+          <Bar dataKey="count" fill="rgb(var(--brand-600))" radius={[4, 4, 0, 0]} maxBarSize={48} />
         </BarChart>
       </ResponsiveContainer>
     </div>

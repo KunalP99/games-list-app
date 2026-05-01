@@ -128,8 +128,8 @@ export default function GenreAndPlatformCharts({
               />
               <Radar
                 dataKey="count"
-                stroke="#ff5722"
-                fill="#ff5722"
+                stroke="rgb(var(--brand-600))"
+                fill="rgb(var(--brand-600))"
                 fillOpacity={0.25}
                 strokeWidth={1.5}
               />

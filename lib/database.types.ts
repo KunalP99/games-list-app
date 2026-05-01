@@ -22,6 +22,8 @@ export type Database = {
           tickets_earned_total: number
           xp: number
           wheel_turn: 'spin' | 'spin_reroll' | 'choose'
+          theme_preference: 'light' | 'dark' | 'system'
+          accent_colour: string | null
           created_at: string
           updated_at: string
         }
@@ -34,6 +36,8 @@ export type Database = {
           tickets_earned_total?: number
           xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
+          theme_preference?: 'light' | 'dark' | 'system'
+          accent_colour?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -46,6 +50,8 @@ export type Database = {
           tickets_earned_total?: number
           xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
+          theme_preference?: 'light' | 'dark' | 'system'
+          accent_colour?: string | null
           created_at?: string
           updated_at?: string
         }

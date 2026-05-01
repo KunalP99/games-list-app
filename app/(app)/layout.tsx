@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Nav from '@/components/layout/Nav'
 import AchievementProvider from '@/components/layout/AchievementProvider'
+import ThemeInitialiser from '@/components/layout/ThemeInitialiser'
 import { readFlashAchievements } from '@/lib/achievements'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -26,8 +27,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const pendingAchievements = readFlashAchievements()
 
+  const profileData = profile as any
+
   return (
     <AchievementProvider initialAchievements={pendingAchievements}>
+      <ThemeInitialiser preference={profileData.theme_preference ?? 'system'} accentColour={profileData.accent_colour ?? null} />
       <div className="min-h-screen bg-surface-page">
         <Nav profile={profile} />
         <main className="max-w-6xl mx-auto px-4 pt-24 pb-8">{children}</main>
