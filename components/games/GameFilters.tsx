@@ -12,6 +12,7 @@ const STATUS_TABS = [
 
 const SORT_OPTIONS = [
   { value: 'created_at', label: 'Date Added' },
+  { value: 'completion_date', label: 'Completion Date' },
   { value: 'title', label: 'Title' },
   { value: 'rating', label: 'Rating' },
   { value: 'hours_played', label: 'Hours Played' },

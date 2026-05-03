@@ -21,6 +21,7 @@ export default async function GamesPage({
   const status = searchParams.status === 'all' ? undefined : searchParams.status
   const sort = searchParams.sort ?? 'created_at'
   const sortAsc = sort === 'title'
+  const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
   const q = searchParams.q?.trim()
 
   const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
@@ -38,7 +39,7 @@ export default async function GamesPage({
     .select('*')
     .eq('user_id', user!.id)
     .neq('status', 'playing')
-    .order(sort === 'status' ? 'created_at' : sort, { ascending: sortAsc, nullsFirst: false })
+    .order(sort === 'status' ? 'created_at' : sort, { ascending: !sortDesc, nullsFirst: false })
 
   if (status) query = query.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
   if (q) query = query.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
