@@ -49,6 +49,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'five_hundred_hours',   name: 'No Life',              description: 'Log 500 total hours played',   icon: '😤', rarity: 'rare',     category: 'hours',      xp: 300  },
   { id: 'thousand_hours',       name: 'Legend',               description: 'Log 1,000 total hours played', icon: '🔥', rarity: 'epic',     category: 'hours',      xp: 500  },
   { id: 'twenty_five_hundred_hours', name: 'No Concept of Time', description: 'Log 2,500 total hours played', icon: '🌀', rarity: 'epic', category: 'hours',      xp: 750  },
+  { id: 'five_thousand_hours',    name: 'Time Thief',           description: 'Log 5,000 total hours played',  icon: '⏳', rarity: 'epic', category: 'hours',      xp: 1000 },
+  { id: 'seventy_five_hundred_hours', name: 'Chronovore',       description: 'Log 7,500 total hours played',  icon: '🕳️', rarity: 'epic', category: 'hours',      xp: 1250 },
+  { id: 'ten_thousand_hours',     name: 'The Abyss',            description: 'Log 10,000 total hours played', icon: '🌑', rarity: 'epic', category: 'hours',      xp: 1500 },
 
   // ── Tickets ───────────────────────────────────────────────────────────────
   { id: 'ten_tickets',          name: 'First Earnings',       description: 'Earn 10 tickets total',        icon: '🎟️', rarity: 'common',   category: 'tickets',    xp: 50   },
@@ -70,7 +73,11 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'harsh_critic',         name: 'Brutally Honest',      description: 'Give a game 1/5',              icon: '💀', rarity: 'common',   category: 'perfection', xp: 50   },
 
   // ── Variety ───────────────────────────────────────────────────────────────
-  { id: 'five_genres',          name: 'Genre Explorer',       description: 'Play games across 5 different genres',   icon: '🗺️', rarity: 'common',   category: 'variety', xp: 75  },
+  { id: 'developer_loyalist',     name: 'Developer Loyalist',     description: 'Complete 3 games by the same developer',         icon: '🏗️', rarity: 'uncommon', category: 'variety', xp: 150 },
+  { id: 'indie_darling',          name: 'Indie Darling',          description: 'Complete 5 indie games',                         icon: '🎸', rarity: 'uncommon', category: 'variety', xp: 150 },
+  { id: 'old_school',             name: 'Old School',             description: 'Complete 5 games released before 2000',          icon: '📺', rarity: 'uncommon', category: 'variety', xp: 150 },
+  { id: 'completionists_journey', name: "Completionist's Journey", description: 'Complete 10 games in the same genre',           icon: '🗂️', rarity: 'rare',     category: 'variety', xp: 300 },
+  { id: 'five_genres',            name: 'Genre Explorer',         description: 'Play games across 5 different genres',           icon: '🗺️', rarity: 'common',   category: 'variety', xp: 75  },
   { id: 'ten_genres',           name: 'Genre Connoisseur',    description: 'Play games across 10 different genres',           icon: '🌍', rarity: 'uncommon', category: 'variety', xp: 150 },
   { id: 'genre_master',         name: 'Genre Master',         description: 'Complete 5 games in the same genre',              icon: '🎓', rarity: 'rare',     category: 'variety', xp: 250 },
   { id: 'retro_fan',            name: 'Retro Fan',            description: 'Complete a game released before 2000',            icon: '📼', rarity: 'uncommon', category: 'variety', xp: 150 },
@@ -92,6 +99,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'committed',            name: 'Committed',            description: 'Complete a game with 150+ hours',        icon: '💪', rarity: 'rare',     category: 'dedication', xp: 400 },
   { id: 'absorbed',             name: 'Absorbed',             description: 'Complete a game with 200+ hours',        icon: '🌊', rarity: 'epic',     category: 'dedication', xp: 600 },
   { id: 'the_grind',            name: 'The Grind',            description: 'Complete 3 games with 100+ hours each',  icon: '⛏️', rarity: 'epic',     category: 'dedication', xp: 700 },
+  { id: 'single_session',       name: 'Single Session',       description: 'Complete a game with 300+ hours',                      icon: '🛌', rarity: 'epic',     category: 'dedication', xp: 800 },
+  { id: 'speed_run',            name: 'Speed Run',            description: 'Complete a game in under 5 hours',                     icon: '💨', rarity: 'uncommon', category: 'dedication', xp: 100 },
+  { id: 'hot_streak',           name: 'Hot Streak',           description: 'Complete 3 games in the same calendar month',          icon: '🔥', rarity: 'uncommon', category: 'dedication', xp: 150 },
+  { id: 'prolific_year',        name: 'Prolific Year',        description: 'Complete 20+ games in a single calendar year',         icon: '📆', rarity: 'rare',     category: 'dedication', xp: 300 },
+  { id: 'consistent',           name: 'Consistent',           description: 'Complete at least 1 game per month for 6 months in a row', icon: '📅', rarity: 'rare',  category: 'dedication', xp: 300 },
+  { id: 'trilogy',              name: 'Trilogy',              description: 'Complete 3 sequels back-to-back',                      icon: '📚', rarity: 'rare',     category: 'dedication', xp: 250 },
+  { id: 'dedicated_reviewer',   name: 'Dedicated Reviewer',   description: 'Write a review for 10 games',                          icon: '✍️', rarity: 'uncommon', category: 'dedication', xp: 150 },
+  { id: 'prolific_critic',      name: 'Prolific Critic',      description: 'Write a review for 25 games',                          icon: '📰', rarity: 'rare',     category: 'dedication', xp: 250 },
+  { id: 'novel',                name: 'Novel',                description: 'Write a review longer than 500 characters',            icon: '📖', rarity: 'uncommon', category: 'dedication', xp: 100 },
 
   // ── Wheel ─────────────────────────────────────────────────────────────────
   { id: 'first_spin',           name: 'Spin to Win',          description: 'Spin the wheel for the first time',      icon: '🎡', rarity: 'common',   category: 'wheel', xp: 50  },
@@ -113,7 +129,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'library_two_fifty',    name: 'Hoarder',              description: 'Have 250 games in your library',         icon: '📦', rarity: 'rare',     category: 'misc', xp: 350  },
   { id: 'library_five_hundred', name: 'Grand Library',        description: 'Have 500 games in your library',         icon: '🏰', rarity: 'epic',     category: 'misc', xp: 600  },
   { id: 'library_thousand',     name: 'The Librarian',        description: 'Have 1,000 games in your library',       icon: '📖', rarity: 'epic',     category: 'misc', xp: 1000 },
-  { id: 'dnf_five',             name: 'Selective Taste',      description: 'DNF 5 games',                            icon: '🚪', rarity: 'common',   category: 'misc', xp: 50   },
+  { id: 'dnf_five',             name: 'Selective Taste',      description: 'DNF 5 games',                                             icon: '🚪', rarity: 'common',   category: 'misc', xp: 50   },
+  { id: 'dnf_redemption',       name: 'DNF Redemption',       description: 'Complete a game you previously DNF\'d',               icon: '🔰', rarity: 'rare',     category: 'misc', xp: 300  },
+  { id: 'backlog_slayer',       name: 'Backlog Slayer',       description: 'Complete 10 games that were already in your library', icon: '⚔️', rarity: 'rare',     category: 'misc', xp: 250  },
+  { id: 'quick_turnaround',     name: 'Quick Turnaround',     description: 'Complete a game within 7 days of adding it',         icon: '⚡', rarity: 'uncommon', category: 'misc', xp: 150  },
 ]
 
 export const CATEGORY_LABELS: Record<AchievementCategory, string> = {
@@ -198,13 +217,30 @@ type Stats = {
   dnfCount: number
   hasUsedReroll: boolean
   hasSkippedChoose: boolean
+  hasSingleSession: boolean
+  reviewCount: number
+  hasNovelReview: boolean
+  topDeveloperCompletions: number
+  indieGameCount: number
+  retroGameCount: number
+  hasDnfRedemption: boolean
+  hotStreakMonth: boolean
+  hasProlificYear: boolean
+  hasConsistentStreak: boolean
+  hasTrilogy: boolean
+  hasSpeedRun: boolean
+  backlogSlayerCount: number
+  hasQuickTurnaround: boolean
 }
 
 async function gatherStats(supabase: SupabaseClient, userId: string): Promise<Stats> {
   const { data: games } = await (supabase.from('games') as any)
-    .select('status, hours_played, achievement_progress, rating, genres, platform, is_replay, is_sequel, is_favourite, assigned_by, release_date, completion_date')
+    .select('status, title, developer, review, hours_played, achievement_progress, rating, genres, platform, is_replay, is_sequel, is_favourite, assigned_by, release_date, completion_date, created_at')
     .eq('user_id', userId) as { data: Array<{
       status: string
+      title: string
+      developer: string | null
+      review: string | null
       hours_played: number | null
       achievement_progress: number | null
       rating: number | null
@@ -216,6 +252,7 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
       assigned_by: string | null
       release_date: string | null
       completion_date: string | null
+      created_at: string
     }> | null }
 
   const list = games ?? []
@@ -272,6 +309,93 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
       comp.getMonth() + 1 === releaseMonth
   })
 
+  const hasSingleSession = completed.some(g => (g.hours_played ?? 0) >= 300)
+
+  const reviewCount = list.filter(g => g.review && g.review.trim().length > 0).length
+  const hasNovelReview = list.some(g => g.review && g.review.trim().length > 500)
+
+  const indieGameCount = completed.filter(g =>
+    g.genres?.some(genre => genre.toLowerCase() === 'indie')
+  ).length
+
+  const retroGameCount = completed.filter(g => {
+    if (!g.release_date) return false
+    const year = parseInt(g.release_date.substring(0, 4))
+    return !isNaN(year) && year < 2000
+  }).length
+
+  const monthCounts = new Map<string, number>()
+  const completionMonths = new Set<string>()
+  for (const g of completed) {
+    if (!g.completion_date) continue
+    const ym = g.completion_date.substring(0, 7)
+    monthCounts.set(ym, (monthCounts.get(ym) ?? 0) + 1)
+    completionMonths.add(ym)
+  }
+  const hotStreakMonth = Array.from(monthCounts.values()).some(c => c >= 3)
+
+  const yearCounts = new Map<string, number>()
+  for (const g of completed) {
+    if (!g.completion_date) continue
+    const year = g.completion_date.substring(0, 4)
+    yearCounts.set(year, (yearCounts.get(year) ?? 0) + 1)
+  }
+  const hasProlificYear = Array.from(yearCounts.values()).some(c => c >= 20)
+
+  const hasSpeedRun = completed.some(g => g.hours_played != null && g.hours_played > 0 && g.hours_played < 5)
+
+  const sortedByDate = [...completed]
+    .filter(g => g.completion_date)
+    .sort((a, b) => a.completion_date!.localeCompare(b.completion_date!))
+  let sequelStreak = 0
+  let hasTrilogy = false
+  for (const g of sortedByDate) {
+    if (g.is_sequel) { if (++sequelStreak >= 3) { hasTrilogy = true; break } }
+    else sequelStreak = 0
+  }
+
+  const sortedMonths = Array.from(completionMonths).sort()
+  let maxStreak = sortedMonths.length > 0 ? 1 : 0
+  let currentStreak = 1
+  for (let i = 1; i < sortedMonths.length; i++) {
+    const prev = new Date(sortedMonths[i - 1] + '-01')
+    const curr = new Date(sortedMonths[i] + '-01')
+    const monthDiff = (curr.getFullYear() - prev.getFullYear()) * 12 + (curr.getMonth() - prev.getMonth())
+    if (monthDiff === 1) {
+      currentStreak++
+      if (currentStreak > maxStreak) maxStreak = currentStreak
+    } else {
+      currentStreak = 1
+    }
+  }
+  const hasConsistentStreak = maxStreak >= 6
+
+  const backlogSlayerCount = completed.filter(g => {
+    if (!g.completion_date) return false
+    const createdDay = g.created_at.substring(0, 10)
+    return g.completion_date > createdDay
+  }).length
+
+  const hasQuickTurnaround = completed.some(g => {
+    if (!g.completion_date) return false
+    const createdMs = new Date(g.created_at.substring(0, 10)).getTime()
+    const completedMs = new Date(g.completion_date).getTime()
+    const days = (completedMs - createdMs) / 86400000
+    return days >= 1 && days <= 7
+  })
+
+  const devCompletionMap = new Map<string, number>()
+  for (const g of completed) {
+    if (g.developer) {
+      const key = g.developer.toLowerCase()
+      devCompletionMap.set(key, (devCompletionMap.get(key) ?? 0) + 1)
+    }
+  }
+  const topDeveloperCompletions = devCompletionMap.size > 0 ? Math.max(...Array.from(devCompletionMap.values())) : 0
+
+  const dnfTitles = new Set(list.filter(g => g.status === 'dnf').map(g => g.title.toLowerCase()))
+  const hasDnfRedemption = completed.some(g => dnfTitles.has(g.title.toLowerCase()))
+
   const { data: profile } = await (supabase.from('profiles') as any)
     .select('tickets_earned_total')
     .eq('id', userId)
@@ -310,6 +434,20 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
     dnfCount: list.filter(g => g.status === 'dnf').length,
     hasUsedReroll: spins.some(s => s.spin_type === 'spin_reroll'),
     hasSkippedChoose: spins.some(s => s.spin_type === 'choose_skip'),
+    hasSingleSession,
+    reviewCount,
+    hasNovelReview,
+    topDeveloperCompletions,
+    indieGameCount,
+    retroGameCount,
+    hasDnfRedemption,
+    hotStreakMonth,
+    hasProlificYear,
+    hasConsistentStreak,
+    hasTrilogy,
+    hasSpeedRun,
+    backlogSlayerCount,
+    hasQuickTurnaround,
   }
 }
 
@@ -336,8 +474,11 @@ function evaluateAchievement(id: string, s: Stats): boolean {
     case 'hundred_hours':          return s.totalHours >= 100
     case 'two_fifty_hours':        return s.totalHours >= 250
     case 'five_hundred_hours':     return s.totalHours >= 500
-    case 'thousand_hours':         return s.totalHours >= 1000
+    case 'thousand_hours':          return s.totalHours >= 1000
     case 'twenty_five_hundred_hours': return s.totalHours >= 2500
+    case 'five_thousand_hours':     return s.totalHours >= 5000
+    case 'seventy_five_hundred_hours': return s.totalHours >= 7500
+    case 'ten_thousand_hours':      return s.totalHours >= 10000
     // Tickets
     case 'ten_tickets':            return s.ticketsEarnedTotal >= 10
     case 'fifty_tickets':          return s.ticketsEarnedTotal >= 50
@@ -356,6 +497,10 @@ function evaluateAchievement(id: string, s: Stats): boolean {
     case 'easy_to_please':         return s.fiveStarCount >= 5
     case 'harsh_critic':           return s.hasOneRating
     // Variety
+    case 'developer_loyalist':     return s.topDeveloperCompletions >= 3
+    case 'indie_darling':          return s.indieGameCount >= 5
+    case 'old_school':             return s.retroGameCount >= 5
+    case 'completionists_journey': return s.topGenreCompletions >= 10
     case 'five_genres':            return s.uniqueGenres >= 5
     case 'ten_genres':             return s.uniqueGenres >= 10
     case 'genre_master':           return s.topGenreCompletions >= 5
@@ -377,6 +522,15 @@ function evaluateAchievement(id: string, s: Stats): boolean {
     case 'committed':              return s.hasCommittedGame
     case 'absorbed':               return s.hasAbsorbedGame
     case 'the_grind':              return s.marathonGameCount >= 3
+    case 'single_session':         return s.hasSingleSession
+    case 'speed_run':              return s.hasSpeedRun
+    case 'hot_streak':             return s.hotStreakMonth
+    case 'prolific_year':          return s.hasProlificYear
+    case 'consistent':             return s.hasConsistentStreak
+    case 'trilogy':                return s.hasTrilogy
+    case 'dedicated_reviewer':     return s.reviewCount >= 10
+    case 'prolific_critic':        return s.reviewCount >= 25
+    case 'novel':                  return s.hasNovelReview
     // Wheel
     case 'first_spin':             return s.totalSpins >= 1
     case 'ten_spins':              return s.totalSpins >= 10
@@ -397,6 +551,9 @@ function evaluateAchievement(id: string, s: Stats): boolean {
     case 'library_five_hundred':   return s.libraryCount >= 500
     case 'library_thousand':       return s.libraryCount >= 1000
     case 'dnf_five':               return s.dnfCount >= 5
+    case 'dnf_redemption':         return s.hasDnfRedemption
+    case 'backlog_slayer':         return s.backlogSlayerCount >= 10
+    case 'quick_turnaround':       return s.hasQuickTurnaround
     default: return false
   }
 }
