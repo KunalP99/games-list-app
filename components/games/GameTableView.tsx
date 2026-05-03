@@ -88,10 +88,12 @@ export default function GameTableView({ games, isOwner }: { games: Game[]; isOwn
               <td className="px-4 py-3 hidden sm:table-cell">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {game.is_replay && (
-                    <span className="text-brand-500" title="Replay">↩</span>
+                    <span className="text-orange-400" title="Replay">↩</span>
                   )}
                   {game.is_sequel && (
-                    <span className="text-xs text-fg-muted font-medium">Sequel</span>
+                    <span className="text-violet-500" title="Sequel">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+                    </span>
                   )}
                 </div>
               </td>
