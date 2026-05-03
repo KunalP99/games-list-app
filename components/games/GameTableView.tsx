@@ -88,7 +88,7 @@ export default function GameTableView({ games, isOwner }: { games: Game[]; isOwn
               <td className="px-4 py-3 hidden sm:table-cell">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {game.is_replay && (
-                    <span className="text-xs text-brand-500 font-medium">↩ Replay</span>
+                    <span className="text-brand-500" title="Replay">↩</span>
                   )}
                   {game.is_sequel && (
                     <span className="text-xs text-fg-muted font-medium">Sequel</span>
