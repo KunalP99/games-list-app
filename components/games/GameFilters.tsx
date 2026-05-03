@@ -28,6 +28,18 @@ export default function GameFilters() {
   const activeView = searchParams.get('view') ?? 'grid'
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
 
+  // Restore saved view preference when no ?view= param is present in the URL
+  useEffect(() => {
+    if (!searchParams.get('view')) {
+      const saved = localStorage.getItem('gameView')
+      if (saved === 'table' || saved === 'grid') {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('view', saved)
+        router.replace(`${pathname}?${params.toString()}`)
+      }
+    }
+  }, [])
+
   // Sync search input if URL param changes externally (e.g. tab switch clears q)
   useEffect(() => {
     setSearch(searchParams.get('q') ?? '')
@@ -50,6 +62,7 @@ export default function GameFilters() {
   function update(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString())
     params.set(key, value)
+    if (key === 'view') localStorage.setItem('gameView', value)
     router.push(`${pathname}?${params.toString()}`)
   }
 
