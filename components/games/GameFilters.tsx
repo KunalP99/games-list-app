@@ -28,6 +28,20 @@ export default function GameFilters() {
   const activeView = searchParams.get('view') ?? 'grid'
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
 
+  // On mount: if no ?view= in URL, read cookie and silently inject it so the
+  // toggle reflects the correct state and subsequent filter clicks preserve it.
+  useEffect(() => {
+    if (!searchParams.get('view')) {
+      const m = document.cookie.match(/\bgameView=(grid|table)\b/)
+      const saved = m?.[1] as 'grid' | 'table' | undefined
+      if (saved === 'table') {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('view', 'table')
+        router.replace(`${pathname}?${params.toString()}`)
+      }
+    }
+  }, [])
+
   // Sync search input if URL param changes externally (e.g. tab switch clears q)
   useEffect(() => {
     setSearch(searchParams.get('q') ?? '')
