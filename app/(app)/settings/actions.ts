@@ -13,7 +13,7 @@ export async function updateProfile(formData: FormData): Promise<ActionResult> {
 
   const { error } = await supabase
     .from('profiles')
-    .update({ display_name })
+    .update({ display_name } as never)
     .eq('id', user.id)
 
   if (error) return { success: false, error: error.message }
@@ -44,7 +44,7 @@ export async function updateAppearance(formData: FormData): Promise<ActionResult
 
   const { error } = await supabase
     .from('profiles')
-    .update({ theme_preference, accent_colour })
+    .update({ theme_preference, accent_colour } as never)
     .eq('id', user.id)
 
   if (error) return { success: false, error: error.message }
