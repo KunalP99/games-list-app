@@ -25,16 +25,19 @@ export default function GameFilters() {
 
   const activeStatus = searchParams.get('status') ?? 'all'
   const activeSort = searchParams.get('sort') ?? 'created_at'
-  const activeView = searchParams.get('view') ?? 'grid'
+  const [activeView, setActiveView] = useState<'grid' | 'table'>(
+    (searchParams.get('view') as 'grid' | 'table') ?? 'grid'
+  )
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
 
-  // On mount: if no ?view= in URL, read cookie and silently inject it so the
-  // toggle reflects the correct state and subsequent filter clicks preserve it.
+  // On mount: if no ?view= in URL, read cookie and update both the icon and
+  // the URL so subsequent filter changes continue to preserve the view param.
   useEffect(() => {
     if (!searchParams.get('view')) {
       const m = document.cookie.match(/\bgameView=(grid|table)\b/)
       const saved = m?.[1] as 'grid' | 'table' | undefined
       if (saved === 'table') {
+        setActiveView('table')
         const params = new URLSearchParams(searchParams.toString())
         params.set('view', 'table')
         router.replace(`${pathname}?${params.toString()}`)
@@ -65,6 +68,7 @@ export default function GameFilters() {
     const params = new URLSearchParams(searchParams.toString())
     params.set(key, value)
     if (key === 'view') {
+      setActiveView(value as 'grid' | 'table')
       document.cookie = `gameView=${value}; path=/; max-age=31536000; SameSite=Lax`
     }
     router.push(`${pathname}?${params.toString()}`)
