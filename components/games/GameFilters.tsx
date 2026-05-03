@@ -25,6 +25,7 @@ export default function GameFilters() {
 
   const activeStatus = searchParams.get('status') ?? 'all'
   const activeSort = searchParams.get('sort') ?? 'created_at'
+  const activeView = searchParams.get('view') ?? 'grid'
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
 
   // Sync search input if URL param changes externally (e.g. tab switch clears q)
@@ -105,8 +106,8 @@ export default function GameFilters() {
         ))}
       </div>
 
-      {/* Sort */}
-      <div className="flex items-center gap-2 text-sm text-fg-muted order-3 ml-auto">
+      {/* Sort + view toggle */}
+      <div className="flex items-center gap-3 text-sm text-fg-muted order-3 ml-auto">
         <span>Sort by</span>
         <select
           value={activeSort}
@@ -117,6 +118,31 @@ export default function GameFilters() {
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+
+        {/* View toggle */}
+        <div className="flex items-center gap-1 border border-edge-base rounded-lg p-1">
+          <button
+            onClick={() => update('view', 'grid')}
+            aria-label="Grid view"
+            className={`p-1 rounded transition-colors ${activeView === 'grid' ? 'text-brand-500' : 'text-fg-subtle hover:text-fg-secondary'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+          <button
+            onClick={() => update('view', 'table')}
+            aria-label="Table view"
+            className={`p-1 rounded transition-colors ${activeView === 'table' ? 'text-brand-500' : 'text-fg-subtle hover:text-fg-secondary'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" d="M3 6h18M3 12h18M3 18h18" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   )

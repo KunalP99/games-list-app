@@ -19,7 +19,7 @@ export default async function UserProfilePage({
   searchParams,
 }: {
   params: { username: string }
-  searchParams: { status?: string; sort?: string }
+  searchParams: { status?: string; sort?: string; view?: string }
 }) {
   if (!searchParams.status) redirect(`/users/${encodeURIComponent(params.username)}?status=completed`)
 
@@ -132,7 +132,7 @@ export default async function UserProfilePage({
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={isOwner} />
+        <GameListView games={games} status={searchParams.status} isOwner={isOwner} view={searchParams.view === 'table' ? 'table' : 'grid'} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>

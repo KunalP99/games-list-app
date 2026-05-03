@@ -1,4 +1,5 @@
 import GameCard from './GameCard'
+import GameTableView from './GameTableView'
 import type { Game } from '@/lib/types'
 
 function CompletedByYear({ games, isOwner }: { games: Game[]; isOwner: boolean }) {
@@ -41,11 +42,17 @@ export default function GameListView({
   games,
   status,
   isOwner = true,
+  view = 'grid',
 }: {
   games: Game[]
   status: string
   isOwner?: boolean
+  view?: 'grid' | 'table'
 }) {
+  if (view === 'table') {
+    return <GameTableView games={games} isOwner={isOwner} />
+  }
+
   if (status === 'completed') {
     return <CompletedByYear games={games} isOwner={isOwner} />
   }

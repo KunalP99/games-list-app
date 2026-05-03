@@ -10,7 +10,7 @@ import { Suspense } from 'react'
 export default async function GamesPage({
   searchParams,
 }: {
-  searchParams: { status?: string; sort?: string; q?: string }
+  searchParams: { status?: string; sort?: string; q?: string; view?: string }
 }) {
   if (!searchParams.status) redirect('/games?status=completed')
 
@@ -90,7 +90,7 @@ export default async function GamesPage({
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={true} />
+        <GameListView games={games} status={searchParams.status} isOwner={true} view={searchParams.view === 'table' ? 'table' : 'grid'} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>
