@@ -1,10 +1,18 @@
 import { notFound, redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Game, Profile } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
+import GameCard from '@/components/games/GameCard'
 import { Suspense } from 'react'
+
+function StatPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 px-3 py-1 bg-surface-elevated border border-edge-base rounded-full text-sm text-fg-secondary">
+      {children}
+    </span>
+  )
+}
 
 export default async function UserProfilePage({
   params,
@@ -20,7 +28,7 @@ export default async function UserProfilePage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('*')
+    .select('id, display_name, username, ticket_balance, accent_colour')
     .eq('username', params.username)
     .single() as { data: Profile | null }
 
@@ -38,20 +46,27 @@ export default async function UserProfilePage({
     .eq('user_id', profile.id)
     .order(sort, { ascending: sortAsc, nullsFirst: false })
 
-  if (status) query = query.eq('status', status)
+  if (status) query = query.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
 
   const { data: games } = await query as { data: Game[] | null }
 
-  // Summary counts (all games regardless of filter)
   const { data: allGames } = await supabase
     .from('games')
     .select('status, hours_played')
     .eq('user_id', profile.id) as { data: { status: string; hours_played: number | null }[] | null }
 
+  const { data: playingGames } = await supabase
+    .from('games')
+    .select('*')
+    .eq('user_id', profile.id)
+    .eq('status', 'playing')
+    .order('created_at', { ascending: false })
+    .limit(2) as { data: Game[] | null }
+
   const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
-  const totalPlaying = allGames?.filter(g => g.status === 'playing').length ?? 0
-  const totalBacklog = allGames?.filter(g => g.status === 'backlog').length ?? 0
-  const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
+  const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0
+  const totalBacklog   = allGames?.filter(g => g.status === 'backlog').length ?? 0
+  const totalHours     = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
 
   const initials = (profile.display_name ?? profile.username)
     .split(' ')
@@ -60,35 +75,57 @@ export default async function UserProfilePage({
     .join('')
     .toUpperCase()
 
+  const accentColour = profile.accent_colour ?? '#7c3aed'
+  const bannerStyle = {
+    background: `linear-gradient(135deg, ${accentColour}cc 0%, ${accentColour}44 100%)`,
+  }
+
   return (
     <div className="space-y-6">
-      {/* Profile header */}
-      <div className="flex items-start gap-4">
-        <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-lg flex-shrink-0 dark:bg-brand-900/40 dark:text-brand-300">
-          {initials}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-fg-base">
-              {profile.display_name ?? profile.username}
-            </h1>
-            <span className="flex items-center gap-1.5 text-sm font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-3 py-0.5 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300">
-              🎟️ {profile.ticket_balance}
-            </span>
-          </div>
-          <p className="text-sm text-fg-subtle mt-0.5">@{profile.username}</p>
+      {/* Hero card */}
+      <div className="bg-surface-base border border-edge-base rounded-xl overflow-visible">
+        {/* Banner */}
+        <div className="h-36 rounded-t-xl" style={bannerStyle} />
 
-          {/* Stats row */}
-          <div className="flex flex-wrap gap-4 mt-3 text-sm text-fg-muted">
-            <span><span className="font-semibold text-fg-secondary">{totalCompleted}</span> completed</span>
-            <span><span className="font-semibold text-fg-secondary">{totalPlaying}</span> playing</span>
-            <span><span className="font-semibold text-fg-secondary">{totalBacklog}</span> backlog</span>
-            {totalHours > 0 && (
-              <span><span className="font-semibold text-fg-secondary">{totalHours.toLocaleString()}h</span> played</span>
-            )}
+        {/* Avatar — overlaps banner with negative margin */}
+        <div className="px-6">
+          <div
+            className="w-24 h-24 rounded-full border-4 border-surface-base flex items-center justify-center text-3xl font-bold text-white -mt-12 select-none"
+            style={{ backgroundColor: accentColour }}
+          >
+            {initials}
+          </div>
+        </div>
+
+        {/* Name + stats */}
+        <div className="px-6 pt-3 pb-6">
+          <h1 className="text-2xl font-bold text-fg-base">
+            {profile.display_name ?? profile.username}
+          </h1>
+          <p className="text-sm text-fg-muted mt-0.5">@{profile.username}</p>
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            <StatPill>🎟️ {profile.ticket_balance}</StatPill>
+            <StatPill>{totalCompleted} completed</StatPill>
+            {totalPlaying > 0 && <StatPill>{totalPlaying} playing</StatPill>}
+            {totalBacklog > 0 && <StatPill>{totalBacklog} in backlog</StatPill>}
+            {totalHours > 0 && <StatPill>{totalHours.toLocaleString()}h played</StatPill>}
           </div>
         </div>
       </div>
+
+      {playingGames && playingGames.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
+            Now Playing · {playingGames.length}
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {playingGames.map(game => (
+              <GameCard key={game.id} game={game} isOwner={isOwner} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <Suspense>
         <GameFilters />
@@ -102,15 +139,11 @@ export default async function UserProfilePage({
           <p className="font-medium text-fg-secondary">No games found</p>
           <p className="text-sm mt-1">
             {status
-              ? `${profile.display_name ?? profile.username} has no games with status "${status}"`
+              ? `${profile.display_name ?? profile.username} has no ${status} games`
               : `${profile.display_name ?? profile.username} hasn't added any games yet`}
           </p>
         </div>
       )}
-
-      <Link href="/users" className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
-        ← Back to Friends
-      </Link>
     </div>
   )
 }

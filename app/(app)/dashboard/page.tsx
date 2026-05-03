@@ -29,6 +29,10 @@ export default async function DashboardPage() {
 
   const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
 
+  const completedCount = allGames?.filter(g => g.status === 'completed').length ?? 0
+  const startedCount = allGames?.filter(g => g.status !== 'backlog').length ?? 0
+  const completionRate = startedCount > 0 ? Math.round((completedCount / startedCount) * 100) : null
+
   const gamesByYear: Record<string, { title: string; image_url: string | null }[]> = {}
   const genreCounts: Record<string, number> = {}
   const platformCounts: Record<string, number> = {}
@@ -67,9 +71,17 @@ export default async function DashboardPage() {
     .map(([platform, count]) => ({ platform, count }))
     .sort((a, b) => b.count - a.count)
 
+  const { data: ticketEarnings } = await supabase
+    .from('ticket_transactions')
+    .select('amount')
+    .eq('user_id', user!.id)
+    .gt('amount', 0) as { data: { amount: number }[] | null }
+
+  const totalTicketsEarned = ticketEarnings?.reduce((sum, t) => sum + t.amount, 0) ?? 0
+
   const { data: recentGamesRaw } = await supabase
     .from('games')
-    .select('id, title, status, hours_played, achievement_progress, rating, completion_date, created_at')
+    .select('id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at')
     .eq('user_id', user!.id)
     .in('status', ['playing', 'completed', 'dnf'])
     .order('created_at', { ascending: false })
@@ -88,7 +100,25 @@ export default async function DashboardPage() {
     : { data: [] as { game_id: string; amount: number }[] }
 
   const ticketsByGame = (ticketRows ?? []).reduce<Record<string, number>>((acc, row) => {
+    if (!row.game_id) return acc
     acc[row.game_id] = (acc[row.game_id] ?? 0) + row.amount
+    return acc
+  }, {})
+
+  const { data: friendProfiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, username, ticket_balance')
+    .neq('id', user!.id)
+    .order('display_name', { ascending: true, nullsFirst: false }) as { data: Profile[] | null }
+
+  const { data: friendGameCounts } = await supabase
+    .from('games')
+    .select('user_id, status') as { data: { user_id: string; status: string }[] | null }
+
+  const friendCountsByUser = (friendGameCounts ?? []).reduce<Record<string, { completed: number; playing: number }>>((acc, g) => {
+    if (!acc[g.user_id]) acc[g.user_id] = { completed: 0, playing: 0 }
+    if (g.status === 'completed') acc[g.user_id].completed++
+    if (g.status === 'playing') acc[g.user_id].playing++
     return acc
   }, {})
 
@@ -102,14 +132,19 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Ticket Balance" value={`🎟️ ${profile?.ticket_balance ?? 0}`} />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <StatCard label="Tickets Earned" value={`🎟️ ${totalTicketsEarned}`} href="/tickets" linkLabel="View history" />
         <StatCard
           label="Current Turn"
           value={formatTurn(profile?.wheel_turn ?? 'spin')}
         />
         <StatCard label="Games" value={String(allGames?.length ?? 0)} href="/games" linkLabel="View list" />
         <StatCard label="Total Hours" value={`${totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}h`} />
+        <StatCard
+          label="Completion Rate"
+          value={completionRate !== null ? `${completionRate}%` : '—'}
+          sub={completionRate !== null ? `${completedCount} of ${startedCount} started` : 'No games started yet'}
+        />
       </div>
 
       {/* Quick actions */}
@@ -123,6 +158,46 @@ export default async function DashboardPage() {
           <QuickAction href="/tickets" label="Ticket History" icon="🎟️" />
         </div>
       </div>
+
+      {/* Friends */}
+      {(friendProfiles ?? []).length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
+            Friends <span className="font-normal normal-case text-fg-subtle ml-1">({friendProfiles!.length})</span>
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(friendProfiles ?? []).map(profile => {
+              const counts = friendCountsByUser[profile.id] ?? { completed: 0, playing: 0 }
+              const initials = (profile.display_name ?? profile.username)
+                .split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
+              return (
+                <Link
+                  key={profile.id}
+                  href={`/users/${encodeURIComponent(profile.username)}`}
+                  className="flex items-center gap-3 bg-surface-base border border-edge-base rounded-xl p-3 hover:border-brand-300 hover:shadow-sm transition-all dark:hover:border-brand-700"
+                >
+                  <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm flex-shrink-0 dark:bg-brand-900/40 dark:text-brand-300">
+                    {initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm text-fg-base truncate">{profile.display_name ?? profile.username}</p>
+                    <p className="text-xs text-fg-subtle truncate">@{profile.username}</p>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-fg-muted">
+                      <span>{counts.completed} completed</span>
+                      {counts.playing > 0 && (
+                        <span className="text-brand-600 dark:text-brand-400">{counts.playing} playing</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="flex-shrink-0 text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2 py-0.5 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300">
+                    🎟️ {profile.ticket_balance}
+                  </span>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Recent games table */}
       {recentGames.length > 0 && (
@@ -194,7 +269,9 @@ export default async function DashboardPage() {
                     </td>
                     <td className="px-4 py-3 text-right text-fg-muted hidden lg:table-cell">
                       {game.completion_date
-                        ? new Date(game.completion_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                        ? (game.completion_date_precision === 'year'
+                            ? game.completion_date.slice(0, 4)
+                            : new Date(game.completion_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
                         : <span className="text-fg-subtle">—</span>}
                     </td>
                   </tr>
@@ -215,11 +292,13 @@ export default async function DashboardPage() {
 function StatCard({
   label,
   value,
+  sub,
   href,
   linkLabel,
 }: {
   label: string
   value: string
+  sub?: string
   href?: string
   linkLabel?: string
 }) {
@@ -227,6 +306,7 @@ function StatCard({
     <div className="bg-surface-base border border-edge-base rounded-xl p-4">
       <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">{label}</p>
       <p className="mt-1 text-xl font-bold text-fg-base">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-fg-subtle">{sub}</p>}
       {href && linkLabel && (
         <Link href={href} className="mt-2 text-xs text-brand-600 hover:text-brand-800 transition-colors">
           {linkLabel} →

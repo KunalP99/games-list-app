@@ -10,7 +10,6 @@ import UserDropdown from '@/components/layout/UserDropdown'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/games', label: 'My Games' },
-  { href: '/users', label: 'Friends' },
   { href: '/tickets', label: 'Tickets' },
   { href: '/wheel', label: 'Wheel' },
   { href: '/achievements', label: 'Achievements' },

@@ -6,6 +6,7 @@ interface Props {
   games: string[]
   target: string
   onComplete: () => void
+  accentColour?: string
 }
 
 const COLORS = [
@@ -23,7 +24,7 @@ const COLORS = [
 
 const NUM_SPINS = 8    // more rotations = more exciting
 const DURATION   = 4000 // ms — longer allows a dramatic slow stop
-const SIZE = 340
+const SIZE = 520
 
 // Quintic ease-out: fast start, very gradual stop
 function easeOutQuint(t: number): number {
@@ -51,7 +52,7 @@ function drawWheel(canvas: HTMLCanvasElement, games: string[]) {
   const radius = SIZE / 2 - 3
   const n = games.length
   const seg = (2 * Math.PI) / n
-  const fontSize = n <= 6 ? 14 : n <= 10 ? 12 : 10
+  const fontSize = n <= 6 ? 17 : n <= 10 ? 14 : 12
 
   ctx.clearRect(0, 0, SIZE, SIZE)
 
@@ -88,7 +89,7 @@ function drawWheel(canvas: HTMLCanvasElement, games: string[]) {
     ctx.textBaseline = 'middle'
     ctx.shadowColor = 'rgba(0,0,0,0.4)'
     ctx.shadowBlur = 3
-    ctx.fillText(truncate(games[i], 16), 0, 0)
+    ctx.fillText(truncate(games[i], 22), 0, 0)
     ctx.shadowBlur = 0
     ctx.restore()
   }
@@ -97,26 +98,107 @@ function drawWheel(canvas: HTMLCanvasElement, games: string[]) {
   ctx.beginPath()
   ctx.arc(cx, cy, radius, 0, 2 * Math.PI)
   ctx.strokeStyle = 'rgba(255,255,255,0.6)'
-  ctx.lineWidth = 4
+  ctx.lineWidth = 5
   ctx.stroke()
 
   // Centre hub
   ctx.beginPath()
-  ctx.arc(cx, cy, 16, 0, 2 * Math.PI)
+  ctx.arc(cx, cy, 22, 0, 2 * Math.PI)
   ctx.fillStyle = '#ffffff'
   ctx.fill()
   ctx.strokeStyle = '#d4d4d8'
-  ctx.lineWidth = 2
+  ctx.lineWidth = 3
   ctx.stroke()
 
   // Hub dot
   ctx.beginPath()
-  ctx.arc(cx, cy, 5, 0, 2 * Math.PI)
+  ctx.arc(cx, cy, 7, 0, 2 * Math.PI)
   ctx.fillStyle = '#a1a1aa'
   ctx.fill()
 }
 
-export default function WheelAnimation({ games, target, onComplete }: Props) {
+const IDLE_SPEED = 12 // degrees per second
+
+function lightenHex(hex: string): string {
+  const h = hex.replace('#', '')
+  if (h.length !== 6) return hex
+  const r = Math.min(255, parseInt(h.slice(0, 2), 16) + 55)
+  const g = Math.min(255, parseInt(h.slice(2, 4), 16) + 55)
+  const b = Math.min(255, parseInt(h.slice(4, 6), 16) + 55)
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
+// Rounded left-pointing triangle: base on right (x=28), tip on left (x=0, y=15)
+// The two right-angle corners are rounded with r≈4 via quadratic bezier curves
+function PointerSvg({ accentColour }: { accentColour: string }) {
+  const light = lightenHex(accentColour)
+  return (
+    <svg
+      className="absolute"
+      style={{ left: SIZE - 6, top: '50%', transform: 'translateY(-50%)', filter: 'drop-shadow(-2px 0 3px rgba(0,0,0,0.3))' }}
+      width="28"
+      height="30"
+      viewBox="0 0 28 30"
+    >
+      <defs>
+        <linearGradient id="pointer-grad" x1="1" y1="0" x2="0" y2="0">
+          <stop offset="0%" stopColor={light} />
+          <stop offset="100%" stopColor={accentColour} />
+        </linearGradient>
+      </defs>
+      <path
+        d="M 28,4 L 28,26 Q 28,30 24.5,28.1 L 0,15 L 24.5,1.9 Q 28,0 28,4 Z"
+        fill="url(#pointer-grad)"
+      />
+    </svg>
+  )
+}
+
+export function WheelStatic({ games, accentColour = '#7c3aed' }: { games: string[]; accentColour?: string }) {
+  const canvasRef  = useRef<HTMLCanvasElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const rafRef     = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (canvasRef.current) drawWheel(canvasRef.current, games)
+  }, [games])
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    let angle = 0
+    let lastTime: number | null = null
+
+    function animate(now: number) {
+      if (lastTime !== null) {
+        angle += IDLE_SPEED * (now - lastTime) / 1000
+        if (wrapper) wrapper.style.transform = `rotate(${angle}deg)`
+      }
+      lastTime = now
+      rafRef.current = requestAnimationFrame(animate)
+    }
+
+    rafRef.current = requestAnimationFrame(animate)
+    return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current) }
+  }, [])
+
+  return (
+    <div className="shrink-0">
+      <div className="relative" style={{ width: SIZE + 28, height: SIZE }}>
+        <div
+          ref={wrapperRef}
+          className="absolute top-0 left-0"
+          style={{ width: SIZE, height: SIZE }}
+        >
+          <canvas ref={canvasRef} className="block" />
+        </div>
+        <PointerSvg accentColour={accentColour} />
+      </div>
+    </div>
+  )
+}
+
+export default function WheelAnimation({ games, target, onComplete, accentColour = '#7c3aed' }: Props) {
   const canvasRef  = useRef<HTMLCanvasElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const rafRef     = useRef<number | null>(null)
@@ -183,20 +265,7 @@ export default function WheelAnimation({ games, target, onComplete }: Props) {
         </div>
 
         {/* Fixed pointer — left-pointing triangle at 3 o'clock */}
-        <div
-          className="absolute"
-          style={{
-            left: SIZE - 6,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 0,
-            height: 0,
-            borderTop: '11px solid transparent',
-            borderBottom: '11px solid transparent',
-            borderRight: '20px solid #7c3aed',
-            filter: 'drop-shadow(-2px 0 3px rgba(0,0,0,0.3))',
-          }}
-        />
+        <PointerSvg accentColour={accentColour} />
       </div>
 
       {label && (

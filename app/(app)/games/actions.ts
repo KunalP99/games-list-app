@@ -36,6 +36,18 @@ export async function createGame(formData: FormData) {
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
 
+  const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
+  const releaseDate = releaseDatePrecision === 'year'
+    ? (formData.get('release_date_year') ? `${formData.get('release_date_year')}-01-01` : null)
+    : ((formData.get('release_date') as string) || null)
+
+  const completionDatePrecision = (formData.get('completion_date_precision') as 'full' | 'year') || 'full'
+  const completionDate = (status === 'completed' || status === 'dnf')
+    ? (completionDatePrecision === 'year'
+        ? (formData.get('completion_date_year') ? `${formData.get('completion_date_year')}-01-01` : null)
+        : ((formData.get('completion_date') as string) || null))
+    : null
+
   let description: string | null = null
   let genres: string[] | null = null
   if (rawgId) {
@@ -49,10 +61,12 @@ export async function createGame(formData: FormData) {
     user_id: user.id,
     title: (formData.get('title') as string).trim(),
     developer: (formData.get('developer') as string)?.trim() || null,
-    release_date: formData.get('release_date') || null,
+    release_date: releaseDate,
+    release_date_precision: releaseDatePrecision,
     status,
     hours_played: hours,
-    completion_date: (status === 'completed' || status === 'dnf') && formData.get('completion_date') ? formData.get('completion_date') as string : null,
+    completion_date: completionDate,
+    completion_date_precision: (status === 'completed' || status === 'dnf') ? completionDatePrecision : 'full',
     rating: (status === 'completed' || status === 'dnf') && formData.get('rating') ? Number(formData.get('rating')) : null,
     achievement_progress: achievementProgress,
     review: (formData.get('review') as string)?.trim() || null,
@@ -104,6 +118,18 @@ export async function updateGame(id: string, formData: FormData) {
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
 
+  const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
+  const releaseDate = releaseDatePrecision === 'year'
+    ? (formData.get('release_date_year') ? `${formData.get('release_date_year')}-01-01` : null)
+    : ((formData.get('release_date') as string) || null)
+
+  const completionDatePrecision = (formData.get('completion_date_precision') as 'full' | 'year') || 'full'
+  const completionDate = (status === 'completed' || status === 'dnf')
+    ? (completionDatePrecision === 'year'
+        ? (formData.get('completion_date_year') ? `${formData.get('completion_date_year')}-01-01` : null)
+        : ((formData.get('completion_date') as string) || null))
+    : null
+
   // Only re-fetch from RAWG if the rawg_id changed
   let description: string | null = existing?.description ?? null
   let genres: string[] | null = existing?.genres ?? null
@@ -117,10 +143,12 @@ export async function updateGame(id: string, formData: FormData) {
   const { error } = await (supabase.from('games') as any).update({
     title: (formData.get('title') as string).trim(),
     developer: (formData.get('developer') as string)?.trim() || null,
-    release_date: formData.get('release_date') || null,
+    release_date: releaseDate,
+    release_date_precision: releaseDatePrecision,
     status,
     hours_played: hours,
-    completion_date: (status === 'completed' || status === 'dnf') && formData.get('completion_date') ? formData.get('completion_date') as string : null,
+    completion_date: completionDate,
+    completion_date_precision: (status === 'completed' || status === 'dnf') ? completionDatePrecision : 'full',
     rating: (status === 'completed' || status === 'dnf') && formData.get('rating') ? Number(formData.get('rating')) : null,
     achievement_progress: achievementProgress,
     review: (formData.get('review') as string)?.trim() || null,

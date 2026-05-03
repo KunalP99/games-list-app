@@ -13,6 +13,7 @@ const REASON_BADGE: Record<string, { label: string; className: string }> = {
   series_back_to_back:      { label: 'SE',    className: 'bg-blue-100 text-blue-800 border border-blue-200' },
   turn_skipped:             { label: 'SKIP',  className: 'bg-amber-50 text-amber-700 border border-amber-200' },
   objective_completed:      { label: 'OBJ',   className: 'bg-violet-50 text-violet-700 border border-violet-200' },
+  OBJ:                      { label: 'OBJ',   className: 'bg-violet-50 text-violet-700 border border-violet-200' },
   spin:                     { label: 'SPIN',  className: 'bg-surface-active text-fg-secondary border border-edge-base' },
   spin_reroll:              { label: 'RE',    className: 'bg-surface-active text-fg-secondary border border-edge-base' },
   choose_game:              { label: 'PICK',  className: 'bg-surface-active text-fg-secondary border border-edge-base' },
@@ -20,6 +21,54 @@ const REASON_BADGE: Record<string, { label: string; className: string }> = {
   assigned_game_incomplete: { label: 'DNF',   className: 'bg-red-50 text-red-600 border border-red-200' },
   objective_incomplete:     { label: 'OBJ−',  className: 'bg-red-50 text-red-600 border border-red-200' },
   admin_adjustment:         { label: 'ADJ',   className: 'bg-surface-active text-fg-muted border border-edge-base' },
+}
+
+// Maps CSV abbreviations (stored in the note) back to internal reason keys for badge display
+const CSV_PART_TO_REASON: Record<string, string> = {
+  'SKIP': 'turn_skipped',
+  'CS':   'game_completed_short',
+  'CM':   'game_completed_medium',
+  'CL':   'game_completed_long',
+  '100%': 'achievement_100_percent',
+  'CONT': 'series_back_to_back',
+  'DNF':  'assigned_game_incomplete',
+  'SP':   'spin',
+  'OBJ':  'OBJ',
+}
+
+// Parses the note field to extract all reason keys so multiple badges can be shown.
+// Note format: "CS - 100% | Game: TITLE" or just "CL - 20 (*3)"
+function reasonsFromNote(note: string | null, fallback: string): string[] {
+  const reasonStr = note ? note.split(' | ')[0].trim() : ''
+  if (!reasonStr) return [fallback]
+
+  const parts = reasonStr.split(' - ').map(p => p.trim().toUpperCase())
+  const keys = parts.map(p => {
+    if (CSV_PART_TO_REASON[p]) return CSV_PART_TO_REASON[p]
+    if (/\d+\s*\(\*\d+\)/.test(p)) return 'game_completed_bonus_hours'
+    return null
+  }).filter((k): k is string => k !== null)
+
+  return keys.length > 0 ? keys : [fallback]
+}
+
+const LOWERCASE_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'but', 'or', 'nor', 'for', 'so', 'yet',
+  'at', 'by', 'in', 'of', 'on', 'to', 'up', 'as', 'is', 'vs',
+])
+
+function toTitleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map((word, i, arr) => {
+      if (!word) return word
+      if (i === 0 || i === arr.length - 1 || !LOWERCASE_WORDS.has(word))
+        return word.charAt(0).toUpperCase() + word.slice(1)
+      return word
+    })
+    .join(' ')
+    .replace(/:\s*(\w)/g, (_, c) => `: ${c.toUpperCase()}`)
 }
 
 function ReasonBadge({ reason, amount }: { reason: string; amount: number }) {
@@ -171,16 +220,24 @@ export default async function TicketsPage({
                             href={`/games/${group.game.id}`}
                             className="text-fg-secondary hover:text-brand-600 transition-colors dark:hover:text-brand-400"
                           >
-                            {group.game.title}
+                            {toTitleCase(group.game.title)}
                           </Link>
-                        ) : (
-                          <span className="text-fg-subtle">—</span>
-                        )}
+                        ) : (() => {
+                          const note = group.transactions[0]?.note ?? null
+                          const gamePart = note?.split(' | ').find(p => p.startsWith('Game: '))
+                          const nameFromNote = gamePart ? gamePart.slice(6) : null
+                          return nameFromNote
+                            ? <span className="text-fg-secondary">{toTitleCase(nameFromNote)}</span>
+                            : <span className="text-fg-subtle">—</span>
+                        })()}
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
                         <div className="flex flex-wrap gap-1">
-                          {group.transactions.map(tx => (
-                            <ReasonBadge key={tx.id} reason={tx.reason} amount={tx.amount} />
+                          {reasonsFromNote(
+                            group.transactions[0]?.note ?? null,
+                            group.transactions[0]?.reason ?? '',
+                          ).map((reason, i) => (
+                            <ReasonBadge key={i} reason={reason} amount={group.totalAmount} />
                           ))}
                         </div>
                       </td>

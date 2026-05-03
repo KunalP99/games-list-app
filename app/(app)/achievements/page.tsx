@@ -109,11 +109,11 @@ export default async function AchievementsPage() {
   )
 }
 
-const RARITY_TINT: Record<AchievementRarity, string> = {
-  common:   'border-edge-base',
-  uncommon: 'border-blue-500/40',
-  rare:     'border-accent2-500/50',
-  epic:     'border-amber-500/60',
+const RARITY_BORDER: Record<AchievementRarity, string> = {
+  common:   'border border-zinc-300 dark:border-zinc-600',
+  uncommon: 'border-2 border-blue-400/80 dark:border-blue-500/70',
+  rare:     'border-2 border-accent2-400/90 dark:border-accent2-500/80',
+  epic:     '', // handled by animated wrapper
 }
 
 const RARITY_BADGE: Record<AchievementRarity, string> = {
@@ -132,12 +132,16 @@ function AchievementCard({
   unlocked: boolean
   unlockedAt?: string
 }) {
-  return (
+  const isEpic = unlocked && achievement.rarity === 'epic'
+
+  const inner = (
     <div
-      id={`achievement-${achievement.id}`}
       className={`
-        relative bg-surface-base border rounded-xl p-4 flex gap-3 transition-all scroll-mt-24
-        ${unlocked ? RARITY_TINT[achievement.rarity] : 'border-edge-subtle opacity-55 grayscale'}
+        relative flex gap-3 p-4 transition-all
+        ${isEpic
+          ? 'bg-surface-base rounded-[10px] h-full'
+          : `bg-surface-base rounded-xl ${unlocked ? RARITY_BORDER[achievement.rarity] : 'border border-edge-subtle opacity-55 grayscale'}`
+        }
       `}
     >
       <div className="text-3xl shrink-0 leading-none">{achievement.icon}</div>
@@ -161,6 +165,23 @@ function AchievementCard({
           )}
         </div>
       </div>
+    </div>
+  )
+
+  if (isEpic) {
+    return (
+      <div
+        id={`achievement-${achievement.id}`}
+        className="epic-achievement-border rounded-xl p-[2px] scroll-mt-24"
+      >
+        {inner}
+      </div>
+    )
+  }
+
+  return (
+    <div id={`achievement-${achievement.id}`} className="scroll-mt-24">
+      {inner}
     </div>
   )
 }

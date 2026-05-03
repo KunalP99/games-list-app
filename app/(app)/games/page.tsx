@@ -39,7 +39,7 @@ export default async function GamesPage({
     .neq('status', 'playing')
     .order(sort === 'status' ? 'created_at' : sort, { ascending: sortAsc, nullsFirst: false })
 
-  if (status) query = query.eq('status', status)
+  if (status) query = query.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
   if (q) query = query.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
   let { data: games } = await query as { data: Game[] | null }
@@ -55,12 +55,20 @@ export default async function GamesPage({
           <h1 className="text-2xl font-bold text-fg-base">My Games</h1>
           <p className="text-sm text-fg-muted mt-0.5">{games?.length ?? 0} games</p>
         </div>
-        <Link
-          href="/games/new"
-          className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
-        >
-          + Add Game
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/import"
+            className="px-3 py-2 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
+          >
+            Import
+          </Link>
+          <Link
+            href="/games/new"
+            className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+          >
+            + Add Game
+          </Link>
+        </div>
       </div>
 
       {/* Now Playing strip — always visible if any games are in progress */}

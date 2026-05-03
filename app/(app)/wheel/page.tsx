@@ -10,19 +10,19 @@ export default async function WheelPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('wheel_turn, ticket_balance')
+    .select('wheel_turn, ticket_balance, accent_colour')
     .eq('id', user.id)
-    .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number } | null }
+    .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number; accent_colour: string | null } | null }
 
   if (!profile) redirect('/login')
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-fg-base">Wheel Spin</h1>
         <p className="text-sm text-fg-muted mt-0.5">Spin to decide what you play next</p>
       </div>
-      <WheelClient turn={profile.wheel_turn} balance={profile.ticket_balance} />
+      <WheelClient turn={profile.wheel_turn} balance={profile.ticket_balance} accentColour={profile.accent_colour ?? '#7c3aed'} />
     </div>
   )
 }

@@ -254,7 +254,7 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
       genreCompletionMap.set(genre, (genreCompletionMap.get(genre) ?? 0) + 1)
     }
   }
-  const topGenreCompletions = genreCompletionMap.size > 0 ? Math.max(...genreCompletionMap.values()) : 0
+  const topGenreCompletions = genreCompletionMap.size > 0 ? Math.max(...Array.from(genreCompletionMap.values())) : 0
 
   const hasRetroGame = completed.some(g => {
     if (!g.release_date) return false

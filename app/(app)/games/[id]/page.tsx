@@ -81,9 +81,9 @@ export default async function GameDetailPage({ params }: { params: { id: string 
                 </span>
               )}
             </div>
-            {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).length > 0 && (
+            {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
               <p className="text-white/70 text-sm mb-2">
-                {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).join(' · ')}
+                {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
               </p>
             )}
             {game.genres && game.genres.length > 0 && (
@@ -122,7 +122,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
               )}
             </div>
             <p className="text-fg-muted text-sm">
-              {[game.developer, game.release_date ? new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null, game.platform].filter(Boolean).join(' · ')}
+              {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
             </p>
             {game.genres && game.genres.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -173,9 +173,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
             {game.status === 'dnf' ? 'Date Dropped' : 'Completed'}
           </p>
           <p className="text-fg-base text-sm">
-            {new Date(game.completion_date).toLocaleDateString('en-GB', {
-              day: 'numeric', month: 'long', year: 'numeric',
-            })}
+            {formatDate(game.completion_date, game.completion_date_precision)}
           </p>
         </div>
       )}
@@ -244,6 +242,12 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       </Link>
     </div>
   )
+}
+
+function formatDate(date: string | null, precision: 'full' | 'year' = 'full'): string | null {
+  if (!date) return null
+  if (precision === 'year') return date.slice(0, 4)
+  return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

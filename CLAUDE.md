@@ -8,9 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # Start development server (http://localhost:3000)
 npm run build    # Production build
 npm run lint     # Run Next.js linter
+npm test         # Run Vitest suite (45 tests across tickets, wheel, achievements)
 ```
 
-No test suite is currently configured.
+**Run `npm test` after every change.** Test files live in `lib/__tests__/`.
 
 ## Architecture
 

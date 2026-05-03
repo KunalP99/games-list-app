@@ -20,7 +20,13 @@ export default function GameForm({ game }: { game?: Game }) {
   const router = useRouter()
   const [title, setTitle] = useState(game?.title ?? '')
   const [developer, setDeveloper] = useState(game?.developer ?? '')
-  const [releaseDate, setReleaseDate] = useState(game?.release_date ?? '')
+  const [releaseDatePrecision, setReleaseDatePrecision] = useState<'full' | 'year'>(game?.release_date_precision ?? 'full')
+  const [releaseDate, setReleaseDate] = useState(
+    (game?.release_date_precision === 'year') ? '' : (game?.release_date ?? '')
+  )
+  const [releaseYear, setReleaseYear] = useState(
+    (game?.release_date_precision === 'year') ? (game?.release_date?.slice(0, 4) ?? '') : ''
+  )
   const [imageUrl, setImageUrl] = useState(game?.image_url ?? '')
   const [rawgId, setRawgId] = useState<number | null>(game?.rawg_id ?? null)
   const [status, setStatus] = useState(game?.status ?? 'playing')
@@ -28,6 +34,10 @@ export default function GameForm({ game }: { game?: Game }) {
   const [isReplay, setIsReplay] = useState(game?.is_replay ?? false)
   const [replayDetected, setReplayDetected] = useState(false)
   const [isSequel, setIsSequel] = useState(game?.is_sequel ?? false)
+  const [completionDatePrecision, setCompletionDatePrecision] = useState<'full' | 'year'>(game?.completion_date_precision ?? 'full')
+  const [completionYear, setCompletionYear] = useState(
+    (game?.completion_date_precision === 'year') ? (game?.completion_date?.slice(0, 4) ?? '') : ''
+  )
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -119,6 +129,7 @@ export default function GameForm({ game }: { game?: Game }) {
   async function handleRawgSelect(result: RawgSearchResult) {
     setTitle(result.name)
     setReleaseDate(result.released ?? '')
+    setReleaseDatePrecision('full')
     setImageUrl(result.background_image ?? '')
     setRawgId(result.id)
     setSuggestions([])
@@ -232,14 +243,41 @@ export default function GameForm({ game }: { game?: Game }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-fg-secondary mb-1">Release Date</label>
-            <input
-              name="release_date"
-              type="date"
-              value={releaseDate}
-              onChange={e => setReleaseDate(e.target.value)}
-              className={input}
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-sm font-medium text-fg-secondary">Release Date</label>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = releaseDatePrecision === 'full' ? 'year' : 'full'
+                  setReleaseDatePrecision(next)
+                  if (next === 'year' && releaseDate) setReleaseYear(releaseDate.slice(0, 4))
+                }}
+                className="text-[11px] text-fg-subtle hover:text-fg-secondary transition-colors underline underline-offset-2"
+              >
+                {releaseDatePrecision === 'year' ? 'Switch to full date' : 'Year only'}
+              </button>
+            </div>
+            {releaseDatePrecision === 'year' ? (
+              <input
+                name="release_date_year"
+                type="number"
+                min="1950"
+                max={new Date().getFullYear() + 5}
+                value={releaseYear}
+                onChange={e => setReleaseYear(e.target.value)}
+                placeholder={`e.g. ${new Date().getFullYear() - 2}`}
+                className={input}
+              />
+            ) : (
+              <input
+                name="release_date"
+                type="date"
+                value={releaseDate}
+                onChange={e => setReleaseDate(e.target.value)}
+                className={input}
+              />
+            )}
+            <input type="hidden" name="release_date_precision" value={releaseDatePrecision} />
           </div>
           <div>
             <label className="block text-sm font-medium text-fg-secondary mb-1">Platform</label>
@@ -331,19 +369,50 @@ export default function GameForm({ game }: { game?: Game }) {
           <div className="space-y-4 pt-2 border-t border-edge-subtle">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Completion Date</label>
-                <input
-                  name="completion_date"
-                  type="date"
-                  defaultValue={game?.completion_date ?? ''}
-                  className={input}
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-fg-secondary">Completion Date</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = completionDatePrecision === 'full' ? 'year' : 'full'
+                      setCompletionDatePrecision(next)
+                    }}
+                    className="text-[11px] text-fg-subtle hover:text-fg-secondary transition-colors underline underline-offset-2"
+                  >
+                    {completionDatePrecision === 'year' ? 'Switch to full date' : 'Year only'}
+                  </button>
+                </div>
+                {completionDatePrecision === 'year' ? (
+                  <input
+                    name="completion_date_year"
+                    type="number"
+                    min="1950"
+                    max={new Date().getFullYear()}
+                    value={completionYear}
+                    onChange={e => setCompletionYear(e.target.value)}
+                    placeholder={`e.g. ${new Date().getFullYear()}`}
+                    className={input}
+                  />
+                ) : (
+                  <input
+                    name="completion_date"
+                    type="date"
+                    defaultValue={
+                      game?.completion_date_precision === 'year' ? '' : (game?.completion_date ?? '')
+                    }
+                    className={input}
+                  />
+                )}
+                <input type="hidden" name="completion_date_precision" value={completionDatePrecision} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Rating (1–5)</label>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">
+                  Rating (1–5) <span className="text-red-500">*</span>
+                </label>
                 <input
                   name="rating"
                   type="number"
+                  required
                   min={1}
                   max={5}
                   step={0.5}
@@ -375,13 +444,41 @@ export default function GameForm({ game }: { game?: Game }) {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Date Dropped</label>
-                <input
-                  name="completion_date"
-                  type="date"
-                  defaultValue={game?.completion_date ?? ''}
-                  className={input}
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-fg-secondary">Date Dropped</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = completionDatePrecision === 'full' ? 'year' : 'full'
+                      setCompletionDatePrecision(next)
+                    }}
+                    className="text-[11px] text-fg-subtle hover:text-fg-secondary transition-colors underline underline-offset-2"
+                  >
+                    {completionDatePrecision === 'year' ? 'Switch to full date' : 'Year only'}
+                  </button>
+                </div>
+                {completionDatePrecision === 'year' ? (
+                  <input
+                    name="completion_date_year"
+                    type="number"
+                    min="1950"
+                    max={new Date().getFullYear()}
+                    value={completionYear}
+                    onChange={e => setCompletionYear(e.target.value)}
+                    placeholder={`e.g. ${new Date().getFullYear()}`}
+                    className={input}
+                  />
+                ) : (
+                  <input
+                    name="completion_date"
+                    type="date"
+                    defaultValue={
+                      game?.completion_date_precision === 'year' ? '' : (game?.completion_date ?? '')
+                    }
+                    className={input}
+                  />
+                )}
+                <input type="hidden" name="completion_date_precision" value={completionDatePrecision} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-fg-secondary mb-1">Rating (1–5) <span className="text-xs text-fg-subtle font-normal">optional</span></label>

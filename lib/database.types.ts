@@ -55,6 +55,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       user_achievements: {
         Row: {
@@ -75,6 +76,7 @@ export type Database = {
           achievement_id?: string
           unlocked_at?: string
         }
+        Relationships: []
       }
       games: {
         Row: {
@@ -83,9 +85,11 @@ export type Database = {
           title: string
           developer: string | null
           release_date: string | null
+          release_date_precision: 'full' | 'year'
           status: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played: number | null
           completion_date: string | null
+          completion_date_precision: 'full' | 'year'
           rating: number | null
           achievement_progress: number | null
           review: string | null
@@ -108,10 +112,12 @@ export type Database = {
           user_id: string
           title: string
           developer?: string | null
-          year_developed?: number | null
+          release_date?: string | null
+          release_date_precision?: 'full' | 'year'
           status?: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played?: number | null
           completion_date?: string | null
+          completion_date_precision?: 'full' | 'year'
           rating?: number | null
           achievement_progress?: number | null
           review?: string | null
@@ -134,10 +140,12 @@ export type Database = {
           user_id?: string
           title?: string
           developer?: string | null
-          year_developed?: number | null
+          release_date?: string | null
+          release_date_precision?: 'full' | 'year'
           status?: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played?: number | null
           completion_date?: string | null
+          completion_date_precision?: 'full' | 'year'
           rating?: number | null
           achievement_progress?: number | null
           review?: string | null
@@ -155,6 +163,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       ticket_transactions: {
         Row: {
@@ -193,6 +202,7 @@ export type Database = {
           note?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       wheel_spins: {
         Row: {
@@ -225,6 +235,7 @@ export type Database = {
           option_b_name?: string | null
           created_at?: string
         }
+        Relationships: []
       }
       changelog_entries: {
         Row: {
@@ -251,12 +262,11 @@ export type Database = {
           released_at?: string
           created_at?: string
         }
+        Relationships: []
       }
     }
     Views: {
-      [key: string]: {
-        Row: Record<string, unknown>
-      }
+      [_ in never]: never
     }
     Functions: {
       award_tickets: {
@@ -283,6 +293,9 @@ export type Database = {
         }
         Returns: void
       }
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
     Enums: {
       ticket_reason:

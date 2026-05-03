@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import WheelAnimation from './WheelAnimation'
+import WheelAnimation, { WheelStatic } from './WheelAnimation'
 import {
   performSpin,
   acceptSpinResult,
@@ -52,9 +52,10 @@ function shuffle<T>(arr: T[]): T[] {
 interface Props {
   turn: WheelTurn
   balance: number
+  accentColour: string
 }
 
-export default function WheelClient({ turn, balance }: Props) {
+export default function WheelClient({ turn, balance, accentColour }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -63,6 +64,7 @@ export default function WheelClient({ turn, balance }: Props) {
   const [mode, setMode] = useState<'elimination' | 'first_land'>('elimination')
   const [chooseInput, setChooseInput] = useState('')
   const [error, setError] = useState('')
+  const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
 
   // Optimistic balance — updated immediately on spend, synced from server after revalidation
   const [localBalance, setLocalBalance] = useState(balance)
@@ -86,8 +88,11 @@ export default function WheelClient({ turn, balance }: Props) {
   const [finalChosen, setFinalChosen] = useState('')
   const [chooseAnyReturnPhase, setChooseAnyReturnPhase] = useState<Phase>('spin_result')
 
-  const gamesList = rawGames.split('\n').map(g => g.trim()).filter(Boolean)
-  const uniqueGames = Array.from(new Set(gamesList))
+  const gamesList = rawGames.split(/\r?\n/).map(g => g.trim()).filter(Boolean)
+  const uniqueGames = Array.from(new Set(gamesList.map(g => g.toLowerCase()))).map(
+    lower => gamesList.find(g => g.toLowerCase() === lower)!
+  )
+  const duplicateCount = gamesList.length - uniqueGames.length
   const canSpin = uniqueGames.length >= WHEEL_MIN_GAMES
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -161,8 +166,8 @@ export default function WheelClient({ turn, balance }: Props) {
       setElimIndex(next)
       setCurrentAnimGames(remaining)
       setAnimTarget(elimQueue[next])
+      setElimNextPhase('spinning')
       setPhase('elim_step')
-      setTimeout(() => setPhase('spinning'), 600)
     }
   }, [mode, turn, elimQueue, elimIndex, eliminated, uniqueGames])
 
@@ -226,8 +231,8 @@ export default function WheelClient({ turn, balance }: Props) {
       setElimIndex(next)
       setCurrentAnimGames(remaining)
       setAnimTarget(elimQueue[next])
+      setElimNextPhase('spin_paid_spinning')
       setPhase('elim_step')
-      setTimeout(() => setPhase('spin_paid_spinning'), 600)
     }
   }, [mode, elimQueue, elimIndex, eliminated, uniqueGames])
 
@@ -280,8 +285,8 @@ export default function WheelClient({ turn, balance }: Props) {
       setElimIndex(next)
       setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
       setAnimTarget(elimQueue[next])
+      setElimNextPhase('spin_upgrade_spinning')
       setPhase('elim_step')
-      setTimeout(() => setPhase('spin_upgrade_spinning'), 600)
     }
   }, [mode, elimQueue, elimIndex, eliminated, uniqueGames, upgradeGames])
 
@@ -334,8 +339,8 @@ export default function WheelClient({ turn, balance }: Props) {
       setElimIndex(next)
       setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
       setAnimTarget(elimQueue[next])
+      setElimNextPhase('spin_upgrade_game3_spinning')
       setPhase('elim_step')
-      setTimeout(() => setPhase('spin_upgrade_game3_spinning'), 600)
     }
   }, [mode, elimQueue, elimIndex, eliminated, uniqueGames, upgradeGames, upgradeMaxGames])
 
@@ -473,6 +478,50 @@ export default function WheelClient({ turn, balance }: Props) {
     )
   }
 
+  function handleShuffle() {
+    const winner = elimQueue[elimQueue.length - 1]
+    const toShuffle = elimQueue.slice(elimIndex, elimQueue.length - 1)
+    const shuffledRemaining = shuffle(toShuffle)
+    const newQueue = [...elimQueue.slice(0, elimIndex), ...shuffledRemaining, winner]
+    setElimQueue(newQueue)
+    setAnimTarget(newQueue[elimIndex])
+    setCurrentAnimGames(shuffle([...currentAnimGames]))
+  }
+
+  function entriesPanel(onShuffle?: () => void) {
+    return (
+      <div className="rounded-xl border border-edge-base bg-surface-base p-4 space-y-3 w-52 shrink-0">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">
+            Entries <span className="font-bold text-fg-base">{uniqueGames.length}</span>
+          </p>
+          {onShuffle && (
+            <button
+              onClick={onShuffle}
+              className="text-xs font-medium text-brand-600 hover:text-brand-800 dark:hover:text-brand-400 transition-colors"
+            >
+              ⇄ Shuffle
+            </button>
+          )}
+        </div>
+        <ul className="space-y-1.5">
+          {uniqueGames.map(g => (
+            <li
+              key={g}
+              className={`text-sm truncate ${
+                eliminated.includes(g)
+                  ? 'line-through text-fg-subtle'
+                  : 'text-fg-secondary'
+              }`}
+            >
+              {g}
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
   // ─── Animation phases ─────────────────────────────────────────────────────
 
   const animPhaseMap: Partial<Record<Phase, () => void>> = {
@@ -491,28 +540,43 @@ export default function WheelClient({ turn, balance }: Props) {
     phase === 'reroll_spinning'
   ) {
     return (
-      <div className="space-y-4">
-        {elimBadges()}
+      <div className="flex flex-col lg:flex-row lg:items-start gap-6">
         <WheelAnimation
           games={currentAnimGames.length > 0 ? currentAnimGames : uniqueGames}
           target={animTarget}
           onComplete={animPhaseMap[phase]!}
+          accentColour={accentColour}
         />
+        {entriesPanel()}
       </div>
     )
   }
 
   if (phase === 'elim_step') {
+    const remaining = uniqueGames.length - eliminated.length
     return (
-      <div className="space-y-4">
-        {elimBadges()}
-        <div className="rounded-xl border border-edge-base bg-surface-base p-6 text-center">
-          <p className="text-sm text-fg-muted">
-            ❌ <span className="font-semibold text-fg-secondary">{elimQueue[elimIndex - 1]}</span> eliminated
-          </p>
-          <p className="text-xs text-fg-subtle mt-1">
-            {uniqueGames.length - eliminated.length} games remaining…
-          </p>
+      <div className="flex flex-col lg:flex-row lg:items-start gap-6">
+        <WheelStatic games={currentAnimGames} accentColour={accentColour} />
+        <div className="flex flex-col gap-4 lg:flex-1">
+          <div className="rounded-xl border border-edge-base bg-surface-base p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl shrink-0">❌</span>
+              <div>
+                <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-0.5">Eliminated</p>
+                <p className="text-lg font-bold text-fg-base">{elimQueue[elimIndex - 1]}</p>
+              </div>
+            </div>
+            <p className="text-sm text-fg-muted">
+              {remaining} game{remaining !== 1 ? 's' : ''} remaining
+            </p>
+            <button
+              onClick={() => setPhase(elimNextPhase)}
+              className="w-full py-2.5 bg-brand-600 text-white text-sm font-semibold rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              🎰 Spin again
+            </button>
+          </div>
+          {entriesPanel(handleShuffle)}
         </div>
       </div>
     )
@@ -522,15 +586,15 @@ export default function WheelClient({ turn, balance }: Props) {
 
   if (phase === 'spin_result') {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-2xl">
         {turnBadge}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
-          <div className="text-center space-y-1">
-            <p className="text-sm text-fg-muted font-medium uppercase tracking-wide">You got</p>
+          <div>
+            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">You got</p>
             <p className="text-2xl font-bold text-fg-base">{winner}</p>
           </div>
 
-          {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+          {error && <p className="text-xs text-red-600">{error}</p>}
 
           {/* Accept */}
           <button
@@ -541,7 +605,7 @@ export default function WheelClient({ turn, balance }: Props) {
             {isPending ? 'Saving…' : '✅ Accept this game'}
           </button>
 
-          <p className="text-xs text-fg-subtle text-center font-medium uppercase tracking-wide">
+          <p className="text-xs text-fg-subtle font-medium uppercase tracking-wide">
             or spend tickets to change it
           </p>
 
@@ -600,7 +664,7 @@ export default function WheelClient({ turn, balance }: Props) {
 
   if (phase === 'spin_choose_any') {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-2xl">
         {turnBadge}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
           <div>
@@ -645,17 +709,17 @@ export default function WheelClient({ turn, balance }: Props) {
     const nextGameNum = spinCount + 1
     const canSpinMore = spinCount < upgradeMaxGames
     return (
-      <div className="rounded-xl border border-edge-base bg-surface-base p-8 space-y-5">
-        <div className="text-center space-y-1">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wide">Game {spinCount}</p>
+      <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5 max-w-2xl">
+        <div>
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">Game {spinCount}</p>
           <p className="text-2xl font-bold text-fg-base">{latestGame}</p>
         </div>
         {canSpinMore && (
-          <p className="text-sm text-fg-muted text-center">
+          <p className="text-sm text-fg-muted">
             Spin once more for game {nextGameNum}, or go straight to choosing?
           </p>
         )}
-        {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+        {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex gap-3">
           <button
             onClick={handleUpgradeKeepGame2}
@@ -683,10 +747,12 @@ export default function WheelClient({ turn, balance }: Props) {
   if (phase === 'spin_upgrade_final_choice') {
     const options = upgradeGames
     return (
-      <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
-        <p className="text-base font-semibold text-fg-base text-center">Choose your game</p>
-        <p className="text-xs text-fg-muted text-center">Pick one from your options</p>
-        {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+      <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4 max-w-2xl">
+        <div>
+          <p className="text-base font-semibold text-fg-base">Choose your game</p>
+          <p className="text-xs text-fg-muted mt-0.5">Pick one from your options</p>
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="grid gap-3">
           {options.map((game, i) => (
             <button
@@ -708,11 +774,13 @@ export default function WheelClient({ turn, balance }: Props) {
 
   if (phase === 'reroll_prompt') {
     return (
-      <div className="rounded-xl border border-edge-base bg-surface-base p-8 text-center space-y-5">
-        <p className="text-sm text-fg-muted font-medium uppercase tracking-wide">You got</p>
-        <p className="text-2xl font-bold text-fg-base">{winner}</p>
+      <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5 max-w-2xl">
+        <div>
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">You got</p>
+          <p className="text-2xl font-bold text-fg-base">{winner}</p>
+        </div>
         {error && <p className="text-xs text-red-600">{error}</p>}
-        <div className="flex gap-3 justify-center">
+        <div className="flex gap-3">
           <button
             onClick={handleKeep}
             disabled={isPending}
@@ -734,11 +802,11 @@ export default function WheelClient({ turn, balance }: Props) {
 
   if (phase === 'final_choice') {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-2xl">
         {turnBadge}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
-          <p className="text-base font-semibold text-fg-base text-center">Choose your game</p>
-          {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+          <p className="text-base font-semibold text-fg-base">Choose your game</p>
+          {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="grid grid-cols-2 gap-4">
             {[winner, rerollWinner].map(game => (
               <button
@@ -752,7 +820,7 @@ export default function WheelClient({ turn, balance }: Props) {
             ))}
           </div>
 
-          <p className="text-xs text-fg-subtle text-center font-medium uppercase tracking-wide">
+          <p className="text-xs text-fg-subtle font-medium uppercase tracking-wide">
             or spend tickets to change it
           </p>
 
@@ -808,7 +876,7 @@ export default function WheelClient({ turn, balance }: Props) {
 
   if (phase === 'choose_input') {
     return (
-      <div className="space-y-5">
+      <div className="space-y-5 max-w-2xl">
         {turnBadge}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
           <div>
@@ -853,23 +921,28 @@ export default function WheelClient({ turn, balance }: Props) {
   if (phase === 'done') {
     const isSkipped = !finalChosen
     return (
-      <div className="rounded-xl border border-edge-base bg-surface-base p-8 text-center space-y-4">
-        <div className="text-4xl">{isSkipped ? '⏭️' : '🎮'}</div>
+      <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4 max-w-2xl">
         {isSkipped ? (
-          <>
-            <p className="text-lg font-bold text-fg-base">Turn skipped</p>
-            <p className="text-sm text-fg-muted">+{TICKET_AWARDS.turn_skipped} tickets awarded</p>
-          </>
+          <div className="flex items-center gap-3">
+            <span className="text-3xl shrink-0">⏭️</span>
+            <div>
+              <p className="text-lg font-bold text-fg-base">Turn skipped</p>
+              <p className="text-sm text-fg-muted">+{TICKET_AWARDS.turn_skipped} tickets awarded</p>
+            </div>
+          </div>
         ) : (
-          <>
-            <p className="text-sm text-fg-muted font-medium uppercase tracking-wide">You got</p>
-            <p className="text-2xl font-bold text-fg-base">{finalChosen}</p>
-            <p className="text-sm text-fg-subtle">Good luck!</p>
-          </>
+          <div className="flex items-start gap-3">
+            <span className="text-3xl shrink-0">🎮</span>
+            <div>
+              <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-0.5">You got</p>
+              <p className="text-2xl font-bold text-fg-base">{finalChosen}</p>
+              <p className="text-sm text-fg-subtle mt-1">Good luck!</p>
+            </div>
+          </div>
         )}
         <button
           onClick={handleReset}
-          className="mt-2 px-5 py-2 bg-surface-active text-fg-secondary text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors dark:hover:bg-zinc-600"
+          className="px-5 py-2 bg-surface-active text-fg-secondary text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors dark:hover:bg-zinc-600"
         >
           Back to wheel
         </button>
@@ -883,7 +956,7 @@ export default function WheelClient({ turn, balance }: Props) {
   const countOk = gameCount >= WHEEL_MIN_GAMES
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-2xl">
       {turnBadge}
       <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
         <div className="space-y-1.5">
@@ -895,6 +968,11 @@ export default function WheelClient({ turn, balance }: Props) {
               {gameCount} / {WHEEL_MIN_GAMES}+
             </span>
           </div>
+          {duplicateCount > 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              {duplicateCount} duplicate{duplicateCount > 1 ? 's' : ''} removed — {uniqueGames.length} unique game{uniqueGames.length !== 1 ? 's' : ''} will be used
+            </p>
+          )}
           <textarea
             value={rawGames}
             onChange={e => setRawGames(e.target.value)}
