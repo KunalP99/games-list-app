@@ -36,10 +36,10 @@ export default function GameCard({ game, isOwner = true }: { game: Game; isOwner
               {game.hours_played != null && (
                 <span>{game.hours_played}h played</span>
               )}
-              {game.is_replay && <span className="text-orange-400" title="Replay">↩</span>}
+              {game.is_replay && <span className="text-base text-orange-400 leading-none" title="Replay">↩</span>}
               {game.is_sequel && (
                 <span className="text-violet-400" title="Sequel">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
                 </span>
               )}
               {game.rating != null && (
