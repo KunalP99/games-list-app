@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
@@ -90,7 +91,7 @@ export default async function GamesPage({
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={true} view={searchParams.view === 'table' ? 'table' : 'grid'} />
+        <GameListView games={games} status={searchParams.status} isOwner={true} view={(searchParams.view ?? cookies().get('gameView')?.value) === 'table' ? 'table' : 'grid'} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>
