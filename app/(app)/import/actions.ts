@@ -48,6 +48,7 @@ type RawgData = {
   developer: string | null
   genres: string[]
   description: string | null
+  dominant_color: string | null
 }
 
 async function fetchRawgData(title: string): Promise<RawgData | null> {
@@ -64,6 +65,7 @@ async function fetchRawgData(title: string): Promise<RawgData | null> {
       developer: detail?.developers?.[0]?.name ?? top.developers?.[0]?.name ?? null,
       genres: detail?.genres?.map(g => g.name) ?? [],
       description: detail?.description_raw ?? null,
+      dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
     }
   } catch {
     return null
@@ -82,16 +84,25 @@ export async function bulkImportGames(
   const failed: ImportResult['failed'] = []
   let imported = 0
 
-  // ── Enrich completed games with RAWG data ──────────────────────────────────
+  // ── Enrich completed + backlog games with RAWG data ───────────────────────
   let rawgMap = new Map<string, RawgData | null>()
-  if (enrichWithRawg && completedGames.length > 0) {
-    const enriched = await withConcurrency(
-      completedGames,
-      async (g) => ({ title: g.title, data: await fetchRawgData(g.title) }),
-      4,
-    )
-    for (const { title, data } of enriched) {
-      rawgMap.set(title, data)
+  let backlogRawgMap = new Map<string, RawgData | null>()
+  if (enrichWithRawg) {
+    if (completedGames.length > 0) {
+      const enriched = await withConcurrency(
+        completedGames,
+        async (g) => ({ title: g.title, data: await fetchRawgData(g.title) }),
+        4,
+      )
+      for (const { title, data } of enriched) rawgMap.set(title, data)
+    }
+    if (backlogGames.length > 0) {
+      const enriched = await withConcurrency(
+        backlogGames,
+        async (g) => ({ title: g.title, data: await fetchRawgData(g.title) }),
+        4,
+      )
+      for (const { title, data } of enriched) backlogRawgMap.set(title, data)
     }
   }
 
@@ -124,6 +135,7 @@ export async function bulkImportGames(
           rawg_id: rawg?.rawg_id ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
+          dominant_color: rawg?.dominant_color ?? null,
           is_favourite: false,
           is_replay: false,
           is_sequel: false,
@@ -146,6 +158,8 @@ export async function bulkImportGames(
   for (const g of backlogGames) {
     if (!g.title) continue
     try {
+      const rawg = enrichWithRawg ? backlogRawgMap.get(g.title) : null
+
       const { error } = await supabase
         .from('games')
         .insert({
@@ -153,6 +167,14 @@ export async function bulkImportGames(
           title: g.title,
           status: 'backlog',
           platform: g.platform ?? null,
+          developer: rawg?.developer ?? null,
+          image_url: rawg?.image_url ?? null,
+          rawg_id: rawg?.rawg_id ?? null,
+          genres: rawg?.genres?.length ? rawg.genres : null,
+          description: rawg?.description ?? null,
+          dominant_color: rawg?.dominant_color ?? null,
+          release_date: rawg?.release_date ?? null,
+          release_date_precision: rawg?.release_date ? 'full' : 'year',
           is_favourite: false,
           is_replay: false,
           is_sequel: false,

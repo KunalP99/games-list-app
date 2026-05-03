@@ -50,11 +50,13 @@ export async function createGame(formData: FormData) {
 
   let description: string | null = null
   let genres: string[] | null = null
+  let dominantColor: string | null = null
   if (rawgId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
     description = detail?.description_raw ?? null
     genres = detail?.genres?.map(g => g.name) ?? null
+    dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
   }
 
   const { data: game, error } = await (supabase.from('games') as any).insert({
@@ -75,6 +77,7 @@ export async function createGame(formData: FormData) {
     rawg_id: rawgId,
     description,
     genres,
+    dominant_color: dominantColor,
     platform: (formData.get('platform') as string) || null,
     is_favourite: formData.get('is_favourite') === 'on',
     is_replay: formData.get('is_replay') === 'on',
@@ -107,10 +110,10 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Fetch current status, rawg_id, and description before updating to detect transitions
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status, rawg_id, description, genres')
+    .select('status, rawg_id, description, genres, dominant_color')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string; rawg_id: number | null; description: string | null; genres: string[] | null } | null }
+    .single() as { data: { status: string; rawg_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null } | null }
 
   const status = formData.get('status') as string
   const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
@@ -133,11 +136,13 @@ export async function updateGame(id: string, formData: FormData) {
   // Only re-fetch from RAWG if the rawg_id changed
   let description: string | null = existing?.description ?? null
   let genres: string[] | null = existing?.genres ?? null
+  let dominantColor: string | null = existing?.dominant_color ?? null
   if (rawgId && rawgId !== existing?.rawg_id) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
     description = detail?.description_raw ?? null
     genres = detail?.genres?.map(g => g.name) ?? null
+    dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
   }
 
   const { error } = await (supabase.from('games') as any).update({
@@ -157,6 +162,7 @@ export async function updateGame(id: string, formData: FormData) {
     rawg_id: rawgId,
     description,
     genres,
+    dominant_color: dominantColor,
     platform: (formData.get('platform') as string) || null,
     is_favourite: formData.get('is_favourite') === 'on',
     is_replay: formData.get('is_replay') === 'on',

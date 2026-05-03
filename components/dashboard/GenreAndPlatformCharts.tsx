@@ -84,6 +84,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   'TurboGrafx-16 / PC Engine':   '#CC6600',
   'Commodore 64':                '#4169E1',
   'Amiga':                       '#AA0000',
+  'Cracked':                     '#fe7eff',
   'Other':                       '#888888',
 }
 

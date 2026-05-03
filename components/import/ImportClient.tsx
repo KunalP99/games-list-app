@@ -297,7 +297,7 @@ export default function ImportClient() {
                 Enrich with RAWG data
               </p>
               <p className="text-xs text-fg-muted mt-0.5">
-                Fetches cover images, full release dates, genres, and descriptions for each completed game. Recommended but adds time for large lists.
+                Fetches cover images, full release dates, genres, and descriptions for completed and backlog games. Recommended but adds time for large lists.
               </p>
             </div>
           </label>
@@ -340,7 +340,7 @@ export default function ImportClient() {
           </div>
           {enrichWithRawg && (
             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300">
-              ⏱ RAWG enrichment may take ~{Math.ceil(parsedCompleted.length * 2 / 4 / 10) * 10}s for {parsedCompleted.length} games
+              ⏱ RAWG enrichment may take ~{Math.ceil((parsedCompleted.length + parsedBacklog.length) * 2 / 4 / 10) * 10}s for {parsedCompleted.length + parsedBacklog.length} games
             </span>
           )}
         </div>

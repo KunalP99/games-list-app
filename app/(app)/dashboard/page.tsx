@@ -52,9 +52,10 @@ export default async function DashboardPage() {
       genreCounts[genre] = (genreCounts[genre] ?? 0) + 1
     }
 
-    // Pie — platform counts
+    // Pie — platform counts (normalise case so "XBOX 360" and "Xbox 360" merge)
     if (g.platform) {
-      platformCounts[g.platform] = (platformCounts[g.platform] ?? 0) + 1
+      const p = g.platform.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+      platformCounts[p] = (platformCounts[p] ?? 0) + 1
     }
   }
 

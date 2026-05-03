@@ -16,6 +16,8 @@ export type RawgGameDetail = {
   released: string | null
   developers: Array<{ name: string }>
   genres: Array<{ name: string }>
+  dominant_color: string | null
+  saturated_color: string | null
 }
 
 export type RawgScreenshot = {

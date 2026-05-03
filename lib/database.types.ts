@@ -102,6 +102,7 @@ export type Database = {
           is_favourite: boolean
           is_replay: boolean
           is_sequel: boolean
+          dominant_color: string | null
           in_wheel: boolean
           assigned_by: string | null
           created_at: string
@@ -127,6 +128,7 @@ export type Database = {
           description?: string | null
           genres?: string[] | null
           platform?: string | null
+          dominant_color?: string | null
           is_favourite?: boolean
           is_replay?: boolean
           is_sequel?: boolean
@@ -155,6 +157,7 @@ export type Database = {
           description?: string | null
           genres?: string[] | null
           platform?: string | null
+          dominant_color?: string | null
           is_favourite?: boolean
           is_replay?: boolean
           is_sequel?: boolean

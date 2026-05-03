@@ -61,10 +61,13 @@ export default function GameCard({ game, isOwner = true }: { game: Game; isOwner
     )
   }
 
+  const tint = game.dominant_color ? `#${game.dominant_color}` : null
+
   return (
     <Link
       href={`/games/${game.id}`}
       className="flex flex-col justify-between bg-surface-base border border-edge-base rounded-xl p-4 min-h-[140px] hover:border-brand-300 hover:shadow-md hover:-translate-y-1 transition-all duration-200 dark:hover:border-brand-600"
+      style={tint ? { background: `linear-gradient(135deg, ${tint}18 0%, transparent 55%)` } : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">

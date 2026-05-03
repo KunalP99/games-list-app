@@ -58,6 +58,7 @@ const LOWERCASE_WORDS = new Set([
 ])
 
 function toTitleCase(str: string): string {
+  if (!/[a-zA-Z]/.test(str)) return str
   return str
     .toLowerCase()
     .split(' ')
