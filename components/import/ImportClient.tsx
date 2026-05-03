@@ -79,6 +79,16 @@ function parseAchievements(str: string): number | null {
   return isNaN(val) ? null : Math.min(100, Math.max(0, val))
 }
 
+const LOWERCASE_WORDS = new Set(['a','an','the','and','but','or','nor','for','so','yet','at','by','in','of','on','to','up','as','is'])
+
+function toTitleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .split(' ')
+    .map((word, i) => (i === 0 || !LOWERCASE_WORDS.has(word)) ? word.charAt(0).toUpperCase() + word.slice(1) : word)
+    .join(' ')
+}
+
 function parseReleaseYear(str: string): string | null {
   if (!str) return null
   const m = str.match(/\d{4}/)
@@ -93,7 +103,7 @@ function mapCompleted(rows: Record<string, string>[]): CompletedGameRow[] {
     .map(r => {
       const { date: completion_date, precision: completion_date_precision } = parseDateAndPrecision(r['Date Completed'] ?? '')
       return {
-        title: r['Name'].trim(),
+        title: toTitleCase(r['Name'].trim()),
         release_year: parseReleaseYear(r['Release Date'] ?? r['Yr'] ?? r['Year'] ?? ''),
         developer: r['Developer']?.trim() || null,
         platform: r['Platform']?.trim() || null,
@@ -111,7 +121,7 @@ function mapBacklog(rows: Record<string, string>[]): BacklogGameRow[] {
   return rows
     .filter(r => r['Name']?.trim())
     .map(r => ({
-      title: r['Name'].trim(),
+      title: toTitleCase(r['Name'].trim()),
       platform: r['Platform']?.trim() || null,
     }))
 }
