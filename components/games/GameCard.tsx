@@ -36,11 +36,10 @@ export default function GameCard({ game, isOwner = true }: { game: Game; isOwner
               {game.hours_played != null && (
                 <span>{game.hours_played}h played</span>
               )}
-              {game.is_replay && <span className="text-orange-400">↩ Replay</span>}
+              {game.is_replay && <span className="text-orange-400" title="Replay">↩</span>}
               {game.is_sequel && (
-                <span className="flex items-center gap-1 text-violet-400">
+                <span className="text-violet-400" title="Sequel">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
-                  Sequel
                 </span>
               )}
               {game.rating != null && (
@@ -85,11 +84,10 @@ export default function GameCard({ game, isOwner = true }: { game: Game; isOwner
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-4 text-xs text-fg-subtle">
-          {game.is_replay && <span className="text-orange-400">↩ Replay</span>}
+          {game.is_replay && <span className="text-orange-400" title="Replay">↩</span>}
           {game.is_sequel && (
-            <span className="flex items-center gap-1 text-violet-500">
+            <span className="text-violet-500" title="Sequel">
               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
-              Sequel
             </span>
           )}
           {game.hours_played != null && (
