@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Deployment
+
+The app is deployed to Vercel. **Do not push changes to GitHub unless explicitly asked.** Make all code changes locally first; the user will request a push when they are ready to deploy.
+
 ## Commands
 
 ```bash
