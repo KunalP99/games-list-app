@@ -220,21 +220,18 @@ function StatRow({
   label,
   value,
   isWinner,
-  accent,
 }: {
   label: string
   value: string
   isWinner: boolean
-  accent: string | null
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-sm text-fg-muted">{label}</span>
-      {isWinner ? (
-        <span className="text-sm font-bold" style={{ color: accent ?? undefined }}>{value}</span>
-      ) : (
-        <span className="text-sm font-medium text-fg-base">{value}</span>
-      )}
+      <span className="flex items-center gap-1">
+        {isWinner && <span className="text-[10px] text-fg-subtle">▲</span>}
+        <span className={`text-sm ${isWinner ? 'font-semibold text-fg-base' : 'font-medium text-fg-secondary'}`}>{value}</span>
+      </span>
     </div>
   )
 }
@@ -301,9 +298,9 @@ function StatsColumn({
           <MiniStat label="Playing" value={String(stats.playingCount)} />
         </div>
         <div className="space-y-2 pt-1">
-          <StatRow label="Total hours" value={fmtHours(stats.totalHours)} isWinner={isWin('totalHours')} accent={accent} />
-          <StatRow label="Completion rate" value={fmt(stats.completionRate, '%')} isWinner={isWin('completionRate')} accent={accent} />
-          <StatRow label="Average rating" value={stats.avgRating != null ? `${stats.avgRating}/5` : '—'} isWinner={isWin('avgRating')} accent={accent} />
+          <StatRow label="Total hours" value={fmtHours(stats.totalHours)} isWinner={isWin('totalHours')} />
+          <StatRow label="Completion rate" value={fmt(stats.completionRate, '%')} isWinner={isWin('completionRate')} />
+          <StatRow label="Average rating" value={stats.avgRating != null ? `${stats.avgRating}/5` : '—'} isWinner={isWin('avgRating')} />
         </div>
       </SectionCard>
 
@@ -321,10 +318,10 @@ function StatsColumn({
       {/* Tickets */}
       <SectionCard title="Tickets">
         <div className="space-y-2">
-          <StatRow label="Earned" value={`+${stats.ticketsEarned}`} isWinner={isWin('ticketsEarned')} accent={accent} />
-          <StatRow label="Spent" value={`${stats.ticketsSpent}`} isWinner={isWin('ticketsSpent')} accent={accent} />
-          <StatRow label="Current balance" value={String(stats.profile.ticket_balance)} isWinner={isWin('ticketBalance')} accent={accent} />
-          <StatRow label="DNF rate" value={fmt(stats.dnfRate, '%')} isWinner={isWin('dnfRate')} accent={accent} />
+          <StatRow label="Earned" value={`+${stats.ticketsEarned}`} isWinner={isWin('ticketsEarned')} />
+          <StatRow label="Spent" value={`${stats.ticketsSpent}`} isWinner={isWin('ticketsSpent')} />
+          <StatRow label="Current balance" value={String(stats.profile.ticket_balance)} isWinner={isWin('ticketBalance')} />
+          <StatRow label="DNF rate" value={fmt(stats.dnfRate, '%')} isWinner={isWin('dnfRate')} />
         </div>
       </SectionCard>
 
@@ -335,10 +332,9 @@ function StatsColumn({
             label="Unlocked"
             value={`${stats.achievementsUnlocked} / ${ACHIEVEMENTS.length}`}
             isWinner={isWin('achievementsUnlocked')}
-            accent={accent}
           />
-          <StatRow label="Total XP" value={stats.profile.xp.toLocaleString()} isWinner={isWin('xp')} accent={accent} />
-          <StatRow label="Level" value={String(level)} isWinner={false} accent={null} />
+          <StatRow label="Total XP" value={stats.profile.xp.toLocaleString()} isWinner={isWin('xp')} />
+          <StatRow label="Level" value={String(level)} isWinner={false} />
         </div>
         {/* XP progress bar */}
         <div className="space-y-1">
