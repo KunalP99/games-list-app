@@ -251,8 +251,12 @@ function ColumnHeader({ stats }: { stats: UserStats }) {
   const name = stats.profile.display_name ?? stats.profile.username
   return (
     <div
-      className="px-4 py-3 rounded-xl border border-edge-base bg-surface-base"
-      style={{ borderLeftWidth: '4px', borderLeftColor: accent }}
+      className="px-4 py-3 rounded-xl border border-edge-base"
+      style={{
+        borderLeftWidth: '4px',
+        borderLeftColor: accent,
+        background: `linear-gradient(to right, ${accent}22, transparent)`,
+      }}
     >
       <p className="font-semibold text-fg-base text-sm">{name}</p>
       <p className="text-xs text-fg-muted">@{stats.profile.username}</p>
@@ -331,7 +335,7 @@ function StatsColumn({
           <div className="h-1.5 bg-surface-active rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${percent}%`, backgroundColor: stats.profile.accent_colour ?? 'rgb(var(--brand-600))' }}
+              style={{ width: `${percent}%`, background: `linear-gradient(to right, ${(stats.profile.accent_colour ?? '#7c3aed')}99, ${stats.profile.accent_colour ?? '#7c3aed'})` }}
             />
           </div>
           <p className="text-xs text-fg-subtle">{percent}% to level {level + 1}</p>
