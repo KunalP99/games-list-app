@@ -47,33 +47,43 @@ const VALID_REASONS = new Set([
   'game_completed_short', 'game_completed_medium', 'game_completed_long',
   'game_completed_bonus_hours', 'achievement_100_percent',
   'sequel_back_to_back', 'series_back_to_back',
-  'turn_skipped', 'spin_reroll', 'spin', 'choose_game', 'admin_adjustment',
+  'turn_skipped', 'spin_reroll', 'spin', 'choose_game',
+  'assigned_game_incomplete', 'objective_completed', 'objective_incomplete',
+  'choose_other_player_game', 'admin_adjustment',
 ])
 
+function mapSinglePart(part: string): string | null {
+  const u = part.toUpperCase().trim()
+  if (u === 'CS') return 'game_completed_short'
+  if (u === 'CM') return 'game_completed_medium'
+  if (u === 'CL') return 'game_completed_long'
+  if (u === 'DNF') return 'assigned_game_incomplete'
+  if (u === 'OBJ') return 'objective_completed'
+  if (u === 'SKIP' || u === 'SKIPPED') return 'turn_skipped'
+  if (u === 'SP') return 'spin'
+  if (u === 'CONT') return 'series_back_to_back'
+  if (u === '100%') return 'achievement_100_percent'
+  if (/\d+\s*\(\*\d+\)/.test(u)) return 'game_completed_bonus_hours'
+  if (u.includes('SHORT')) return 'game_completed_short'
+  if (u.includes('MEDIUM')) return 'game_completed_medium'
+  if (u.includes('LONG')) return 'game_completed_long'
+  if (u.includes('SEQUEL')) return 'sequel_back_to_back'
+  if (u.includes('SERIES')) return 'series_back_to_back'
+  if (u.includes('REROLL')) return 'spin_reroll'
+  if (u.includes('SPIN')) return 'spin'
+  if (u.includes('CHOOSE')) return 'choose_game'
+  return null
+}
+
+// Maps a raw CSV reason string (possibly compound like "CL - 100%") to the primary DB enum value.
+// Returns the first recognisable part so compound reasons don't fail the enum check.
 function mapReason(raw: string): string {
   if (!raw) return 'admin_adjustment'
-  if (/\d+\s*\(\*\d+\)/.test(raw)) return 'game_completed_bonus_hours'
-
-  const upper = raw.toUpperCase().trim()
-  // Shorthand codes used in CSV exports
-  if (upper === 'CS') return 'game_completed_short'
-  if (upper === 'CM') return 'game_completed_medium'
-  if (upper === 'CL') return 'game_completed_long'
-  if (upper === 'OBJ' || upper === 'DNF') return 'admin_adjustment'
-
-  const lower = raw.toLowerCase()
-  if (lower.includes('short')) return 'game_completed_short'
-  if (lower.includes('medium')) return 'game_completed_medium'
-  if (lower.includes('long')) return 'game_completed_long'
-  if (lower.includes('100%') || lower.includes('achievement')) return 'achievement_100_percent'
-  if (lower.includes('sequel')) return 'sequel_back_to_back'
-  if (lower.includes('series')) return 'series_back_to_back'
-  if (lower.includes('skip') || lower.includes('skipped')) return 'turn_skipped'
-  if (lower.includes('reroll')) return 'spin_reroll'
-  if (lower.includes('spin')) return 'spin'
-  if (lower.includes('choose')) return 'choose_game'
-
-  // Fall back to admin_adjustment for any unknown value to avoid enum errors
+  const parts = raw.split(' - ').map(p => p.trim())
+  for (const part of parts) {
+    const mapped = mapSinglePart(part)
+    if (mapped) return mapped
+  }
   return VALID_REASONS.has(raw) ? raw : 'admin_adjustment'
 }
 
@@ -170,8 +180,11 @@ export async function POST(request: NextRequest) {
     // balance_before is derivable: newTotal - amount
     const balanceBefore = newTotal - amount
 
-    // Store unmatched game name as a note so the record isn't orphaned
-    const note = gameName && !gameId ? `Game: ${gameName}` : null
+    // Always store the raw reason so the tickets page can render all badges.
+    // If the game wasn't matched to the library, append the name so it still displays.
+    const rawReason = (row['Reason'] ?? '').trim()
+    const gameNote = gameName && !gameId ? `Game: ${gameName}` : null
+    const note = [rawReason || null, gameNote].filter(Boolean).join(' | ') || null
 
     const { error } = await supabase
       .from('ticket_transactions')
