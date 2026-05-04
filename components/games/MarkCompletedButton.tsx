@@ -88,6 +88,7 @@ export default function MarkCompletedButton({
   }
 
   function handleConfirm() {
+    setShowModal(false)
     startTransition(async () => {
       await markAsCompleted(gameId, {
         hours: hours ? Number(hours) : null,
@@ -95,7 +96,6 @@ export default function MarkCompletedButton({
         achievementProgress: achievementProgress ? Number(achievementProgress) : null,
         completionDate,
       })
-      setShowModal(false)
     })
   }
 

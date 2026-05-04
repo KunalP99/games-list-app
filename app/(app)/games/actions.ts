@@ -89,12 +89,16 @@ export async function createGame(formData: FormData) {
 
   if (status === 'completed') {
     await awardCompletionTickets(supabase, user.id, game.id, hours, achievementProgress)
-    await awardGameCompletionXp(supabase, user.id, hours, achievementProgress)
+    await Promise.all([
+      awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
+      checkAndAwardAchievements(supabase, user.id),
+    ])
   } else if (status === 'dnf') {
     await applyDnfPenalty(supabase, user.id, game.id)
+    await checkAndAwardAchievements(supabase, user.id)
+  } else {
+    await checkAndAwardAchievements(supabase, user.id)
   }
-
-  await checkAndAwardAchievements(supabase, user.id)
 
   revalidatePath('/games')
   revalidatePath('/dashboard')
@@ -181,24 +185,31 @@ export async function updateGame(id: string, formData: FormData) {
     // Editing a completed game — reverse old awards and re-award with new values
     await reverseGameCompletionTickets(supabase, user.id, id)
     await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
+    await checkAndAwardAchievements(supabase, user.id)
   } else if (!wasCompleted && isCompleted) {
     // Newly completed — award tickets; also reverse any DNF penalty if coming from DNF
     if (wasDnf) await reverseDnfPenalty(supabase, user.id, id)
     await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
-    await awardGameCompletionXp(supabase, user.id, hours, achievementProgress)
+    await Promise.all([
+      awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
+      checkAndAwardAchievements(supabase, user.id),
+    ])
   } else if (wasCompleted && !isCompleted) {
     // Un-completing — reverse completion awards; apply DNF penalty if moving to DNF
     await reverseGameCompletionTickets(supabase, user.id, id)
     if (isDnf) await applyDnfPenalty(supabase, user.id, id)
+    await checkAndAwardAchievements(supabase, user.id)
   } else if (!wasDnf && isDnf) {
     // Newly marked DNF
     await applyDnfPenalty(supabase, user.id, id)
+    await checkAndAwardAchievements(supabase, user.id)
   } else if (wasDnf && !isDnf) {
     // Removing DNF status
     await reverseDnfPenalty(supabase, user.id, id)
+    await checkAndAwardAchievements(supabase, user.id)
+  } else {
+    await checkAndAwardAchievements(supabase, user.id)
   }
-
-  await checkAndAwardAchievements(supabase, user.id)
 
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
@@ -253,8 +264,10 @@ export async function markAsCompleted(
   if (error) return { error: error.message }
 
   await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
-  await awardGameCompletionXp(supabase, user.id, hours, achievementProgress)
-  await checkAndAwardAchievements(supabase, user.id)
+  await Promise.all([
+    awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
+    checkAndAwardAchievements(supabase, user.id),
+  ])
 
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
