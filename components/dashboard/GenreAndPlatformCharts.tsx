@@ -90,8 +90,12 @@ const PLATFORM_COLORS: Record<string, string> = {
 
 const FALLBACK_COLOR = '#888888'
 
+const PLATFORM_COLORS_LOWER: Record<string, string> = Object.fromEntries(
+  Object.entries(PLATFORM_COLORS).map(([k, v]) => [k.toLowerCase(), v])
+)
+
 function getPlatformColor(platform: string): string {
-  return PLATFORM_COLORS[platform] ?? FALLBACK_COLOR
+  return PLATFORM_COLORS[platform] ?? PLATFORM_COLORS_LOWER[platform.toLowerCase()] ?? FALLBACK_COLOR
 }
 
 function PlatformTooltip({ active, payload }: { active?: boolean; payload?: { name: string; value: number }[] }) {

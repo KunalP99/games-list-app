@@ -36,6 +36,7 @@ export default async function DashboardPage() {
   const gamesByYear: Record<string, { title: string; image_url: string | null }[]> = {}
   const genreCounts: Record<string, number> = {}
   const platformCounts: Record<string, number> = {}
+  const platformDisplayNames: Record<string, string> = {}
 
   for (const g of allGames ?? []) {
     if (g.status === 'backlog') continue
@@ -52,10 +53,15 @@ export default async function DashboardPage() {
       genreCounts[genre] = (genreCounts[genre] ?? 0) + 1
     }
 
-    // Pie — platform counts (normalise case so "XBOX 360" and "Xbox 360" merge)
+    // Pie — platform counts (use lowercase key to merge casing variants like
+    // "XBOX 360" and "Xbox 360", but track original name for display/colour lookup)
     if (g.platform) {
-      const p = g.platform.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
-      platformCounts[p] = (platformCounts[p] ?? 0) + 1
+      const key = g.platform.trim().toLowerCase()
+      if (!platformCounts[key]) {
+        platformDisplayNames[key] = g.platform.trim()
+        platformCounts[key] = 0
+      }
+      platformCounts[key]++
     }
   }
 
@@ -69,7 +75,7 @@ export default async function DashboardPage() {
     .slice(0, 10)
 
   const platformData = Object.entries(platformCounts)
-    .map(([platform, count]) => ({ platform, count }))
+    .map(([key, count]) => ({ platform: platformDisplayNames[key] ?? key, count }))
     .sort((a, b) => b.count - a.count)
 
   const { data: ticketEarnings } = await supabase
