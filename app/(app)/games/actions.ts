@@ -114,10 +114,10 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Fetch current status, rawg_id, and description before updating to detect transitions
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status, rawg_id, description, genres, dominant_color')
+    .select('status, rawg_id, description, genres, dominant_color, hours_played, achievement_progress')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string; rawg_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null } | null }
+    .single() as { data: { status: string; rawg_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; hours_played: number | null; achievement_progress: number | null } | null }
 
   const status = formData.get('status') as string
   const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
@@ -182,9 +182,13 @@ export async function updateGame(id: string, formData: FormData) {
   const isDnf = status === 'dnf'
 
   if (wasCompleted && isCompleted) {
-    // Editing a completed game — reverse old awards and re-award with new values
-    await reverseGameCompletionTickets(supabase, user.id, id)
-    await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
+    // Only reverse+re-award if the ticket-relevant fields changed
+    const hoursChanged = hours !== (existing?.hours_played ?? null)
+    const achievementChanged = achievementProgress !== (existing?.achievement_progress ?? null)
+    if (hoursChanged || achievementChanged) {
+      await reverseGameCompletionTickets(supabase, user.id, id)
+      await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
+    }
     await checkAndAwardAchievements(supabase, user.id)
   } else if (!wasCompleted && isCompleted) {
     // Newly completed — award tickets; also reverse any DNF penalty if coming from DNF
