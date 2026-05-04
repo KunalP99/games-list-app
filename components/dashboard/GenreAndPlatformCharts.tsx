@@ -2,7 +2,7 @@
 
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
-  PieChart, Pie, Cell, Tooltip, Legend,
+  PieChart, Pie, Cell, Tooltip,
 } from 'recharts'
 
 type GenreEntry = { genre: string; count: number }
@@ -151,31 +151,42 @@ export default function GenreAndPlatformCharts({
       {hasPlatforms && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-5">
           <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-3">Platforms</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie
-                data={platformData}
-                dataKey="count"
-                nameKey="platform"
-                cx="50%"
-                cy="45%"
-                outerRadius={70}
-                strokeWidth={0}
-              >
-                {platformData.map((entry, i) => (
-                  <Cell key={i} fill={getPlatformColor(entry.platform)} />
-                ))}
-              </Pie>
-              <Tooltip content={<PlatformTooltip />} />
-              <Legend
-                iconType="circle"
-                iconSize={7}
-                formatter={(value) => (
-                  <span style={{ fontSize: '11px', color: 'var(--color-fg-muted)' }}>{value}</span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex items-center gap-3">
+            {/* Pie */}
+            <div className="shrink-0" style={{ width: 120, height: 120 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={platformData}
+                    dataKey="count"
+                    nameKey="platform"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={55}
+                    strokeWidth={0}
+                  >
+                    {platformData.map((entry, i) => (
+                      <Cell key={i} fill={getPlatformColor(entry.platform)} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<PlatformTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Legend */}
+            <div className="flex-1 min-w-0 space-y-1 overflow-y-auto max-h-[120px]">
+              {platformData.map((entry, i) => (
+                <div key={i} className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className="shrink-0 w-2 h-2 rounded-full"
+                    style={{ backgroundColor: getPlatformColor(entry.platform) }}
+                  />
+                  <span className="text-[11px] text-fg-muted truncate">{entry.platform}</span>
+                  <span className="text-[11px] text-fg-subtle ml-auto shrink-0">{entry.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
