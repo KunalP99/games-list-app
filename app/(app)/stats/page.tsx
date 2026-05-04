@@ -354,10 +354,10 @@ function StatsColumn({
           {stats.gamesPerYear.length > 0 && (
             <div>
               <p className="text-xs text-fg-muted mb-2">Games per year</p>
-              <GamesPerYearChart data={stats.gamesPerYear} />
+              <GamesPerYearChart data={stats.gamesPerYear} accentColor={accent} />
             </div>
           )}
-          <GenreAndPlatformCharts genreData={stats.genreData} platformData={stats.platformData} />
+          <GenreAndPlatformCharts genreData={stats.genreData} platformData={stats.platformData} accentColor={accent} />
         </SectionCard>
       )}
     </div>

@@ -110,13 +110,17 @@ function PlatformTooltip({ active, payload }: { active?: boolean; payload?: { na
 export default function GenreAndPlatformCharts({
   genreData,
   platformData,
+  accentColor,
 }: {
   genreData: GenreEntry[]
   platformData: PlatformEntry[]
+  accentColor?: string | null
 }) {
   const hasGenres = genreData.length > 0
   const hasPlatforms = platformData.length > 0
   if (!hasGenres && !hasPlatforms) return null
+
+  const radarColor = accentColor ?? 'rgb(var(--brand-600))'
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -133,8 +137,8 @@ export default function GenreAndPlatformCharts({
               />
               <Radar
                 dataKey="count"
-                stroke="rgb(var(--brand-600))"
-                fill="rgb(var(--brand-600))"
+                stroke={radarColor}
+                fill={radarColor}
                 fillOpacity={0.25}
                 strokeWidth={1.5}
               />
