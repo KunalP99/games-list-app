@@ -368,8 +368,6 @@ export default async function StatsPage({
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const compareUsername = searchParams.compare?.trim() || null
-
   const { data: allProfiles } = await supabase
     .from('profiles')
     .select('id, display_name, username')
@@ -377,6 +375,8 @@ export default async function StatsPage({
     .order('display_name', { ascending: true, nullsFirst: false }) as { data: { id: string; display_name: string | null; username: string }[] | null }
 
   const friends = allProfiles ?? []
+
+  const compareUsername = searchParams.compare?.trim() || friends[0]?.username || null
 
   let myStats: UserStats
   let friendStats: UserStats | null = null
