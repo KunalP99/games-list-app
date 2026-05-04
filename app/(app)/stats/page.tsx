@@ -24,8 +24,6 @@ type UserStats = {
   avgRating: number | null
   longestGame: { title: string; hours_played: number } | null
   shortestGame: { title: string; hours_played: number } | null
-  highestRated: { title: string; rating: number } | null
-  lowestRated: { title: string; rating: number } | null
   mostProlificMonth: { label: string; count: number } | null
   ticketsEarned: number
   ticketsSpent: number
@@ -101,10 +99,6 @@ async function computeUserStats(
     ? { title: completedWithHours[completedWithHours.length - 1].title, hours_played: completedWithHours[completedWithHours.length - 1].hours_played! }
     : null
 
-  const sortedByRating = [...ratedGames].sort((a, b) => b.rating! - a.rating!)
-  const highestRated = sortedByRating[0] ? { title: sortedByRating[0].title, rating: sortedByRating[0].rating! } : null
-  const lowestRated  = sortedByRating.length > 0 ? { title: sortedByRating[sortedByRating.length - 1].title, rating: sortedByRating[sortedByRating.length - 1].rating! } : null
-
   const monthCounts: Record<string, number> = {}
   for (const g of completedGames) {
     if (!g.completion_date) continue
@@ -171,8 +165,6 @@ async function computeUserStats(
     avgRating,
     longestGame,
     shortestGame,
-    highestRated,
-    lowestRated,
     mostProlificMonth,
     ticketsEarned,
     ticketsSpent,
@@ -309,8 +301,6 @@ function StatsColumn({
         <div className="space-y-3">
           <HighlightRow label="Longest" value={stats.longestGame ? `${stats.longestGame.title} · ${fmtHours(stats.longestGame.hours_played)}` : '—'} />
           <HighlightRow label="Shortest" value={stats.shortestGame ? `${stats.shortestGame.title} · ${fmtHours(stats.shortestGame.hours_played)}` : '—'} />
-          <HighlightRow label="Highest rated" value={stats.highestRated ? `${stats.highestRated.title} · ${stats.highestRated.rating}/5` : '—'} />
-          <HighlightRow label="Lowest rated" value={stats.lowestRated ? `${stats.lowestRated.title} · ${stats.lowestRated.rating}/5` : '—'} />
           <HighlightRow label="Best month" value={stats.mostProlificMonth ? `${stats.mostProlificMonth.label} · ${stats.mostProlificMonth.count} game${stats.mostProlificMonth.count !== 1 ? 's' : ''}` : '—'} />
         </div>
       </SectionCard>
