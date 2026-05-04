@@ -43,10 +43,23 @@ function parseCSV(raw: string): Record<string, string>[] {
 // ── Field mappers ──────────────────────────────────────────────────────────────
 
 // "20 (*3)" = 3 bonus-hour tickets; "OBJ" = objective; otherwise try known labels.
+const VALID_REASONS = new Set([
+  'game_completed_short', 'game_completed_medium', 'game_completed_long',
+  'game_completed_bonus_hours', 'achievement_100_percent',
+  'sequel_back_to_back', 'series_back_to_back',
+  'turn_skipped', 'spin_reroll', 'spin', 'choose_game', 'admin_adjustment',
+])
+
 function mapReason(raw: string): string {
   if (!raw) return 'admin_adjustment'
   if (/\d+\s*\(\*\d+\)/.test(raw)) return 'game_completed_bonus_hours'
-  if (raw.toUpperCase() === 'OBJ') return 'OBJ'
+
+  const upper = raw.toUpperCase().trim()
+  // Shorthand codes used in CSV exports
+  if (upper === 'CS') return 'game_completed_short'
+  if (upper === 'CM') return 'game_completed_medium'
+  if (upper === 'CL') return 'game_completed_long'
+  if (upper === 'OBJ' || upper === 'DNF') return 'admin_adjustment'
 
   const lower = raw.toLowerCase()
   if (lower.includes('short')) return 'game_completed_short'
@@ -60,7 +73,8 @@ function mapReason(raw: string): string {
   if (lower.includes('spin')) return 'spin'
   if (lower.includes('choose')) return 'choose_game'
 
-  return raw
+  // Fall back to admin_adjustment for any unknown value to avoid enum errors
+  return VALID_REASONS.has(raw) ? raw : 'admin_adjustment'
 }
 
 function parseWheelTurn(raw: string): 'spin' | 'spin_reroll' | 'choose' | null {
