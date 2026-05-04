@@ -13,6 +13,7 @@ const navItems = [
   { href: '/tickets', label: 'Tickets' },
   { href: '/wheel', label: 'Wheel' },
   { href: '/achievements', label: 'Achievements' },
+  { href: '/stats', label: 'Stats' },
 ]
 
 export default function Nav({ profile }: { profile: Profile }) {

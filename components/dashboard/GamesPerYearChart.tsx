@@ -36,8 +36,10 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payl
   )
 }
 
-export default function GamesPerYearChart({ data }: { data: YearData[] }) {
+export default function GamesPerYearChart({ data, accentColor }: { data: YearData[]; accentColor?: string | null }) {
   if (data.length === 0) return null
+
+  const barColor = accentColor ?? 'rgb(var(--brand-600))'
 
   return (
     <div className="bg-surface-base border border-edge-base rounded-xl p-5">
@@ -61,7 +63,7 @@ export default function GamesPerYearChart({ data }: { data: YearData[] }) {
             content={<CustomTooltip />}
             cursor={{ fill: 'var(--color-surface-hover)' }}
           />
-          <Bar dataKey="count" fill="rgb(var(--brand-600))" radius={[4, 4, 0, 0]} maxBarSize={48} />
+          <Bar dataKey="count" fill={barColor} radius={[4, 4, 0, 0]} maxBarSize={48} />
         </BarChart>
       </ResponsiveContainer>
     </div>

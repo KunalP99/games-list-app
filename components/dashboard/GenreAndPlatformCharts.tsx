@@ -2,7 +2,7 @@
 
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
-  PieChart, Pie, Cell, Tooltip, Legend,
+  PieChart, Pie, Cell, Tooltip,
 } from 'recharts'
 
 type GenreEntry = { genre: string; count: number }
@@ -110,13 +110,17 @@ function PlatformTooltip({ active, payload }: { active?: boolean; payload?: { na
 export default function GenreAndPlatformCharts({
   genreData,
   platformData,
+  accentColor,
 }: {
   genreData: GenreEntry[]
   platformData: PlatformEntry[]
+  accentColor?: string | null
 }) {
   const hasGenres = genreData.length > 0
   const hasPlatforms = platformData.length > 0
   if (!hasGenres && !hasPlatforms) return null
+
+  const radarColor = accentColor ?? 'rgb(var(--brand-600))'
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -133,8 +137,8 @@ export default function GenreAndPlatformCharts({
               />
               <Radar
                 dataKey="count"
-                stroke="rgb(var(--brand-600))"
-                fill="rgb(var(--brand-600))"
+                stroke={radarColor}
+                fill={radarColor}
                 fillOpacity={0.25}
                 strokeWidth={1.5}
               />
@@ -147,15 +151,15 @@ export default function GenreAndPlatformCharts({
       {hasPlatforms && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-5">
           <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-3">Platforms</p>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie
                 data={platformData}
                 dataKey="count"
                 nameKey="platform"
                 cx="50%"
-                cy="45%"
-                outerRadius={70}
+                cy="50%"
+                outerRadius={75}
                 strokeWidth={0}
               >
                 {platformData.map((entry, i) => (
@@ -163,13 +167,6 @@ export default function GenreAndPlatformCharts({
                 ))}
               </Pie>
               <Tooltip content={<PlatformTooltip />} />
-              <Legend
-                iconType="circle"
-                iconSize={7}
-                formatter={(value) => (
-                  <span style={{ fontSize: '11px', color: 'var(--color-fg-muted)' }}>{value}</span>
-                )}
-              />
             </PieChart>
           </ResponsiveContainer>
         </div>
