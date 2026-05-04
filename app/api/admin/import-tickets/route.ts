@@ -135,8 +135,12 @@ export async function POST(request: NextRequest) {
 
   for (const row of userRows) {
     const gameName = row['Game Name']?.trim() || null
-    const amount = parseInt(row['Tickets'] ?? '', 10)
-    const newTotal = parseInt(row['New Total'] ?? '', 10)
+    const rawTickets = (row['Tickets'] ?? row['🎟️'] ?? '').trim()
+    const amount = parseInt(rawTickets, 10)
+    // New Total may be formatted as "(old) new" — take the last token
+    const rawNewTotal = (row['New Total'] ?? '').trim()
+    const newTotalStr = rawNewTotal.split(/\s+/).pop() ?? ''
+    const newTotal = parseInt(newTotalStr, 10)
     const entry = gameName ?? row['Date'] ?? '?'
 
     if (isNaN(amount) || isNaN(newTotal)) {
