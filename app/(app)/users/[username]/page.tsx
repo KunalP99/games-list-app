@@ -34,17 +34,17 @@ function computeRecommendations(
 
 function RecommendationCard({ game }: { game: RawRecommendation }) {
   return (
-    <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden flex flex-col">
+    <div className="snap-start shrink-0 w-36 bg-surface-base border border-edge-base rounded-xl overflow-hidden flex flex-col">
       {game.image_url
-        ? <img src={game.image_url} alt={game.title} className="w-full h-28 object-cover" />
-        : <div className="w-full h-28 bg-surface-active flex items-center justify-center text-2xl">🎮</div>
+        ? <img src={game.image_url} alt={game.title} className="w-full h-36 object-cover" />
+        : <div className="w-full h-36 bg-surface-active flex items-center justify-center text-3xl">🎮</div>
       }
-      <div className="p-3 space-y-0.5">
-        <p className="text-sm font-semibold text-fg-base leading-tight">{game.title}</p>
-        {game.developer && <p className="text-xs text-fg-muted">{game.developer}</p>}
-        <div className="flex items-center justify-between pt-1 flex-wrap gap-1">
-          {game.rating != null && <span className="text-xs text-fg-subtle">⭐ {game.rating}/5</span>}
-          {game.genres?.[0] && <span className="text-xs text-fg-subtle">{game.genres[0]}</span>}
+      <div className="p-2.5 space-y-0.5 flex-1">
+        <p className="text-xs font-semibold text-fg-base leading-tight line-clamp-2">{game.title}</p>
+        {game.developer && <p className="text-[11px] text-fg-muted truncate">{game.developer}</p>}
+        <div className="flex flex-col gap-0.5 pt-1">
+          {game.rating != null && <span className="text-[11px] text-fg-subtle">⭐ {game.rating}/5</span>}
+          {game.genres?.[0] && <span className="text-[11px] text-fg-subtle truncate">{game.genres[0]}</span>}
         </div>
       </div>
     </div>
@@ -201,7 +201,7 @@ export default async function UserProfilePage({
           <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">
             Games you might like
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1">
             {recommendations.map((g, i) => (
               <RecommendationCard key={i} game={g} />
             ))}
