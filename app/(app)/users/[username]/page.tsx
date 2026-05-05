@@ -7,6 +7,50 @@ import GameFilters from '@/components/games/GameFilters'
 import GameCard from '@/components/games/GameCard'
 import { Suspense } from 'react'
 
+type RawRecommendation = {
+  title: string
+  genres: string[] | null
+  rating: number | null
+  image_url: string | null
+  developer: string | null
+}
+
+function computeRecommendations(
+  friendGames: RawRecommendation[],
+  myTitles: Set<string>,
+  myGenreCounts: Record<string, number>,
+): (RawRecommendation & { score: number })[] {
+  return friendGames
+    .filter(g => !myTitles.has(g.title.trim().toLowerCase()))
+    .filter(g => g.rating == null || g.rating >= 3)
+    .map(g => {
+      const base = g.rating ?? 3
+      const bonus = (g.genres ?? []).reduce((s, genre) => s + (myGenreCounts[genre] ?? 0) * 0.5, 0)
+      return { ...g, score: base + bonus }
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+}
+
+function RecommendationCard({ game }: { game: RawRecommendation }) {
+  return (
+    <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden flex flex-col">
+      {game.image_url
+        ? <img src={game.image_url} alt={game.title} className="w-full h-28 object-cover" />
+        : <div className="w-full h-28 bg-surface-active flex items-center justify-center text-2xl">🎮</div>
+      }
+      <div className="p-3 space-y-0.5">
+        <p className="text-sm font-semibold text-fg-base leading-tight">{game.title}</p>
+        {game.developer && <p className="text-xs text-fg-muted">{game.developer}</p>}
+        <div className="flex items-center justify-between pt-1 flex-wrap gap-1">
+          {game.rating != null && <span className="text-xs text-fg-subtle">⭐ {game.rating}/5</span>}
+          {game.genres?.[0] && <span className="text-xs text-fg-subtle">{game.genres[0]}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StatPill({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1 px-3 py-1 bg-surface-elevated border border-edge-base rounded-full text-sm text-fg-secondary">
@@ -63,6 +107,30 @@ export default async function UserProfilePage({
     .eq('status', 'playing')
     .order('created_at', { ascending: false })
     .limit(2) as { data: Game[] | null }
+
+  const [friendCompletedRes, myGamesRes] = !isOwner
+    ? await Promise.all([
+        supabase
+          .from('games')
+          .select('title, genres, rating, image_url, developer')
+          .eq('user_id', profile.id)
+          .eq('status', 'completed'),
+        supabase
+          .from('games')
+          .select('title, genres, status')
+          .eq('user_id', user!.id),
+      ])
+    : [null, null]
+
+  const myTitles = new Set((myGamesRes?.data ?? []).map((g: { title: string }) => g.title.trim().toLowerCase()))
+  const myGenreCounts: Record<string, number> = {}
+  for (const g of myGamesRes?.data ?? []) {
+    if ((g as { status: string }).status !== 'completed') continue
+    for (const genre of (g as { genres: string[] | null }).genres ?? []) {
+      myGenreCounts[genre] = (myGenreCounts[genre] ?? 0) + 1
+    }
+  }
+  const recommendations = isOwner ? [] : computeRecommendations(friendCompletedRes?.data ?? [], myTitles, myGenreCounts)
 
   const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
   const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0
@@ -123,6 +191,19 @@ export default async function UserProfilePage({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {playingGames.map(game => (
               <GameCard key={game.id} game={game} isOwner={isOwner} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recommendations.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">
+            Games you might like
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {recommendations.map((g, i) => (
+              <RecommendationCard key={i} game={g} />
             ))}
           </div>
         </div>
