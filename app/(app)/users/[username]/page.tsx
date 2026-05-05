@@ -5,6 +5,7 @@ import type { Game, Profile } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
 import GameCard from '@/components/games/GameCard'
+import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
 import { Suspense } from 'react'
 
 type RawRecommendation = {
@@ -32,24 +33,6 @@ function computeRecommendations(
     .slice(0, 8)
 }
 
-function RecommendationCard({ game }: { game: RawRecommendation }) {
-  return (
-    <div className="snap-start shrink-0 w-36 bg-surface-base border border-edge-base rounded-xl overflow-hidden flex flex-col">
-      {game.image_url
-        ? <img src={game.image_url} alt={game.title} className="w-full h-36 object-cover" />
-        : <div className="w-full h-36 bg-surface-active flex items-center justify-center text-3xl">🎮</div>
-      }
-      <div className="p-2.5 space-y-0.5 flex-1">
-        <p className="text-xs font-semibold text-fg-base leading-tight line-clamp-2">{game.title}</p>
-        {game.developer && <p className="text-[11px] text-fg-muted truncate">{game.developer}</p>}
-        <div className="flex flex-col gap-0.5 pt-1">
-          {game.rating != null && <span className="text-[11px] text-fg-subtle">⭐ {game.rating}/5</span>}
-          {game.genres?.[0] && <span className="text-[11px] text-fg-subtle truncate">{game.genres[0]}</span>}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function StatPill({ children }: { children: React.ReactNode }) {
   return (
@@ -201,11 +184,7 @@ export default async function UserProfilePage({
           <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">
             Games you might like
           </h2>
-          <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-1 px-1">
-            {recommendations.map((g, i) => (
-              <RecommendationCard key={i} game={g} />
-            ))}
-          </div>
+          <RecommendationsCarousel games={recommendations} />
         </div>
       )}
 
