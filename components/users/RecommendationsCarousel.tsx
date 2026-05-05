@@ -2,7 +2,6 @@
 
 import useEmblaCarousel from 'embla-carousel-react'
 import Autoplay from 'embla-carousel-autoplay'
-import Fade from 'embla-carousel-fade'
 import { useCallback, useEffect, useState } from 'react'
 
 type Recommendation = {
@@ -15,8 +14,8 @@ type Recommendation = {
 
 export default function RecommendationsCarousel({ games }: { games: Recommendation[] }) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
-    { loop: true },
-    [Autoplay({ delay: 3500, stopOnInteraction: false }), Fade()],
+    { loop: true, align: 'center', containScroll: false },
+    [Autoplay({ delay: 3500, stopOnInteraction: false })],
   )
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -34,37 +33,52 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
 
   return (
     <div className="space-y-3">
-      {/* Viewport */}
-      <div ref={emblaRef} className="overflow-hidden rounded-xl">
-        <div className="flex">
-          {games.map((game, i) => (
-            <div key={i} className="flex-[0_0_100%] min-w-0 relative">
-              {/* Cover image */}
-              <div className="relative w-full h-64 bg-surface-active">
-                {game.image_url
-                  ? <img src={game.image_url} alt={game.title} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-5xl">🎮</div>
-                }
-                {/* Gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                {/* Text over image */}
-                <div className="absolute bottom-0 left-0 right-0 p-4">
-                  <p className="text-base font-bold text-white leading-tight">{game.title}</p>
-                  {game.developer && (
-                    <p className="text-sm text-white/70 mt-0.5">{game.developer}</p>
-                  )}
-                  <div className="flex items-center gap-3 mt-1.5">
-                    {game.rating != null && (
-                      <span className="text-xs text-white/80">⭐ {game.rating}/5</span>
+      {/* Outer wrapper clips the peeking slides */}
+      <div className="overflow-hidden">
+        {/* Embla viewport — intentionally wider than its container via negative margin so adjacent slides peek in */}
+        <div ref={emblaRef}>
+          <div className="flex gap-3">
+            {games.map((game, i) => {
+              const isActive = i === selectedIndex
+              return (
+                <div
+                  key={i}
+                  className={`flex-[0_0_78%] min-w-0 relative rounded-xl overflow-hidden transition-opacity duration-500 cursor-pointer ${
+                    isActive ? 'opacity-100' : 'opacity-40 hover:opacity-60'
+                  }`}
+                  onClick={() => emblaApi?.scrollTo(i)}
+                >
+                  <div className="relative w-full h-64 bg-surface-active">
+                    {game.image_url
+                      ? <img src={game.image_url} alt={game.title} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-5xl">🎮</div>
+                    }
+                    {/* Gradient overlay — only on active */}
+                    {isActive && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                     )}
-                    {game.genres?.[0] && (
-                      <span className="text-xs text-white/60">{game.genres[0]}</span>
+                    {/* Text — only on active */}
+                    {isActive && (
+                      <div className="absolute bottom-0 left-0 right-0 p-4">
+                        <p className="text-base font-bold text-white leading-tight">{game.title}</p>
+                        {game.developer && (
+                          <p className="text-sm text-white/70 mt-0.5">{game.developer}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {game.rating != null && (
+                            <span className="text-xs text-white/80">⭐ {game.rating}/5</span>
+                          )}
+                          {game.genres?.[0] && (
+                            <span className="text-xs text-white/60">{game.genres[0]}</span>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              )
+            })}
+          </div>
         </div>
       </div>
 
