@@ -43,12 +43,12 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
               return (
                 <div
                   key={i}
-                  className={`flex-[0_0_78%] min-w-0 relative rounded-xl overflow-hidden transition-opacity duration-500 cursor-pointer ${
+                  className={`flex-[0_0_58%] min-w-0 relative rounded-xl overflow-hidden transition-opacity duration-500 cursor-pointer ${
                     isActive ? 'opacity-100' : 'opacity-40 hover:opacity-60'
                   }`}
                   onClick={() => emblaApi?.scrollTo(i)}
                 >
-                  <div className="relative w-full h-64 bg-surface-active">
+                  <div className="relative w-full aspect-square bg-surface-active">
                     {game.image_url
                       ? <img src={game.image_url} alt={game.title} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-5xl">🎮</div>
