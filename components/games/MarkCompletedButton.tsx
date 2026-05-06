@@ -84,7 +84,7 @@ export default function MarkCompletedButton({
   function handleCardClick(e: React.MouseEvent) {
     e.preventDefault()
     e.stopPropagation()
-    startTransition(async () => { await markAsCompleted(gameId) })
+    setShowModal(true)
   }
 
   function handleConfirm() {
@@ -198,12 +198,94 @@ export default function MarkCompletedButton({
   }
 
   return (
-    <button
-      onClick={handleCardClick}
-      disabled={pending}
-      className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5 hover:bg-emerald-100 disabled:opacity-50 transition-colors dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-    >
-      {pending ? '…' : 'Mark Complete'}
-    </button>
+    <>
+      <button
+        onClick={handleCardClick}
+        disabled={pending}
+        className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5 hover:bg-emerald-100 disabled:opacity-50 transition-colors dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+      >
+        {pending ? '…' : 'Mark Complete'}
+      </button>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => !pending && setShowModal(false)}
+          />
+          <div className="relative w-full max-w-md bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-5">
+
+            <div>
+              <h2 className="text-lg font-semibold text-fg-base">Mark as Completed</h2>
+              <p className="text-sm text-fg-muted mt-0.5">All fields are optional — fill in what you know.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-2">Rating</label>
+              <StarPicker value={rating} onChange={setRating} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Hours Played</label>
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={hours}
+                onChange={e => setHours(e.target.value)}
+                placeholder="e.g. 25"
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Achievement Progress</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={achievementProgress}
+                  onChange={e => setAchievementProgress(e.target.value)}
+                  placeholder="0–100"
+                  className={`${inputClass} pr-8`}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-fg-muted pointer-events-none">%</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Date Completed</label>
+              <input
+                type="date"
+                value={completionDate}
+                onChange={e => setCompletionDate(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                disabled={pending}
+                className="px-4 py-2 text-sm font-medium text-fg-secondary hover:text-fg-base border border-edge-base rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={pending}
+                className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+              >
+                {pending ? 'Saving…' : 'Mark as Completed'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </>
   )
 }

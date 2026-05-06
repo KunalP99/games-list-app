@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
 
   const completedCount = allGames?.filter(g => g.status === 'completed').length ?? 0
-  const startedCount = allGames?.filter(g => g.status !== 'backlog').length ?? 0
+  const startedCount = allGames?.filter(g => g.status === 'completed' || g.status === 'dnf').length ?? 0
   const completionRate = startedCount > 0 ? Math.round((completedCount / startedCount) * 100) : null
 
   const gamesByYear: Record<string, { title: string; image_url: string | null }[]> = {}
@@ -92,10 +92,10 @@ export default async function DashboardPage() {
 
   const { data: recentGamesRaw } = await supabase
     .from('games')
-    .select('id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at')
+    .select('id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at')
     .eq('user_id', user!.id)
     .in('status', ['playing', 'completed', 'dnf'])
-    .order('created_at', { ascending: false })
+    .order('updated_at', { ascending: false })
     .limit(20) as { data: Game[] | null; error: unknown }
 
   const recentGames = recentGamesRaw ?? []

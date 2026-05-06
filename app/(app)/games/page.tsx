@@ -13,13 +13,13 @@ export default async function GamesPage({
 }: {
   searchParams: { status?: string; sort?: string; q?: string; view?: string }
 }) {
-  if (!searchParams.status) redirect('/games?status=completed')
+  if (!searchParams.status) redirect('/games?status=completed&sort=completion_date')
 
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const status = searchParams.status === 'all' ? undefined : searchParams.status
-  const sort = searchParams.sort ?? 'created_at'
+  const sort = searchParams.sort ?? 'completion_date'
   const sortAsc = sort === 'title'
   const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
   const q = searchParams.q?.trim()

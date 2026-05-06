@@ -25,7 +25,7 @@ export default function GameFilters() {
   const searchParams = useSearchParams()
 
   const activeStatus = searchParams.get('status') ?? 'all'
-  const activeSort = searchParams.get('sort') ?? 'created_at'
+  const activeSort = searchParams.get('sort') ?? 'completion_date'
   const [activeView, setActiveView] = useState<'grid' | 'table'>(
     (searchParams.get('view') as 'grid' | 'table') ?? 'grid'
   )
