@@ -16,13 +16,25 @@ export default async function WheelPage() {
 
   if (!profile) redirect('/login')
 
+  const { data: backlogGames } = await supabase
+    .from('games')
+    .select('id, title')
+    .eq('user_id', user.id)
+    .eq('status', 'backlog')
+    .order('title', { ascending: true }) as { data: { id: string; title: string }[] | null }
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-fg-base">Wheel Spin</h1>
         <p className="text-sm text-fg-muted mt-0.5">Spin to decide what you play next</p>
       </div>
-      <WheelClient turn={profile.wheel_turn} balance={profile.ticket_balance} accentColour={profile.accent_colour ?? '#7c3aed'} />
+      <WheelClient
+        turn={profile.wheel_turn}
+        balance={profile.ticket_balance}
+        accentColour={profile.accent_colour ?? '#7c3aed'}
+        backlogGames={(backlogGames ?? []).map(g => g.title)}
+      />
     </div>
   )
 }
