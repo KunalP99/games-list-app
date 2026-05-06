@@ -5,33 +5,7 @@ import type { Game, Profile } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
 import GameCard from '@/components/games/GameCard'
-import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
 import { Suspense } from 'react'
-
-type RawRecommendation = {
-  title: string
-  genres: string[] | null
-  rating: number | null
-  image_url: string | null
-  developer: string | null
-}
-
-function computeRecommendations(
-  friendGames: RawRecommendation[],
-  myTitles: Set<string>,
-  myGenreCounts: Record<string, number>,
-): (RawRecommendation & { score: number })[] {
-  return friendGames
-    .filter(g => !myTitles.has(g.title.trim().toLowerCase()))
-    .filter(g => g.rating == null || g.rating >= 3)
-    .map(g => {
-      const base = g.rating ?? 3
-      const bonus = (g.genres ?? []).reduce((s, genre) => s + (myGenreCounts[genre] ?? 0) * 0.5, 0)
-      return { ...g, score: base + bonus }
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8)
-}
 
 
 function StatPill({ children }: { children: React.ReactNode }) {
@@ -90,30 +64,6 @@ export default async function UserProfilePage({
     .eq('status', 'playing')
     .order('created_at', { ascending: false })
     .limit(2) as { data: Game[] | null }
-
-  const [friendCompletedRes, myGamesRes] = !isOwner
-    ? await Promise.all([
-        supabase
-          .from('games')
-          .select('title, genres, rating, image_url, developer')
-          .eq('user_id', profile.id)
-          .eq('status', 'completed'),
-        supabase
-          .from('games')
-          .select('title, genres, status')
-          .eq('user_id', user!.id),
-      ])
-    : [null, null]
-
-  const myTitles = new Set((myGamesRes?.data ?? []).map((g: { title: string }) => g.title.trim().toLowerCase()))
-  const myGenreCounts: Record<string, number> = {}
-  for (const g of myGamesRes?.data ?? []) {
-    if ((g as { status: string }).status !== 'completed') continue
-    for (const genre of (g as { genres: string[] | null }).genres ?? []) {
-      myGenreCounts[genre] = (myGenreCounts[genre] ?? 0) + 1
-    }
-  }
-  const recommendations = isOwner ? [] : computeRecommendations(friendCompletedRes?.data ?? [], myTitles, myGenreCounts)
 
   const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
   const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0
@@ -176,15 +126,6 @@ export default async function UserProfilePage({
               <GameCard key={game.id} game={game} isOwner={isOwner} />
             ))}
           </div>
-        </div>
-      )}
-
-      {recommendations.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">
-            Games you might like
-          </h2>
-          <RecommendationsCarousel games={recommendations} />
         </div>
       )}
 

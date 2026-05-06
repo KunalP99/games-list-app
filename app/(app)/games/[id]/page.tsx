@@ -9,6 +9,7 @@ import StatusBadge from '@/components/games/StatusBadge'
 import DeleteGameButton from '@/components/games/DeleteGameButton'
 import MarkCompletedButton from '@/components/games/MarkCompletedButton'
 import AchievementGrid from '@/components/games/AchievementGrid'
+import AddToBacklogButton from '@/components/users/AddToBacklogButton'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -23,6 +24,14 @@ export default async function GameDetailPage({ params }: { params: { id: string 
   if (!game) notFound()
 
   const isOwner = game.user_id === user?.id
+
+  const { data: ownerProfile } = !isOwner
+    ? await supabase
+        .from('profiles')
+        .select('display_name, username, accent_colour')
+        .eq('id', game.user_id)
+        .single() as { data: { display_name: string | null; username: string; accent_colour: string | null } | null }
+    : { data: null }
 
   const [{ data: sameGames }, screenshots, achievements] = await Promise.all([
     supabase
@@ -40,6 +49,28 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
   return (
     <div className="max-w-2xl space-y-6">
+      {/* Owner attribution */}
+      {!isOwner && ownerProfile && (
+        <div className="flex items-center gap-2 text-sm text-fg-muted">
+          <div
+            className="w-5 h-5 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white"
+            style={{ backgroundColor: ownerProfile.accent_colour ?? '#7c3aed' }}
+          >
+            {(ownerProfile.display_name ?? ownerProfile.username).split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+          </div>
+          <span>
+            From{' '}
+            <Link
+              href={`/users/${encodeURIComponent(ownerProfile.username)}`}
+              className="font-medium text-fg-base hover:underline"
+            >
+              {ownerProfile.display_name ?? ownerProfile.username}
+            </Link>
+            's library
+          </span>
+        </div>
+      )}
+
       {/* Hero — banner with overlay when image exists, plain header otherwise */}
       {game.image_url ? (
         <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-md">
@@ -51,21 +82,28 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           {/* Strong gradient so text is always readable */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
 
-          {/* Owner actions — top right */}
-          {isOwner && (
-            <div className="absolute top-3 right-3 flex items-center gap-2">
-              {game.status === 'playing' && (
-                <MarkCompletedButton gameId={game.id} variant="detail" />
-              )}
-              <Link
-                href={`/games/${game.id}/edit`}
-                className="px-2.5 py-1 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-xs font-medium rounded-lg hover:bg-black/60 transition-colors"
-              >
-                Edit
-              </Link>
-              <DeleteGameButton id={game.id} variant="overlay" />
-            </div>
-          )}
+          {/* Actions — top right */}
+          <div className="absolute top-3 right-3 flex items-center gap-2">
+            {isOwner ? (
+              <>
+                {game.status === 'playing' && (
+                  <MarkCompletedButton gameId={game.id} variant="detail" />
+                )}
+                <Link
+                  href={`/games/${game.id}/edit`}
+                  className="px-2.5 py-1 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-xs font-medium rounded-lg hover:bg-black/60 transition-colors"
+                >
+                  Edit
+                </Link>
+                <DeleteGameButton id={game.id} variant="overlay" />
+              </>
+            ) : (
+              <AddToBacklogButton
+                game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres }}
+                variant="glass"
+              />
+            )}
+          </div>
 
           {/* Title and metadata — bottom */}
           <div className="absolute bottom-0 left-0 right-0 p-5">
@@ -152,20 +190,27 @@ export default async function GameDetailPage({ params }: { params: { id: string 
               </p>
             )}
           </div>
-          {isOwner && (
-            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-              {game.status === 'playing' && (
-                <MarkCompletedButton gameId={game.id} variant="detail" />
-              )}
-              <Link
-                href={`/games/${game.id}/edit`}
-                className="px-3 py-1.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
-              >
-                Edit
-              </Link>
-              <DeleteGameButton id={game.id} />
-            </div>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+            {isOwner ? (
+              <>
+                {game.status === 'playing' && (
+                  <MarkCompletedButton gameId={game.id} variant="detail" />
+                )}
+                <Link
+                  href={`/games/${game.id}/edit`}
+                  className="px-3 py-1.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
+                >
+                  Edit
+                </Link>
+                <DeleteGameButton id={game.id} />
+              </>
+            ) : (
+              <AddToBacklogButton
+                game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres }}
+                variant="outline"
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -247,9 +292,15 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
-      <Link href="/games" className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
-        ← Back to My Games
-      </Link>
+      {isOwner ? (
+        <Link href="/games" className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
+          ← Back to My Games
+        </Link>
+      ) : ownerProfile ? (
+        <Link href={`/users/${encodeURIComponent(ownerProfile.username)}`} className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
+          ← Back to {ownerProfile.display_name ?? ownerProfile.username}'s profile
+        </Link>
+      ) : null}
     </div>
   )
 }

@@ -2,20 +2,24 @@
 
 import useEmblaCarousel from 'embla-carousel-react'
 import Autoplay from 'embla-carousel-autoplay'
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import AddToBacklogButton from '@/components/users/AddToBacklogButton'
 
 type Recommendation = {
+  id: string
   title: string
   genres: string[] | null
   rating: number | null
   image_url: string | null
   developer: string | null
+  recommendedBy: string
 }
 
 export default function RecommendationsCarousel({ games }: { games: Recommendation[] }) {
   const [emblaRef, emblaApi] = useEmblaCarousel(
-    { loop: true, align: 'center', containScroll: false },
-    [Autoplay({ delay: 3500, stopOnInteraction: false })],
+    { loop: true },
+    [Autoplay({ delay: 8000, stopOnInteraction: false })],
   )
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -32,68 +36,61 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
   }, [emblaApi, onSelect])
 
   return (
-    <div className="space-y-3">
-      {/* Outer wrapper clips the peeking slides */}
-      <div className="overflow-hidden">
-        {/* Embla viewport — intentionally wider than its container via negative margin so adjacent slides peek in */}
-        <div ref={emblaRef}>
-          <div className="flex gap-3">
-            {games.map((game, i) => {
-              const isActive = i === selectedIndex
-              return (
-                <div
-                  key={i}
-                  className={`flex-[0_0_58%] min-w-0 relative rounded-xl overflow-hidden transition-opacity duration-500 cursor-pointer ${
-                    isActive ? 'opacity-100' : 'opacity-40 hover:opacity-60'
-                  }`}
-                  onClick={() => emblaApi?.scrollTo(i)}
-                >
-                  <div className="relative w-full aspect-square bg-surface-active">
-                    {game.image_url
-                      ? <img src={game.image_url} alt={game.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center text-5xl">🎮</div>
-                    }
-                    {/* Gradient overlay — only on active */}
-                    {isActive && (
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                    )}
-                    {/* Text — only on active */}
-                    {isActive && (
-                      <div className="absolute bottom-0 left-0 right-0 p-4">
-                        <p className="text-base font-bold text-white leading-tight">{game.title}</p>
-                        {game.developer && (
-                          <p className="text-sm text-white/70 mt-0.5">{game.developer}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-1.5">
-                          {game.rating != null && (
-                            <span className="text-xs text-white/80">⭐ {game.rating}/5</span>
-                          )}
-                          {game.genres?.[0] && (
-                            <span className="text-xs text-white/60">{game.genres[0]}</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+    <div className="flex-1 min-h-0 relative">
+      <div ref={emblaRef} className="overflow-hidden rounded-xl h-full">
+        <div className="flex h-full">
+          {games.map((game, i) => (
+            <Link
+              key={i}
+              href={`/games/${game.id}`}
+              className="flex-[0_0_100%] min-w-0 relative block"
+            >
+              <div className="relative w-full h-full min-h-36 bg-surface-active">
+                {game.image_url
+                  ? <img src={game.image_url} alt={game.title} className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center text-5xl">🎮</div>
+                }
+
+                {/* Gradient overlays */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-transparent" />
+
+                {/* Bottom content */}
+                <div className="absolute bottom-0 left-0 right-0 p-3 flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white leading-tight line-clamp-1">{game.title}</p>
+                    <p className="text-[11px] text-white/60 mt-0.5">
+                      from <span className="text-white/80 font-medium">{game.recommendedBy}</span>
+                      {game.rating != null && <span className="ml-2">⭐ {game.rating}/5</span>}
+                    </p>
+                  </div>
+                  <div onClick={(e) => e.preventDefault()}>
+                    <AddToBacklogButton game={game} variant="glass" />
                   </div>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
 
-      {/* Dot indicators */}
-      <div className="flex justify-center gap-1.5">
-        {games.map((_, i) => (
+      {/* Title — rendered once, outside the slides */}
+      <p className="absolute top-0 left-0 right-0 px-3 pt-2.5 text-xs font-semibold text-white uppercase tracking-wider pointer-events-none">
+        Recommended by your friends
+      </p>
+
+      {/* Dot indicators — rendered once, outside the slides */}
+      <div className="absolute top-2.5 right-3 flex gap-1.5">
+        {games.map((_, j) => (
           <button
-            key={i}
-            onClick={() => emblaApi?.scrollTo(i)}
+            key={j}
+            onClick={() => emblaApi?.scrollTo(j)}
             className={`rounded-full transition-all duration-300 ${
-              i === selectedIndex
-                ? 'w-4 h-1.5 bg-fg-base'
-                : 'w-1.5 h-1.5 bg-fg-subtle hover:bg-fg-muted'
+              j === selectedIndex
+                ? 'w-4 h-1.5 bg-white'
+                : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/70'
             }`}
-            aria-label={`Go to slide ${i + 1}`}
+            aria-label={`Go to slide ${j + 1}`}
           />
         ))}
       </div>
