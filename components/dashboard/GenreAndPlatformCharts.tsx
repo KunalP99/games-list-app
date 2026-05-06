@@ -127,7 +127,7 @@ export default function GenreAndPlatformCharts({
       {/* Radar — genres */}
       {hasGenres && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-5">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-3">Genres Played</p>
+          <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Genres Played</p>
           <ResponsiveContainer width="100%" height={200}>
             <RadarChart data={genreData} margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
               <PolarGrid stroke="var(--color-edge-base)" />
@@ -150,7 +150,7 @@ export default function GenreAndPlatformCharts({
       {/* Pie — platforms */}
       {hasPlatforms && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-5">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-3">Platforms</p>
+          <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Platforms</p>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie

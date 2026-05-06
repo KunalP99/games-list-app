@@ -4,6 +4,10 @@ import Link from 'next/link'
 import StatusBadge from '@/components/games/StatusBadge'
 import GamesPerYearChart from '@/components/dashboard/GamesPerYearChart'
 import GenreAndPlatformCharts from '@/components/dashboard/GenreAndPlatformCharts'
+import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
+import FriendActivityFeed from '@/components/dashboard/FriendActivityFeed'
+import { buildActivityItems, type RawAchievementUnlock } from '@/lib/activity'
+import { ACHIEVEMENTS } from '@/lib/achievements'
 import { GREETINGS } from '@/lib/greetings'
 
 
@@ -114,13 +118,99 @@ export default async function DashboardPage() {
 
   const { data: friendProfiles } = await supabase
     .from('profiles')
-    .select('id, display_name, username, ticket_balance')
+    .select('id, display_name, username, ticket_balance, accent_colour')
     .neq('id', user!.id)
     .order('display_name', { ascending: true, nullsFirst: false }) as { data: Profile[] | null }
 
   const { data: friendGameCounts } = await supabase
     .from('games')
     .select('user_id, status') as { data: { user_id: string; status: string }[] | null }
+
+  // Recommendations: fetch friends' completed games for scoring
+  const friendIds = (friendProfiles ?? []).map(f => f.id)
+  const { data: friendCompletedGames } = friendIds.length > 0
+    ? await supabase
+        .from('games')
+        .select('id, title, genres, rating, image_url, developer, user_id')
+        .in('user_id', friendIds)
+        .eq('status', 'completed') as { data: { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] | null }
+    : { data: [] as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] }
+
+  const myTitles = new Set((allGames ?? []).map(g => g.title.trim().toLowerCase()))
+  const friendMap = Object.fromEntries((friendProfiles ?? []).map(f => [f.id, f.display_name ?? f.username]))
+
+  const recommendations = (friendCompletedGames ?? [])
+    .filter(g => !myTitles.has(g.title.trim().toLowerCase()))
+    .filter(g => g.rating == null || g.rating >= 3)
+    .map(g => {
+      const base = g.rating ?? 3
+      const bonus = (g.genres ?? []).reduce((s: number, genre: string) => s + (genreCounts[genre] ?? 0) * 0.5, 0)
+      return { ...g, score: base + bonus, recommendedBy: friendMap[g.user_id] ?? 'A friend' }
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 10)
+
+  // Friends activity feed
+  const { data: friendGames } = friendIds.length > 0
+    ? await supabase
+        .from('games')
+        .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at')
+        .in('user_id', friendIds)
+        .order('updated_at', { ascending: false })
+        .limit(40) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string }[] | null }
+    : { data: [] as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string }[] }
+
+  const { data: friendSpins } = friendIds.length > 0
+    ? await supabase
+        .from('wheel_spins')
+        .select('id, user_id, result_name, created_at')
+        .in('user_id', friendIds)
+        .order('created_at', { ascending: false })
+        .limit(20) as { data: { id: string; user_id: string; result_name: string | null; created_at: string }[] | null }
+    : { data: [] as { id: string; user_id: string; result_name: string | null; created_at: string }[] }
+
+  const completedFriendGameIds = (friendGames ?? []).filter(g => g.status === 'completed').map(g => g.id)
+  const { data: friendTicketRows } = completedFriendGameIds.length > 0
+    ? await supabase
+        .from('ticket_transactions')
+        .select('game_id, amount')
+        .in('game_id', completedFriendGameIds)
+        .gt('amount', 0) as { data: { game_id: string; amount: number }[] | null }
+    : { data: [] as { game_id: string; amount: number }[] }
+
+  const friendTicketsByGame = (friendTicketRows ?? []).reduce<Record<string, number>>((acc, r) => {
+    acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
+    return acc
+  }, {})
+
+  const { data: rawFriendUnlocks } = friendIds.length > 0
+    ? await (supabase.from('user_achievements') as any)
+        .select('user_id, achievement_id, unlocked_at')
+        .in('user_id', friendIds)
+        .order('unlocked_at', { ascending: false })
+        .limit(20) as { data: { user_id: string; achievement_id: string; unlocked_at: string }[] | null }
+    : { data: [] as { user_id: string; achievement_id: string; unlocked_at: string }[] }
+
+  const achievementLookup = new Map(ACHIEVEMENTS.map(a => [a.id, a]))
+  const friendAchievementUnlocks: RawAchievementUnlock[] = (rawFriendUnlocks ?? []).flatMap(r => {
+    const ach = achievementLookup.get(r.achievement_id)
+    if (!ach) return []
+    return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, unlocked_at: r.unlocked_at }]
+  })
+
+  const friendProfileMap = new Map((friendProfiles ?? []).map(f => [
+    f.id,
+    { displayName: f.display_name ?? f.username, username: f.username, accentColour: f.accent_colour ?? null },
+  ]))
+
+  const friendActivityItems = buildActivityItems(
+    friendGames ?? [],
+    friendSpins ?? [],
+    friendProfileMap,
+    friendTicketsByGame,
+    user!.id,
+    friendAchievementUnlocks,
+  )
 
   const friendCountsByUser = (friendGameCounts ?? []).reduce<Record<string, { completed: number; playing: number }>>((acc, g) => {
     if (!acc[g.user_id]) acc[g.user_id] = { completed: 0, playing: 0 }
@@ -156,7 +246,7 @@ export default async function DashboardPage() {
 
       {/* Quick actions */}
       <div>
-        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
+        <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">
           Quick Actions
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -169,7 +259,7 @@ export default async function DashboardPage() {
       {/* Friends */}
       {(friendProfiles ?? []).length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
+          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">
             Friends <span className="font-normal normal-case text-fg-subtle ml-1">({friendProfiles!.length})</span>
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -209,7 +299,7 @@ export default async function DashboardPage() {
       {/* Recent games table */}
       {recentGames.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
+          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">
             Recent Activity
           </h2>
 
@@ -286,6 +376,20 @@ export default async function DashboardPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Recommendations + Friends Activity */}
+      {(recommendations.length > 0 || friendActivityItems.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+          {recommendations.length > 0 && (
+            <div className="flex flex-col">
+              <RecommendationsCarousel games={recommendations} />
+            </div>
+          )}
+          {friendActivityItems.length > 0 && (
+            <FriendActivityFeed items={friendActivityItems.slice(0, 6)} />
+          )}
         </div>
       )}
 

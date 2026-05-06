@@ -43,7 +43,7 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
 
   return (
     <div className="bg-surface-base border border-edge-base rounded-xl p-5">
-      <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-4">Games Completed Per Year</p>
+      <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-4">Games Completed Per Year</p>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-edge-subtle)" vertical={false} />

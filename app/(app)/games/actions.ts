@@ -306,3 +306,30 @@ export async function deleteGame(id: string) {
   revalidatePath('/tickets')
   redirect('/games')
 }
+
+export async function addRecommendationToBacklog(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const title = formData.get('title') as string
+  const developer = formData.get('developer') as string | null
+  const image_url = formData.get('image_url') as string | null
+  const genres = JSON.parse((formData.get('genres') as string) || '[]')
+
+  const { error } = await supabase.from('games').insert({
+    user_id: user.id,
+    title,
+    developer: developer || null,
+    image_url: image_url || null,
+    genres: genres || [],
+    status: 'backlog',
+    release_date_precision: 'year',
+    completion_date_precision: 'year',
+  })
+
+  if (error) return { success: false, error: error.message }
+  revalidatePath('/dashboard')
+  revalidatePath('/games')
+  return { success: true }
+}
