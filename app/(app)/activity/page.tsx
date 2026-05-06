@@ -27,10 +27,10 @@ export default async function ActivityPage() {
 
   const { data: allGames } = await supabase
     .from('games')
-    .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at')
+    .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
     .in('user_id', allUserIds)
     .order('updated_at', { ascending: false })
-    .limit(60) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string }[] | null }
+    .limit(60) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null }
 
   const { data: allSpins } = await supabase
     .from('wheel_spins')
@@ -63,7 +63,7 @@ export default async function ActivityPage() {
   const achievementUnlocks: RawAchievementUnlock[] = (rawUnlocks ?? []).flatMap(r => {
     const ach = achievementLookup.get(r.achievement_id)
     if (!ach) return []
-    return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, unlocked_at: r.unlocked_at }]
+    return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, xp: ach.xp, unlocked_at: r.unlocked_at }]
   })
 
   const allProfiles = [...(friendProfiles ?? []), ...(myProfile ? [myProfile] : [])]
@@ -75,7 +75,7 @@ export default async function ActivityPage() {
   const items = buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks).slice(0, 40)
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-fg-base">Recent Activity</h1>
         <p className="mt-1 text-fg-muted text-sm">You and your friends</p>
@@ -87,10 +87,10 @@ export default async function ActivityPage() {
         <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden">
           <div className="divide-y divide-edge-subtle">
             {items.map((item, i) => (
-              <div key={i} className="flex items-start gap-3 px-4 py-3.5">
+              <div key={i} className="flex items-center gap-3 px-4 py-3.5">
                 {/* Avatar */}
                 <div
-                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white mt-0.5"
+                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
                   style={{ backgroundColor: item.accentColour ?? '#7c3aed' }}
                 >
                   {getInitials(item.displayName)}
@@ -101,13 +101,13 @@ export default async function ActivityPage() {
                   <img
                     src={item.gameImageUrl}
                     alt={item.gameTitle}
-                    className="w-9 h-9 rounded object-cover shrink-0 mt-0.5"
+                    className="w-9 h-9 rounded object-cover shrink-0"
                   />
                 )}
 
                 {/* Text */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-fg-base leading-snug">
+                  <p className="text-sm text-fg-base leading-snug truncate">
                     <span className="font-semibold">
                       {item.isSelf ? 'You' : item.displayName}
                     </span>
@@ -119,12 +119,21 @@ export default async function ActivityPage() {
                     {item.achievementName && (
                       <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
                     )}
-                    {item.ticketsEarned != null && item.ticketsEarned > 0 && (
-                      <span className="text-emerald-500 ml-1">+{item.ticketsEarned} 🎟️</span>
-                    )}
                   </p>
                   <p className="text-xs text-fg-subtle mt-0.5">{formatActivityDate(item.date)}</p>
                 </div>
+
+                {/* Right-side rewards */}
+                {(item.ticketsEarned != null && item.ticketsEarned > 0) || item.xpEarned != null ? (
+                  <div className="shrink-0 flex flex-col items-end gap-0.5 text-xs font-medium">
+                    {item.ticketsEarned != null && item.ticketsEarned > 0 && (
+                      <span className="text-emerald-500">+{item.ticketsEarned} 🎟️</span>
+                    )}
+                    {item.xpEarned != null && (
+                      <span style={{ color: item.accentColour ?? 'rgb(var(--brand-500))' }}>+{item.xpEarned} XP</span>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>

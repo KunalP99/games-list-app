@@ -65,7 +65,7 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
                     </p>
                   </div>
                   <div onClick={(e) => e.preventDefault()}>
-                    <AddToBacklogButton game={game} />
+                    <AddToBacklogButton game={game} variant="glass" />
                   </div>
                 </div>
               </div>

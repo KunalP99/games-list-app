@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 type GameEntry = { title: string; image_url: string | null }
 type YearData = { year: string; count: number; games: GameEntry[] }
@@ -46,6 +46,12 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
       <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-4">Games Completed Per Year</p>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <defs>
+            <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={barColor} stopOpacity={1} />
+              <stop offset="100%" stopColor={barColor} stopOpacity={0.65} />
+            </linearGradient>
+          </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-edge-subtle)" vertical={false} />
           <XAxis
             dataKey="year"
@@ -63,7 +69,7 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
             content={<CustomTooltip />}
             cursor={{ fill: 'var(--color-surface-hover)' }}
           />
-          <Bar dataKey="count" fill={barColor} radius={[4, 4, 0, 0]} maxBarSize={48} />
+          <Bar dataKey="count" fill="url(#barGradient)" radius={[4, 4, 0, 0]} maxBarSize={48} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -9,6 +9,7 @@ export type ActivityItem = {
   gameId?: string
   wheelResult?: string
   ticketsEarned?: number
+  xpEarned?: number
   achievementId?: string
   achievementName?: string
   achievementIcon?: string
@@ -25,6 +26,8 @@ type RawGame = {
   completion_date: string | null
   created_at: string
   updated_at: string
+  hours_played?: number | null
+  achievement_progress?: number | null
 }
 
 type RawWheelSpin = {
@@ -39,6 +42,7 @@ export type RawAchievementUnlock = {
   achievement_id: string
   achievement_name: string
   achievement_icon: string
+  xp: number
   unlocked_at: string
 }
 
@@ -46,6 +50,17 @@ type ProfileInfo = {
   displayName: string
   username: string
   accentColour: string | null
+}
+
+function completionXp(hours: number | null, achievementProgress: number | null): number {
+  const h = hours ?? 0
+  let base: number
+  if (h < 20) base = 50
+  else if (h < 50) base = 100
+  else if (h <= 100) base = 175
+  else base = 250 + Math.floor((h - 100) / 10) * 5
+  if (achievementProgress === 100) base += 75
+  return base
 }
 
 export function buildActivityItems(
@@ -78,6 +93,7 @@ export function buildActivityItems(
         ...base,
         type: 'completed',
         ticketsEarned: ticketsByGame[g.id] ?? undefined,
+        xpEarned: completionXp(g.hours_played ?? null, g.achievement_progress ?? null),
         date: g.completion_date ?? g.updated_at,
       })
     } else if (g.status === 'dnf') {
@@ -116,6 +132,7 @@ export function buildActivityItems(
       achievementId: unlock.achievement_id,
       achievementName: unlock.achievement_name,
       achievementIcon: unlock.achievement_icon,
+      xpEarned: unlock.xp,
       date: unlock.unlocked_at,
       isSelf: unlock.user_id === currentUserId,
     })

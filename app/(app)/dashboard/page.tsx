@@ -139,7 +139,7 @@ export default async function DashboardPage() {
   const myTitles = new Set((allGames ?? []).map(g => g.title.trim().toLowerCase()))
   const friendMap = Object.fromEntries((friendProfiles ?? []).map(f => [f.id, f.display_name ?? f.username]))
 
-  const recommendations = (friendCompletedGames ?? [])
+  const recommendationPool = (friendCompletedGames ?? [])
     .filter(g => !myTitles.has(g.title.trim().toLowerCase()))
     .filter(g => g.rating == null || g.rating >= 3)
     .map(g => {
@@ -148,16 +148,18 @@ export default async function DashboardPage() {
       return { ...g, score: base + bonus, recommendedBy: friendMap[g.user_id] ?? 'A friend' }
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
+    .slice(0, 25)
+
+  const recommendations = seededShuffle(recommendationPool, weekSeed()).slice(0, 10)
 
   // Friends activity feed
   const { data: friendGames } = friendIds.length > 0
     ? await supabase
         .from('games')
-        .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at')
+        .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
         .in('user_id', friendIds)
         .order('updated_at', { ascending: false })
-        .limit(40) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string }[] | null }
+        .limit(40) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null }
     : { data: [] as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string }[] }
 
   const { data: friendSpins } = friendIds.length > 0
@@ -195,7 +197,7 @@ export default async function DashboardPage() {
   const friendAchievementUnlocks: RawAchievementUnlock[] = (rawFriendUnlocks ?? []).flatMap(r => {
     const ach = achievementLookup.get(r.achievement_id)
     if (!ach) return []
-    return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, unlocked_at: r.unlocked_at }]
+    return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, xp: ach.xp, unlocked_at: r.unlocked_at }]
   })
 
   const friendProfileMap = new Map((friendProfiles ?? []).map(f => [
@@ -445,6 +447,24 @@ function colorGradient(pct: number): string {
   if (pct >= 50)   return 'bg-gradient-to-r from-amber-400 to-orange-400'
   if (pct >= 20)   return 'bg-gradient-to-r from-orange-400 to-red-400'
   return                  'bg-gradient-to-r from-red-500 to-rose-600'
+}
+
+function weekSeed(): number {
+  const now = new Date()
+  const startOfYear = new Date(now.getFullYear(), 0, 1)
+  const week = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
+  return now.getFullYear() * 53 + week
+}
+
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const result = [...arr]
+  let s = seed
+  for (let i = result.length - 1; i > 0; i--) {
+    s = Math.imul(1664525, s) + 1013904223 | 0
+    const j = (s >>> 0) % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
 }
 
 function formatTurn(turn: string): string {
