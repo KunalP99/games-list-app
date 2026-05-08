@@ -53,9 +53,10 @@ interface Props {
   turn: WheelTurn
   balance: number
   accentColour: string
+  backlogGames: string[]
 }
 
-export default function WheelClient({ turn, balance, accentColour }: Props) {
+export default function WheelClient({ turn, balance, accentColour, backlogGames }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -955,76 +956,118 @@ export default function WheelClient({ turn, balance, accentColour }: Props) {
   const gameCount = uniqueGames.length
   const countOk = gameCount >= WHEEL_MIN_GAMES
 
+  function addFromBacklog(title: string) {
+    setRawGames(prev => {
+      const lines = prev.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+      if (lines.map(l => l.toLowerCase()).includes(title.toLowerCase())) return prev
+      return lines.length > 0 ? prev.trimEnd() + '\n' + title : title
+    })
+  }
+
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-4xl">
       {turnBadge}
-      <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-fg-secondary">Games (one per line)</label>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              countOk ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
-            }`}>
-              {gameCount} / {WHEEL_MIN_GAMES}+
-            </span>
+      <div className={`grid gap-4 items-start ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-[1fr_260px]' : ''}`}>
+
+        {/* Main card: textarea + mode + spin */}
+        <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-fg-secondary">Games (one per line)</label>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                countOk ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
+              }`}>
+                {gameCount} / {WHEEL_MIN_GAMES}+
+              </span>
+            </div>
+            {duplicateCount > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {duplicateCount} duplicate{duplicateCount > 1 ? 's' : ''} removed — {uniqueGames.length} unique game{uniqueGames.length !== 1 ? 's' : ''} will be used
+              </p>
+            )}
+            <textarea
+              value={rawGames}
+              onChange={e => setRawGames(e.target.value)}
+              placeholder={`Enter at least ${WHEEL_MIN_GAMES} games, one per line…`}
+              rows={8}
+              className="w-full border border-edge-input rounded-lg px-3 py-2.5 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none bg-surface-input"
+            />
           </div>
-          {duplicateCount > 0 && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              {duplicateCount} duplicate{duplicateCount > 1 ? 's' : ''} removed — {uniqueGames.length} unique game{uniqueGames.length !== 1 ? 's' : ''} will be used
-            </p>
-          )}
-          <textarea
-            value={rawGames}
-            onChange={e => setRawGames(e.target.value)}
-            placeholder={`Enter at least ${WHEEL_MIN_GAMES} games, one per line…`}
-            rows={8}
-            className="w-full border border-edge-input rounded-lg px-3 py-2.5 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none bg-surface-input"
-          />
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-fg-secondary">Spin mode</p>
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                {
+                  value: 'elimination' as const,
+                  label: 'Elimination',
+                  desc: 'Keep spinning — each landed game is removed until one remains.',
+                },
+                {
+                  value: 'first_land' as const,
+                  label: 'First Land',
+                  desc: 'Single spin — whatever it lands on first is your game.',
+                },
+              ]).map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setMode(opt.value)}
+                  className={`p-3 rounded-lg border-2 text-left transition-colors ${
+                    mode === opt.value
+                      ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/30 dark:border-brand-500'
+                      : 'border-edge-base hover:border-edge-input'
+                  }`}
+                >
+                  <p className={`text-sm font-semibold ${mode === opt.value ? 'text-brand-700 dark:text-brand-300' : 'text-fg-secondary'}`}>
+                    {opt.label}
+                  </p>
+                  <p className="text-xs text-fg-muted mt-0.5 leading-snug">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          <button
+            onClick={handleSpin}
+            disabled={!canSpin || isPending}
+            className="w-full py-3 bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isPending ? 'Spinning…' : '🎰 Spin!'}
+          </button>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-fg-secondary">Spin mode</p>
-          <div className="grid grid-cols-2 gap-3">
-            {([
-              {
-                value: 'elimination' as const,
-                label: 'Elimination',
-                desc: 'Keep spinning — each landed game is removed until one remains.',
-              },
-              {
-                value: 'first_land' as const,
-                label: 'First Land',
-                desc: 'Single spin — whatever it lands on first is your game.',
-              },
-            ]).map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setMode(opt.value)}
-                className={`p-3 rounded-lg border-2 text-left transition-colors ${
-                  mode === opt.value
-                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/30 dark:border-brand-500'
-                    : 'border-edge-base hover:border-edge-input'
-                }`}
-              >
-                <p className={`text-sm font-semibold ${mode === opt.value ? 'text-brand-700 dark:text-brand-300' : 'text-fg-secondary'}`}>
-                  {opt.label}
-                </p>
-                <p className="text-xs text-fg-muted mt-0.5 leading-snug">{opt.desc}</p>
-              </button>
-            ))}
+        {/* Backlog panel */}
+        {backlogGames.length > 0 && (
+          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3">
+            <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
+            <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto max-h-80">
+              {backlogGames.map(title => {
+                const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(title.toLowerCase())
+                return (
+                  <div key={title} className="flex items-center justify-between gap-2 py-2">
+                    <span className="text-sm text-fg-base truncate">{title}</span>
+                    <button
+                      type="button"
+                      onClick={() => addFromBacklog(title)}
+                      disabled={alreadyAdded}
+                      className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
+                        alreadyAdded
+                          ? 'text-fg-subtle bg-surface-active cursor-default'
+                          : 'text-brand-600 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 dark:hover:bg-brand-900/50'
+                      }`}
+                    >
+                      {alreadyAdded ? '✓' : '+'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
-
-        <button
-          onClick={handleSpin}
-          disabled={!canSpin || isPending}
-          className="w-full py-3 bg-brand-600 text-white text-sm font-bold rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isPending ? 'Spinning…' : '🎰 Spin!'}
-        </button>
       </div>
     </div>
   )
