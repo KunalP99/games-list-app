@@ -7,10 +7,13 @@ import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
 import UserDropdown from '@/components/layout/UserDropdown'
 
-const navItems = [
+const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/games', label: 'My Games' },
   { href: '/wheel', label: 'Wheel' },
+]
+
+const navItemsAfter = [
   { href: '/achievements', label: 'Achievements' },
   { href: '/stats', label: 'Stats' },
 ]
@@ -97,7 +100,7 @@ export default function Nav({ profile }: { profile: Profile }) {
 
           {/* Center: desktop nav links */}
           <nav className="hidden md:flex items-center gap-0.5">
-            {navItems.map((item) => {
+            {navItemsBefore.map((item) => {
               const active = pathname.startsWith(item.href)
               return (
                 <Link
@@ -114,7 +117,7 @@ export default function Nav({ profile }: { profile: Profile }) {
               )
             })}
 
-            {/* History dropdown */}
+            {/* History dropdown — 4th position */}
             <div className="relative" ref={historyRef}>
               {(() => {
                 const active = pathname.startsWith('/tickets') || pathname.startsWith('/wheel/history')
@@ -152,6 +155,23 @@ export default function Nav({ profile }: { profile: Profile }) {
                 </div>
               )}
             </div>
+
+            {navItemsAfter.map((item) => {
+              const active = pathname.startsWith(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                    active
+                      ? 'bg-black/[0.06] dark:bg-white/10 text-fg-base font-medium'
+                      : 'text-fg-muted hover:text-fg-base hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
           </nav>
 
           {/* Right: ticket balance + user dropdown */}
@@ -210,7 +230,7 @@ export default function Nav({ profile }: { profile: Profile }) {
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {navItems.map((item) => {
+          {[...navItemsBefore, ...navItemsAfter].map((item) => {
             const active = pathname.startsWith(item.href)
             return (
               <Link
