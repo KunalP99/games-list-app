@@ -95,12 +95,13 @@ type RawTx = {
   note: string | null
   created_at: string
   games: { id: string; title: string } | null
-  profiles: { id: string; username: string; display_name: string | null } | null
+  profiles: { id: string; username: string; display_name: string | null; accent_colour: string | null } | null
 }
 
 type Group = {
   key: string
   user: { id: string; username: string; display_name: string | null } | null
+  accentColour: string | null
   game: { id: string; title: string } | null
   transactions: RawTx[]
   totalAmount: number
@@ -125,6 +126,7 @@ function groupTransactions(transactions: RawTx[]): Group[] {
     groups.push({
       key,
       user: txs[0].profiles ?? null,
+      accentColour: txs[0].profiles?.accent_colour ?? null,
       game: txs[0].games ?? null,
       transactions: txs,
       totalAmount: txs.reduce((s, t) => s + t.amount, 0),
@@ -148,7 +150,7 @@ export default async function TicketsPage({
 
   const { data: allTransactions } = await supabase
     .from('ticket_transactions')
-    .select('*, games(id, title), profiles(id, username, display_name)')
+    .select('*, games(id, title), profiles(id, username, display_name, accent_colour)')
     .order('created_at', { ascending: false }) as { data: RawTx[] | null }
 
   const { data: profile } = await supabase
@@ -157,7 +159,6 @@ export default async function TicketsPage({
     .eq('id', user!.id)
     .single() as { data: { ticket_balance: number; accent_colour: string | null } | null }
 
-  const accentColour = profile?.accent_colour ?? null
   const groups = groupTransactions(allTransactions ?? [])
   const page = Math.max(1, Number(searchParams.page ?? 1))
   const totalPages = Math.ceil(groups.length / PAGE_SIZE)
@@ -202,8 +203,8 @@ export default async function TicketsPage({
                   return (
                     <tr
                       key={group.key}
-                      className={`hover:bg-surface-hover transition-colors ${isCurrentUser && !accentColour ? 'bg-surface-active' : ''}`}
-                      style={isCurrentUser && accentColour ? { backgroundColor: `${accentColour}18` } : undefined}
+                      className={`hover:bg-surface-hover transition-colors ${isCurrentUser ? 'bg-surface-active' : ''}`}
+                      style={!isCurrentUser && group.accentColour ? { backgroundColor: `${group.accentColour}18` } : undefined}
                     >
                       <td className="px-4 py-3 text-fg-muted whitespace-nowrap">
                         {new Date(group.latestDate).toLocaleDateString('en-GB', {

@@ -7,20 +7,29 @@ import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
 import UserDropdown from '@/components/layout/UserDropdown'
 
-const navItems = [
+const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/games', label: 'My Games' },
-  { href: '/tickets', label: 'Tickets' },
   { href: '/wheel', label: 'Wheel' },
+]
+
+const navItemsAfter = [
   { href: '/achievements', label: 'Achievements' },
   { href: '/stats', label: 'Stats' },
+]
+
+const historyItems = [
+  { href: '/tickets', label: '🎟️ Ticket History' },
+  { href: '/wheel/history', label: '🎰 Wheel History' },
 ]
 
 export default function Nav({ profile }: { profile: Profile }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [ticketAnimating, setTicketAnimating] = useState(false)
   const prevBalance = useRef(profile.ticket_balance)
+  const historyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (profile.ticket_balance > prevBalance.current) {
@@ -35,7 +44,18 @@ export default function Nav({ profile }: { profile: Profile }) {
 
   useEffect(() => {
     setSidebarOpen(false)
+    setHistoryOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setHistoryOpen(false)
+      }
+    }
+    if (historyOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [historyOpen])
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -80,7 +100,63 @@ export default function Nav({ profile }: { profile: Profile }) {
 
           {/* Center: desktop nav links */}
           <nav className="hidden md:flex items-center gap-0.5">
-            {navItems.map((item) => {
+            {navItemsBefore.map((item) => {
+              const active = pathname.startsWith(item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                    active
+                      ? 'bg-black/[0.06] dark:bg-white/10 text-fg-base font-medium'
+                      : 'text-fg-muted hover:text-fg-base hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+
+            {/* History dropdown — 4th position */}
+            <div className="relative" ref={historyRef}>
+              {(() => {
+                const active = pathname.startsWith('/tickets') || pathname.startsWith('/wheel/history')
+                return (
+                  <button
+                    onClick={() => setHistoryOpen(o => !o)}
+                    className={`px-3 py-1 text-sm rounded-full transition-colors flex items-center gap-1 ${
+                      active
+                        ? 'bg-black/[0.06] dark:bg-white/10 text-fg-base font-medium'
+                        : 'text-fg-muted hover:text-fg-base hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    History
+                    <svg className={`w-3 h-3 transition-transform ${historyOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )
+              })()}
+              {historyOpen && (
+                <div className="absolute top-full mt-2 left-0 bg-surface-base border border-edge-base rounded-xl shadow-lg py-1 min-w-[168px] z-50">
+                  {historyItems.map(item => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center px-4 py-2 text-sm transition-colors ${
+                        pathname.startsWith(item.href)
+                          ? 'text-brand-600 dark:text-brand-400 font-medium bg-brand-50 dark:bg-brand-900/20'
+                          : 'text-fg-secondary hover:text-fg-base hover:bg-surface-hover'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {navItemsAfter.map((item) => {
               const active = pathname.startsWith(item.href)
               return (
                 <Link
@@ -154,7 +230,26 @@ export default function Nav({ profile }: { profile: Profile }) {
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {navItems.map((item) => {
+          {[...navItemsBefore, ...navItemsAfter].map((item) => {
+            const active = pathname.startsWith(item.href)
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center px-3 py-2.5 rounded-md text-sm font-medium mb-0.5 transition-colors ${
+                  active
+                    ? 'bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                    : 'text-fg-secondary hover:text-fg-base hover:bg-surface-hover'
+                }`}
+              >
+                {item.label}
+              </Link>
+            )
+          })}
+
+          {/* History group */}
+          <p className="px-3 pt-3 pb-1 text-xs font-semibold text-fg-subtle uppercase tracking-wider">History</p>
+          {historyItems.map((item) => {
             const active = pathname.startsWith(item.href)
             return (
               <Link
