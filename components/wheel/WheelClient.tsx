@@ -967,7 +967,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   return (
     <div className="space-y-5 max-w-4xl">
       {turnBadge}
-      <div className={`grid gap-4 items-start ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-[1fr_260px]' : ''}`}>
+      <div className={`grid gap-4 items-start ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-[1fr_340px]' : ''}`}>
 
         {/* Main card: textarea + mode + spin */}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
