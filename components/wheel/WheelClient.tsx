@@ -70,6 +70,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   // Optimistic balance — updated immediately on spend, synced from server after revalidation
   const [localBalance, setLocalBalance] = useState(balance)
   const [ticketFlash, setTicketFlash] = useState<{ amount: number; id: number } | null>(null)
+  const [spentThisTurn, setSpentThisTurn] = useState(0)
 
   useEffect(() => { setLocalBalance(balance) }, [balance])
 
@@ -101,6 +102,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   function spendTickets(amount: number) {
     setLocalBalance(prev => prev - amount)
     setTicketFlash(prev => ({ amount, id: (prev?.id ?? 0) + 1 }))
+    setSpentThisTurn(prev => prev + amount)
   }
 
   function startAnimation(
@@ -176,7 +178,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleAccept() {
     startTransition(async () => {
-      const res = await acceptSpinResult(winner, mode)
+      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(winner)
       setPhase('done')
@@ -347,7 +349,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleFinalUpgradeChoice(chosen: string) {
     startTransition(async () => {
-      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode)
+      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chosen)
       setPhase('done')
@@ -360,7 +362,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     if (!chooseInput.trim()) return
     spendTickets(TICKET_COSTS.choose_game)
     startTransition(async () => {
-      const res = await payChooseAnyGame(chooseInput.trim())
+      const res = await payChooseAnyGame(chooseInput.trim(), uniqueGames, spentThisTurn)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chooseInput.trim())
       setPhase('done')
@@ -375,7 +377,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleKeep() {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, '', winner, mode)
+      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(winner)
       setPhase('done')
@@ -397,7 +399,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleFinalChoice(chosen: string) {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode)
+      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chosen)
       setPhase('done')
@@ -438,6 +440,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     setChooseInput('')
     setEliminated([])
     setError('')
+    setSpentThisTurn(0)
     router.refresh()
   }
 
@@ -965,9 +968,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   }
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="space-y-5">
       {turnBadge}
-      <div className={`grid gap-4 items-start ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-[1fr_340px]' : ''}`}>
+      <div className={`grid gap-4 items-start ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-2' : ''}`}>
 
         {/* Main card: textarea + mode + spin */}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">

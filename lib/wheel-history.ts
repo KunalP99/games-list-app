@@ -8,9 +8,16 @@ export const SPIN_TYPE_BADGE: Record<SpinType, { label: string; className: strin
   choose_skip: { label: 'Skip',   className: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700' },
 }
 
-export function inferCost(spinType: SpinType, spinMode: SpinMode): string | null {
-  if (spinType === 'spin' && spinMode === null) return '−9 🎟️'
+export const SPIN_TYPE_LABEL: Record<SpinType, string> = {
+  spin:        'Wheel Spin',
+  spin_reroll: 'Spin + Reroll',
+  choose:      'Choose Game',
+  choose_skip: 'Skip',
+}
+
+export function inferCost(spinType: SpinType, ticketsSpent: number | null): string | null {
   if (spinType === 'choose_skip') return '+2 🎟️'
+  if (ticketsSpent && ticketsSpent > 0) return `−${ticketsSpent} 🎟️`
   return null
 }
 

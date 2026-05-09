@@ -101,7 +101,7 @@ export default function Nav({ profile }: { profile: Profile }) {
           {/* Center: desktop nav links */}
           <nav className="hidden md:flex items-center gap-0.5">
             {navItemsBefore.map((item) => {
-              const active = pathname.startsWith(item.href)
+              const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.href}
@@ -231,7 +231,7 @@ export default function Nav({ profile }: { profile: Profile }) {
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
           {[...navItemsBefore, ...navItemsAfter].map((item) => {
-            const active = pathname.startsWith(item.href)
+            const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
             return (
               <Link
                 key={item.href}

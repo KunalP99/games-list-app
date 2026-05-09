@@ -200,11 +200,15 @@ export default async function TicketsPage({
                     ? 'You'
                     : (group.user?.display_name ?? group.user?.username ?? '—')
 
+                  const accent = group.accentColour ?? '#e84410'
                   return (
                     <tr
                       key={group.key}
-                      className={`hover:bg-surface-hover transition-colors ${isCurrentUser ? 'bg-surface-active' : ''}`}
-                      style={!isCurrentUser && group.accentColour ? { backgroundColor: `${group.accentColour}18` } : undefined}
+                      className="hover:bg-surface-hover transition-colors"
+                      style={{
+                        borderLeft: `3px solid ${accent}`,
+                        backgroundColor: isCurrentUser ? `${accent}18` : `${accent}0C`,
+                      }}
                     >
                       <td className="px-4 py-3 text-fg-muted whitespace-nowrap">
                         {new Date(group.latestDate).toLocaleDateString('en-GB', {

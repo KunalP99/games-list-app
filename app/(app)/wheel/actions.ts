@@ -48,7 +48,7 @@ export async function performSpin(games: string[], mode: 'elimination' | 'first_
 
 // ─── SPIN turn — free accept ─────────────────────────────────────────────────
 
-export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land') {
+export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land', gamesList: string[], ticketsSpent: number) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -62,6 +62,8 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
     spin_type: turn,
     spin_mode: mode,
     result_name: resultName,
+    games_list: gamesList,
+    tickets_spent: ticketsSpent > 0 ? ticketsSpent : null,
   })
   await advanceTurn(supabase, user.id, turn)
   await checkAndAwardAchievements(supabase, user.id)
@@ -138,6 +140,8 @@ export async function finalizeUpgradeChoice(
   chosen: string,
   allOptions: string[],
   mode: 'elimination' | 'first_land',
+  gamesList: string[],
+  ticketsSpent: number,
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -154,6 +158,8 @@ export async function finalizeUpgradeChoice(
     option_a_name: allOptions[1] ?? null,
     option_b_name: allOptions[2] ?? null,
     result_name: chosen,
+    games_list: gamesList,
+    tickets_spent: ticketsSpent > 0 ? ticketsSpent : null,
   })
   await advanceTurn(supabase, user.id, turn)
   await checkAndAwardAchievements(supabase, user.id)
@@ -164,7 +170,7 @@ export async function finalizeUpgradeChoice(
 
 // ─── SPIN turn — paid: Choose Any Game (−9) ──────────────────────────────────
 
-export async function payChooseAnyGame(gameName: string) {
+export async function payChooseAnyGame(gameName: string, gamesList: string[], priorTicketsSpent: number) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -189,6 +195,8 @@ export async function payChooseAnyGame(gameName: string) {
     spin_type: turn,
     spin_mode: null,
     result_name: gameName.trim(),
+    games_list: gamesList,
+    tickets_spent: priorTicketsSpent + TICKET_COSTS.choose_game,
   })
 
   await advanceTurn(supabase, user.id, turn)
@@ -217,6 +225,8 @@ export async function finalizeSpinReroll(
   optionB: string,
   chosen: string,
   mode: 'elimination' | 'first_land',
+  gamesList: string[],
+  ticketsSpent: number,
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -232,6 +242,8 @@ export async function finalizeSpinReroll(
     option_a_name: optionA,
     option_b_name: optionB,
     result_name: chosen,
+    games_list: gamesList,
+    tickets_spent: ticketsSpent > 0 ? ticketsSpent : null,
   })
 
   await advanceTurn(supabase, user.id, 'spin_reroll')

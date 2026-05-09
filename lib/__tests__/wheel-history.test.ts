@@ -2,29 +2,26 @@ import { describe, it, expect } from 'vitest'
 import { inferCost, spinModeLabel, SPIN_TYPE_BADGE } from '../wheel-history'
 
 describe('inferCost', () => {
-  it('returns −9 🎟️ for choose_any spin (spin type + null mode)', () => {
-    expect(inferCost('spin', null)).toBe('−9 🎟️')
+  it('returns −9 🎟️ when 9 tickets spent', () => {
+    expect(inferCost('spin', 9)).toBe('−9 🎟️')
+  })
+
+  it('returns −3 🎟️ when 3 tickets spent', () => {
+    expect(inferCost('spin', 3)).toBe('−3 🎟️')
+  })
+
+  it('returns −6 🎟️ when 6 tickets spent', () => {
+    expect(inferCost('spin_reroll', 6)).toBe('−6 🎟️')
   })
 
   it('returns +2 🎟️ for choose_skip', () => {
     expect(inferCost('choose_skip', null)).toBe('+2 🎟️')
   })
 
-  it('returns null for free spin (spin + elimination mode)', () => {
-    expect(inferCost('spin', 'elimination')).toBeNull()
-  })
-
-  it('returns null for free spin (spin + first_land mode)', () => {
-    expect(inferCost('spin', 'first_land')).toBeNull()
-  })
-
-  it('returns null for spin_reroll', () => {
-    expect(inferCost('spin_reroll', 'elimination')).toBeNull()
-    expect(inferCost('spin_reroll', 'first_land')).toBeNull()
+  it('returns null when no tickets spent', () => {
+    expect(inferCost('spin', null)).toBeNull()
+    expect(inferCost('spin', 0)).toBeNull()
     expect(inferCost('spin_reroll', null)).toBeNull()
-  })
-
-  it('returns null for free choose', () => {
     expect(inferCost('choose', null)).toBeNull()
   })
 })

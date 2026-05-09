@@ -71,6 +71,15 @@ html.dark {
 @layer base {
   /* html.dark variables take over automatically — no extra dark: classes needed here */
   html { @apply bg-surface-page text-fg-base; }
+
+  /* Scrollbar — webkit (Chrome, Edge, Safari) */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--color-surface-active); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-edge-base); border-radius: 9999px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--brand-500)); }
+
+  /* Scrollbar — Firefox */
+  * { scrollbar-width: thin; scrollbar-color: var(--color-edge-base) var(--color-surface-active); }
 }
 
 body {

@@ -216,6 +216,8 @@ export type Database = {
           result_name: string | null
           option_a_name: string | null
           option_b_name: string | null
+          games_list: string[] | null
+          tickets_spent: number | null
           created_at: string
         }
         Insert: {
@@ -226,6 +228,8 @@ export type Database = {
           result_name?: string | null
           option_a_name?: string | null
           option_b_name?: string | null
+          games_list?: string[] | null
+          tickets_spent?: number | null
           created_at?: string
         }
         Update: {
@@ -236,6 +240,7 @@ export type Database = {
           result_name?: string | null
           option_a_name?: string | null
           option_b_name?: string | null
+          tickets_spent?: number | null
           created_at?: string
         }
         Relationships: []
