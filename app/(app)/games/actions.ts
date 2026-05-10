@@ -83,6 +83,7 @@ export async function createGame(formData: FormData) {
     is_replay: formData.get('is_replay') === 'on',
     is_sequel: formData.get('is_sequel') === 'on',
     in_wheel: false,
+    youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
   }).select('id').single()
 
   if (error) return { error: error.message }
@@ -172,6 +173,7 @@ export async function updateGame(id: string, formData: FormData) {
     is_replay: formData.get('is_replay') === 'on',
     is_sequel: formData.get('is_sequel') === 'on',
     in_wheel: false,
+    youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
   }).eq('id', id).eq('user_id', user.id)
 
   if (error) return { error: error.message }

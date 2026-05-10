@@ -105,6 +105,7 @@ export type Database = {
           dominant_color: string | null
           in_wheel: boolean
           assigned_by: string | null
+          youtube_playlist_url: string | null
           created_at: string
           updated_at: string
         }
@@ -134,6 +135,7 @@ export type Database = {
           is_sequel?: boolean
           in_wheel?: boolean
           assigned_by?: string | null
+          youtube_playlist_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -163,6 +165,7 @@ export type Database = {
           is_sequel?: boolean
           in_wheel?: boolean
           assigned_by?: string | null
+          youtube_playlist_url?: string | null
           created_at?: string
           updated_at?: string
         }

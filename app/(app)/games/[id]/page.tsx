@@ -253,6 +253,22 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
+      {/* YouTube Playlist */}
+      {game.youtube_playlist_url && extractPlaylistId(game.youtube_playlist_url) && (
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4 space-y-3">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Playlist</p>
+          <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+            <iframe
+              src={`https://www.youtube.com/embed/videoseries?list=${extractPlaylistId(game.youtube_playlist_url)}`}
+              title={`${game.title} playlist`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
+        </div>
+      )}
+
       {/* About — from RAWG description stored at save time */}
       {game.description && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-4">
@@ -303,6 +319,14 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       ) : null}
     </div>
   )
+}
+
+function extractPlaylistId(url: string): string | null {
+  try {
+    return new URL(url).searchParams.get('list')
+  } catch {
+    return null
+  }
 }
 
 function formatDate(date: string | null, precision: 'full' | 'year' = 'full'): string | null {

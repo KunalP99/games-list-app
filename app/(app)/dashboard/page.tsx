@@ -95,7 +95,7 @@ export default async function DashboardPage() {
     .select('id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at')
     .eq('user_id', user!.id)
     .in('status', ['playing', 'completed', 'dnf'])
-    .order('updated_at', { ascending: false })
+    .order('completion_date', { ascending: false, nullsFirst: false })
     .limit(20) as { data: Game[] | null; error: unknown }
 
   const recentGames = recentGamesRaw ?? []

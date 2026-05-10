@@ -970,7 +970,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   return (
     <div className="space-y-5">
       {turnBadge}
-      <div className={`grid gap-4 items-start ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-2' : ''}`}>
+      <div className={`grid gap-4 items-stretch ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-2' : ''}`}>
 
         {/* Main card: textarea + mode + spin */}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
@@ -1044,9 +1044,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
         {/* Backlog panel */}
         {backlogGames.length > 0 && (
-          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3">
+          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-full">
             <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
-            <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto max-h-80">
+            <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto flex-1 pr-3">
               {backlogGames.map(title => {
                 const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(title.toLowerCase())
                 return (

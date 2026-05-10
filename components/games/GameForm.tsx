@@ -316,6 +316,24 @@ export default function GameForm({ game }: { game?: Game }) {
         </div>
       </section>
 
+      {/* Media */}
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Media</h2>
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">
+            YouTube Playlist URL{' '}
+            <span className="text-xs text-fg-subtle font-normal">(optional — shown on the game page)</span>
+          </label>
+          <input
+            name="youtube_playlist_url"
+            type="url"
+            defaultValue={game?.youtube_playlist_url ?? ''}
+            className={input}
+            placeholder="https://www.youtube.com/playlist?list=PLxxxxx"
+          />
+        </div>
+      </section>
+
       {/* Status & Progress */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Status & Progress</h2>

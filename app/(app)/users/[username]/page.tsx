@@ -21,7 +21,7 @@ export default async function UserProfilePage({
   searchParams,
 }: {
   params: { username: string }
-  searchParams: { status?: string; sort?: string; view?: string }
+  searchParams: { status?: string; sort?: string; view?: string; q?: string }
 }) {
   if (!searchParams.status) redirect(`/users/${encodeURIComponent(params.username)}?status=completed`)
 
@@ -49,6 +49,7 @@ export default async function UserProfilePage({
     .order(sort, { ascending: sortAsc, nullsFirst: false })
 
   if (status) query = query.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (searchParams.q?.trim()) query = (query as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
   const { data: games } = await query as { data: Game[] | null }
 
