@@ -148,16 +148,20 @@ export default async function TicketsPage({
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: allTransactions } = await supabase
-    .from('ticket_transactions')
-    .select('*, games(id, title), profiles(id, username, display_name, accent_colour)')
-    .order('created_at', { ascending: false }) as { data: RawTx[] | null }
+  const [allTransactionsRes, profileRes] = await Promise.all([
+    supabase
+      .from('ticket_transactions')
+      .select('*, games(id, title), profiles(id, username, display_name, accent_colour)')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('profiles')
+      .select('ticket_balance, accent_colour')
+      .eq('id', user!.id)
+      .single(),
+  ])
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('ticket_balance, accent_colour')
-    .eq('id', user!.id)
-    .single() as { data: { ticket_balance: number; accent_colour: string | null } | null }
+  const allTransactions = allTransactionsRes.data as RawTx[] | null
+  const profile = profileRes.data as { ticket_balance: number; accent_colour: string | null } | null
 
   const groups = groupTransactions(allTransactions ?? [])
   const page = Math.max(1, Number(searchParams.page ?? 1))
