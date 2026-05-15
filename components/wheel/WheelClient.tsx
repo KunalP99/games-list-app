@@ -992,7 +992,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
               value={rawGames}
               onChange={e => setRawGames(e.target.value)}
               placeholder={`Enter at least ${WHEEL_MIN_GAMES} games, one per line…`}
-              rows={8}
+              rows={5}
               className="w-full border border-edge-input rounded-lg px-3 py-2.5 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none bg-surface-input"
             />
           </div>
@@ -1044,9 +1044,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
         {/* Backlog panel */}
         {backlogGames.length > 0 && (
-          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-full">
+          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-80">
             <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
-            <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto flex-1 pr-3">
+            <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto flex-1 min-h-0 pr-3">
               {backlogGames.map(title => {
                 const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(title.toLowerCase())
                 return (

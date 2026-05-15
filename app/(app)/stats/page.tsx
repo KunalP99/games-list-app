@@ -80,7 +80,7 @@ async function computeUserStats(
   const startedGames   = games.filter(g => g.status !== 'backlog')
 
   const totalHours     = games.reduce((s, g) => s + (g.hours_played ?? 0), 0)
-  const startedCount   = startedGames.length
+  const startedCount   = completedGames.length + dnfGames.length
   const completionRate = startedCount > 0 ? Math.round((completedGames.length / startedCount) * 100) : null
   const dnfRate        = startedCount > 0 ? Math.round((dnfGames.length / startedCount) * 100) : null
 
