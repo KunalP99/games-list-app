@@ -26,25 +26,29 @@ export default async function GamesPage({
 
   const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
 
-  // Playing games always fetched separately for the Now Playing strip
-  const { data: playingGames } = await supabase
-    .from('games')
-    .select('*')
-    .eq('user_id', user!.id)
-    .eq('status', 'playing')
-    .order('created_at', { ascending: false }) as { data: Game[] | null }
-
-  let query = supabase
+  let gamesQuery = supabase
     .from('games')
     .select('*')
     .eq('user_id', user!.id)
     .neq('status', 'playing')
     .order(sort === 'status' ? 'created_at' : sort, { ascending: !sortDesc, nullsFirst: false })
 
-  if (status) query = query.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
-  if (q) query = query.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
+  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
-  let { data: games } = await query as { data: Game[] | null }
+  // Playing games always fetched separately for the Now Playing strip — run both in parallel
+  const [playingGamesRes, gamesRes] = await Promise.all([
+    supabase
+      .from('games')
+      .select('*')
+      .eq('user_id', user!.id)
+      .eq('status', 'playing')
+      .order('created_at', { ascending: false }),
+    gamesQuery,
+  ])
+
+  const playingGames = playingGamesRes.data as Game[] | null
+  let games = gamesRes.data as Game[] | null
 
   if (sort === 'status' && games) {
     games = [...games].sort((a, b) => (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3))

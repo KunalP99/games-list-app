@@ -42,29 +42,33 @@ export default async function UserProfilePage({
   const sort = searchParams.sort ?? 'created_at'
   const sortAsc = sort === 'title'
 
-  let query = supabase
+  let gamesQuery = supabase
     .from('games')
     .select('*')
     .eq('user_id', profile.id)
     .order(sort, { ascending: sortAsc, nullsFirst: false })
 
-  if (status) query = query.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
-  if (searchParams.q?.trim()) query = (query as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
+  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
-  const { data: games } = await query as { data: Game[] | null }
+  const [gamesRes, allGamesRes, playingGamesRes] = await Promise.all([
+    gamesQuery,
+    supabase
+      .from('games')
+      .select('status, hours_played')
+      .eq('user_id', profile.id),
+    supabase
+      .from('games')
+      .select('*')
+      .eq('user_id', profile.id)
+      .eq('status', 'playing')
+      .order('created_at', { ascending: false })
+      .limit(2),
+  ])
 
-  const { data: allGames } = await supabase
-    .from('games')
-    .select('status, hours_played')
-    .eq('user_id', profile.id) as { data: { status: string; hours_played: number | null }[] | null }
-
-  const { data: playingGames } = await supabase
-    .from('games')
-    .select('*')
-    .eq('user_id', profile.id)
-    .eq('status', 'playing')
-    .order('created_at', { ascending: false })
-    .limit(2) as { data: Game[] | null }
+  const games = gamesRes.data as Game[] | null
+  const allGames = allGamesRes.data as { status: string; hours_played: number | null }[] | null
+  const playingGames = playingGamesRes.data as Game[] | null
 
   const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
   const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0

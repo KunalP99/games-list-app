@@ -1,15 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
+import { getProfile } from '@/lib/data/profile'
 import type { Profile, Game } from '@/lib/types'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import StatusBadge from '@/components/games/StatusBadge'
-import GamesPerYearChart from '@/components/dashboard/GamesPerYearChart'
-import GenreAndPlatformCharts from '@/components/dashboard/GenreAndPlatformCharts'
 import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
 import FriendActivityFeed from '@/components/dashboard/FriendActivityFeed'
 import { buildActivityItems, type RawAchievementUnlock } from '@/lib/activity'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { GREETINGS } from '@/lib/greetings'
 
+const GamesPerYearChart = dynamic(() => import('@/components/dashboard/GamesPerYearChart'), { ssr: false })
+const GenreAndPlatformCharts = dynamic(() => import('@/components/dashboard/GenreAndPlatformCharts'), { ssr: false })
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -18,24 +20,58 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user!.id)
-    .single() as { data: Profile | null; error: unknown }
-
   const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
 
-  const { data: allGames } = await supabase
-    .from('games')
-    .select('hours_played, status, completion_date, created_at, title, image_url, genres, platform')
-    .eq('user_id', user!.id) as { data: { hours_played: number | null; status: string; completion_date: string | null; created_at: string; title: string; image_url: string | null; genres: string[] | null; platform: string | null }[] | null; error: unknown }
+  // Wave 1: all queries independent — run in parallel
+  const [
+    profile,
+    allGamesRes,
+    ticketEarningsRes,
+    recentGamesRes,
+    friendProfilesRes,
+  ] = await Promise.all([
+    getProfile(user!.id),
+    supabase
+      .from('games')
+      .select('hours_played, status, completion_date, created_at, title, image_url, genres, platform')
+      .eq('user_id', user!.id),
+    supabase
+      .from('ticket_transactions')
+      .select('amount')
+      .eq('user_id', user!.id)
+      .gt('amount', 0),
+    supabase
+      .from('games')
+      .select('id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at')
+      .eq('user_id', user!.id)
+      .in('status', ['playing', 'completed', 'dnf'])
+      .order('completion_date', { ascending: false, nullsFirst: false })
+      .limit(20),
+    supabase
+      .from('profiles')
+      .select('id, display_name, username, ticket_balance, accent_colour')
+      .neq('id', user!.id)
+      .order('display_name', { ascending: true, nullsFirst: false }),
+  ])
+
+  const allGames = allGamesRes.data as { hours_played: number | null; status: string; completion_date: string | null; created_at: string; title: string; image_url: string | null; genres: string[] | null; platform: string | null }[] | null
+  const ticketEarnings = ticketEarningsRes.data as { amount: number }[] | null
+  const recentGamesRaw = recentGamesRes.data as Game[] | null
+  const friendProfiles = friendProfilesRes.data as Profile[] | null
+
+  // Derive IDs needed for Wave 2
+  const recentGames = recentGamesRaw ?? []
+  const recentGameIds = recentGames.map(g => g.id)
+  const friendIds = (friendProfiles ?? []).map(f => f.id)
+  const allUserIds = [user!.id, ...friendIds]
 
   const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
 
   const completedCount = allGames?.filter(g => g.status === 'completed').length ?? 0
   const startedCount = allGames?.filter(g => g.status === 'completed' || g.status === 'dnf').length ?? 0
   const completionRate = startedCount > 0 ? Math.round((completedCount / startedCount) * 100) : null
+
+  const totalTicketsEarned = ticketEarnings?.reduce((sum, t) => sum + t.amount, 0) ?? 0
 
   const gamesByYear: Record<string, { title: string; image_url: string | null }[]> = {}
   const genreCounts: Record<string, number> = {}
@@ -45,20 +81,16 @@ export default async function DashboardPage() {
   for (const g of allGames ?? []) {
     if (g.status === 'backlog') continue
 
-    // Bar chart — completed only
     if (g.status === 'completed' && g.completion_date) {
       const year = new Date(g.completion_date).getFullYear().toString()
       if (!gamesByYear[year]) gamesByYear[year] = []
       gamesByYear[year].push({ title: g.title, image_url: g.image_url })
     }
 
-    // Radar — genre counts
     for (const genre of g.genres ?? []) {
       genreCounts[genre] = (genreCounts[genre] ?? 0) + 1
     }
 
-    // Pie — platform counts (use lowercase key to merge casing variants like
-    // "XBOX 360" and "Xbox 360", but track original name for display/colour lookup)
     if (g.platform) {
       const key = g.platform.trim().toLowerCase()
       if (!platformCounts[key]) {
@@ -82,33 +114,64 @@ export default async function DashboardPage() {
     .map(([key, count]) => ({ platform: platformDisplayNames[key] ?? key, count }))
     .sort((a, b) => b.count - a.count)
 
-  const { data: ticketEarnings } = await supabase
-    .from('ticket_transactions')
-    .select('amount')
-    .eq('user_id', user!.id)
-    .gt('amount', 0) as { data: { amount: number }[] | null }
+  // Wave 2: queries that depend on Wave 1 IDs — all run in parallel
+  const [
+    ticketRowsRes,
+    friendGameCountsRes,
+    friendCompletedGamesRes,
+    friendGamesRes,
+    friendSpinsRes,
+    rawFriendUnlocksRes,
+  ] = await Promise.all([
+    recentGameIds.length > 0
+      ? supabase
+          .from('ticket_transactions')
+          .select('game_id, amount')
+          .eq('user_id', user!.id)
+          .in('game_id', recentGameIds)
+      : Promise.resolve({ data: [] as { game_id: string; amount: number }[] }),
+    supabase
+      .from('games')
+      .select('user_id, status')
+      .in('user_id', allUserIds),
+    friendIds.length > 0
+      ? supabase
+          .from('games')
+          .select('id, title, genres, rating, image_url, developer, user_id')
+          .in('user_id', friendIds)
+          .eq('status', 'completed')
+      : Promise.resolve({ data: [] as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] }),
+    friendIds.length > 0
+      ? supabase
+          .from('games')
+          .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
+          .in('user_id', friendIds)
+          .order('updated_at', { ascending: false })
+          .limit(40)
+      : Promise.resolve({ data: [] as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] }),
+    friendIds.length > 0
+      ? supabase
+          .from('wheel_spins')
+          .select('id, user_id, result_name, created_at')
+          .in('user_id', friendIds)
+          .order('created_at', { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] as { id: string; user_id: string; result_name: string | null; created_at: string }[] }),
+    friendIds.length > 0
+      ? (supabase.from('user_achievements') as any)
+          .select('user_id, achievement_id, unlocked_at')
+          .in('user_id', friendIds)
+          .order('unlocked_at', { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] as { user_id: string; achievement_id: string; unlocked_at: string }[] }),
+  ])
 
-  const totalTicketsEarned = ticketEarnings?.reduce((sum, t) => sum + t.amount, 0) ?? 0
-
-  const { data: recentGamesRaw } = await supabase
-    .from('games')
-    .select('id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at')
-    .eq('user_id', user!.id)
-    .in('status', ['playing', 'completed', 'dnf'])
-    .order('completion_date', { ascending: false, nullsFirst: false })
-    .limit(20) as { data: Game[] | null; error: unknown }
-
-  const recentGames = recentGamesRaw ?? []
-
-  // Sum ticket transactions per game for the recent activity table
-  const recentGameIds = recentGames.map(g => g.id)
-  const { data: ticketRows } = recentGameIds.length > 0
-    ? await supabase
-        .from('ticket_transactions')
-        .select('game_id, amount')
-        .eq('user_id', user!.id)
-        .in('game_id', recentGameIds)
-    : { data: [] as { game_id: string; amount: number }[] }
+  const ticketRows = ticketRowsRes.data as { game_id: string; amount: number }[] | null
+  const friendGameCounts = friendGameCountsRes.data as { user_id: string; status: string }[] | null
+  const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] | null
+  const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
+  const friendSpins = friendSpinsRes.data as { id: string; user_id: string; result_name: string | null; created_at: string }[] | null
+  const rawFriendUnlocks = rawFriendUnlocksRes.data as { user_id: string; achievement_id: string; unlocked_at: string }[] | null
 
   const ticketsByGame = (ticketRows ?? []).reduce<Record<string, number>>((acc, row) => {
     if (!row.game_id) return acc
@@ -116,25 +179,20 @@ export default async function DashboardPage() {
     return acc
   }, {})
 
-  const { data: friendProfiles } = await supabase
-    .from('profiles')
-    .select('id, display_name, username, ticket_balance, accent_colour')
-    .neq('id', user!.id)
-    .order('display_name', { ascending: true, nullsFirst: false }) as { data: Profile[] | null }
-
-  const { data: friendGameCounts } = await supabase
-    .from('games')
-    .select('user_id, status') as { data: { user_id: string; status: string }[] | null }
-
-  // Recommendations: fetch friends' completed games for scoring
-  const friendIds = (friendProfiles ?? []).map(f => f.id)
-  const { data: friendCompletedGames } = friendIds.length > 0
+  // Wave 3: depends on friendGames (needed to compute completedFriendGameIds)
+  const completedFriendGameIds = (friendGames ?? []).filter(g => g.status === 'completed').map(g => g.id)
+  const { data: friendTicketRows } = completedFriendGameIds.length > 0
     ? await supabase
-        .from('games')
-        .select('id, title, genres, rating, image_url, developer, user_id')
-        .in('user_id', friendIds)
-        .eq('status', 'completed') as { data: { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] | null }
-    : { data: [] as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] }
+        .from('ticket_transactions')
+        .select('game_id, amount')
+        .in('game_id', completedFriendGameIds)
+        .gt('amount', 0) as { data: { game_id: string; amount: number }[] | null }
+    : { data: [] as { game_id: string; amount: number }[] }
+
+  const friendTicketsByGame = (friendTicketRows ?? []).reduce<Record<string, number>>((acc, r) => {
+    acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
+    return acc
+  }, {})
 
   const myTitles = new Set((allGames ?? []).map(g => g.title.trim().toLowerCase()))
   const friendMap = Object.fromEntries((friendProfiles ?? []).map(f => [f.id, f.display_name ?? f.username]))
@@ -151,47 +209,6 @@ export default async function DashboardPage() {
     .slice(0, 25)
 
   const recommendations = seededShuffle(recommendationPool, weekSeed()).slice(0, 10)
-
-  // Friends activity feed
-  const { data: friendGames } = friendIds.length > 0
-    ? await supabase
-        .from('games')
-        .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
-        .in('user_id', friendIds)
-        .order('updated_at', { ascending: false })
-        .limit(40) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null }
-    : { data: [] as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string }[] }
-
-  const { data: friendSpins } = friendIds.length > 0
-    ? await supabase
-        .from('wheel_spins')
-        .select('id, user_id, result_name, created_at')
-        .in('user_id', friendIds)
-        .order('created_at', { ascending: false })
-        .limit(20) as { data: { id: string; user_id: string; result_name: string | null; created_at: string }[] | null }
-    : { data: [] as { id: string; user_id: string; result_name: string | null; created_at: string }[] }
-
-  const completedFriendGameIds = (friendGames ?? []).filter(g => g.status === 'completed').map(g => g.id)
-  const { data: friendTicketRows } = completedFriendGameIds.length > 0
-    ? await supabase
-        .from('ticket_transactions')
-        .select('game_id, amount')
-        .in('game_id', completedFriendGameIds)
-        .gt('amount', 0) as { data: { game_id: string; amount: number }[] | null }
-    : { data: [] as { game_id: string; amount: number }[] }
-
-  const friendTicketsByGame = (friendTicketRows ?? []).reduce<Record<string, number>>((acc, r) => {
-    acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
-    return acc
-  }, {})
-
-  const { data: rawFriendUnlocks } = friendIds.length > 0
-    ? await (supabase.from('user_achievements') as any)
-        .select('user_id, achievement_id, unlocked_at')
-        .in('user_id', friendIds)
-        .order('unlocked_at', { ascending: false })
-        .limit(20) as { data: { user_id: string; achievement_id: string; unlocked_at: string }[] | null }
-    : { data: [] as { user_id: string; achievement_id: string; unlocked_at: string }[] }
 
   const achievementLookup = new Map(ACHIEVEMENTS.map(a => [a.id, a]))
   const friendAchievementUnlocks: RawAchievementUnlock[] = (rawFriendUnlocks ?? []).flatMap(r => {

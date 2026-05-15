@@ -8,20 +8,24 @@ export default async function WheelPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('wheel_turn, ticket_balance, accent_colour')
-    .eq('id', user.id)
-    .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number; accent_colour: string | null } | null }
+  const [profileRes, backlogGamesRes] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('wheel_turn, ticket_balance, accent_colour')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('games')
+      .select('id, title')
+      .eq('user_id', user.id)
+      .eq('status', 'backlog')
+      .order('title', { ascending: true }),
+  ])
+
+  const profile = profileRes.data as { wheel_turn: WheelTurn; ticket_balance: number; accent_colour: string | null } | null
+  const backlogGames = backlogGamesRes.data as { id: string; title: string }[] | null
 
   if (!profile) redirect('/login')
-
-  const { data: backlogGames } = await supabase
-    .from('games')
-    .select('id, title')
-    .eq('user_id', user.id)
-    .eq('status', 'backlog')
-    .order('title', { ascending: true }) as { data: { id: string; title: string }[] | null }
 
   return (
     <div>
