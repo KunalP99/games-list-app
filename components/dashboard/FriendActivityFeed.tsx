@@ -13,7 +13,7 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
       </div>
 
       {/* Activity list */}
-      <div className="divide-y divide-edge-subtle">
+      <div className="divide-y divide-edge-subtle flex-1 overflow-y-auto">
         {items.map((item, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-3">
             {/* Avatar */}

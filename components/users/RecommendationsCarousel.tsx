@@ -47,8 +47,8 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
             >
               <div className="relative w-full h-full min-h-36 bg-surface-active">
                 {game.image_url
-                  ? <img src={game.image_url} alt={game.title} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center text-5xl">🎮</div>
+                  ? <img src={game.image_url} alt={game.title} className="absolute inset-0 w-full h-full object-cover" />
+                  : <div className="absolute inset-0 flex items-center justify-center text-5xl">🎮</div>
                 }
 
                 {/* Gradient overlays */}

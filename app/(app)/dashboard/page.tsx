@@ -400,7 +400,7 @@ export default async function DashboardPage() {
 
       {/* Recommendations + Friends Activity */}
       {(recommendations.length > 0 || friendActivityItems.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch h-[380px]">
           {recommendations.length > 0 && (
             <div className="flex flex-col">
               <RecommendationsCarousel games={recommendations} />
