@@ -71,12 +71,21 @@ Each player cycles through turns in order: **Spin → Spin + Reroll → Choose G
 ### Ticket History
 Full ledger of all ticket activity for all players: date, user, game, reason badges, change amount, and running balance. Current user's rows are highlighted in their accent colour.
 
+### Social & Friends
+- **Friends activity feed** on the dashboard — shows recent game completions, DNFs, backlog adds, wheel spins, and achievement unlocks from friends; updates live
+- **Full activity page** (`/activity`) — expanded feed showing up to 40 recent events across all friends and yourself
+- **Friend profile pages** — view any player's game list, stats, ticket balance, currently playing games, and current wheel turn (shown as a coloured pill matching the wheel page style)
+- **Recommendations carousel** on the dashboard — games your friends have completed and rated, auto-rotating with dot indicators
+- **Wheel history page** (`/wheel/history`) — all players' spin history with spin type badges, game results, mode labels, and ticket costs
+
 ### Dashboard
 - Stats: total games, hours, completions this year, current streak
 - Bar chart — games completed per year (uses accent colour)
 - Radar chart — genres played (uses accent colour)
 - Pie chart — platforms used (branded per platform)
-- Recent activity table
+- Friends activity feed (6 most recent events) with link to full activity page
+- Recommendations carousel showing friends' completed and rated games
+- Charts lazy-loaded for faster initial page render
 
 ### Settings
 - **Profile** — update display name
@@ -305,19 +314,25 @@ end; $$;
 
 ```sql
 create table public.wheel_spins (
-  id           uuid primary key default uuid_generate_v4(),
-  user_id      uuid not null references public.profiles(id) on delete cascade,
-  spin_type    text not null check (spin_type in ('spin', 'spin_reroll', 'choose')),
-  spin_mode    text check (spin_mode in ('elimination', 'first_land')),
-  result_name  text,
+  id            uuid primary key default uuid_generate_v4(),
+  user_id       uuid not null references public.profiles(id) on delete cascade,
+  spin_type     text not null check (spin_type in ('spin', 'spin_reroll', 'choose', 'choose_skip')),
+  spin_mode     text check (spin_mode in ('elimination', 'first_land')),
+  result_name   text,
   option_a_name text,
   option_b_name text,
-  created_at   timestamptz not null default now()
+  games_list    text[],
+  tickets_spent integer,
+  created_at    timestamptz not null default now()
 );
 
 alter table public.wheel_spins enable row level security;
+-- All authenticated users can read spins (for shared history and activity feeds)
+create policy "wheel_spins_read_all" on public.wheel_spins
+  for select using (auth.role() = 'authenticated');
+-- Users can only write their own spins
 create policy "wheel_spins_manage_own" on public.wheel_spins
-  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
 </details>
 
@@ -366,21 +381,29 @@ app/
     games/          # List, detail, new, edit + actions.ts
     tickets/
     wheel/
+      history/      # Shared spin history across all players
     achievements/
+    activity/       # Full friends activity feed
     settings/
     users/
+      [username]/   # Friend profile page
   api/
     achievement-flash/  # Cookie-based flash for new achievement toasts
     rawg/               # RAWG proxy endpoints
 components/
   layout/           # Nav, UserDropdown, ThemeInitialiser, AchievementProvider
   games/            # GameCard, GameForm, GameListView, GameFilters, …
-  dashboard/        # GamesPerYearChart, GenreAndPlatformCharts
+  dashboard/        # GamesPerYearChart, GenreAndPlatformCharts, FriendActivityFeed
+  users/            # RecommendationsCarousel, AddToBacklogButton
   wheel/            # WheelClient, WheelAnimation
 lib/
   achievements.ts   # Achievement definitions, XP, level math, unlock logic
   tickets.ts        # Ticket award/penalty calculations
   wheel.ts          # Turn cycle, winner selection
+  wheel-history.ts  # Spin type badges, labels, cost inference
+  activity.ts       # Activity feed item types, builder, formatters
   accent.ts         # Hex → HSL palette generator for CSS custom properties
   constants.ts      # Ticket costs, awards, wheel rules
+  data/
+    profile.ts      # React cache()-wrapped profile fetch (deduplicates layout + page queries)
 ```
