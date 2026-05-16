@@ -30,7 +30,7 @@ export default async function UserProfilePage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, display_name, username, ticket_balance, accent_colour')
+    .select('id, display_name, username, ticket_balance, accent_colour, wheel_turn')
     .eq('username', params.username)
     .single() as { data: Profile | null }
 
@@ -117,6 +117,15 @@ export default async function UserProfilePage({
             {totalPlaying > 0 && <StatPill>{totalPlaying} playing</StatPill>}
             {totalBacklog > 0 && <StatPill>{totalBacklog} in backlog</StatPill>}
             {totalHours > 0 && <StatPill>{totalHours.toLocaleString()}h played</StatPill>}
+            {profile.wheel_turn && (
+              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${
+                profile.wheel_turn === 'spin'        ? 'bg-brand-100 text-brand-700 border-brand-200 dark:bg-brand-900/40 dark:text-brand-300 dark:border-brand-700' :
+                profile.wheel_turn === 'spin_reroll' ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700' :
+                                                       'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700'
+              }`}>
+                🎡 {profile.wheel_turn === 'spin' ? 'Spin turn' : profile.wheel_turn === 'spin_reroll' ? 'Spin + Reroll turn' : 'Choose turn'}
+              </span>
+            )}
           </div>
         </div>
       </div>

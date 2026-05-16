@@ -15,7 +15,7 @@ const STATUS_OPTIONS = [
   { value: 'dnf', label: 'Did Not Finish (DNF)' },
 ]
 
-export default function GameForm({ game }: { game?: Game }) {
+export default function GameForm({ game, defaultStatus }: { game?: Game; defaultStatus?: string }) {
   const isEdit = !!game
   const router = useRouter()
   const [title, setTitle] = useState(game?.title ?? '')
@@ -29,7 +29,7 @@ export default function GameForm({ game }: { game?: Game }) {
   )
   const [imageUrl, setImageUrl] = useState(game?.image_url ?? '')
   const [rawgId, setRawgId] = useState<number | null>(game?.rawg_id ?? null)
-  const [status, setStatus] = useState(game?.status ?? 'playing')
+  const [status, setStatus] = useState(game?.status ?? defaultStatus ?? 'playing')
   const [isFavourite, setIsFavourite] = useState(game?.is_favourite ?? false)
   const [isReplay, setIsReplay] = useState(game?.is_replay ?? false)
   const [replayDetected, setReplayDetected] = useState(false)
