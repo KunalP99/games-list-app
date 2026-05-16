@@ -84,7 +84,7 @@ export default function GameForm({ game }: { game?: Game }) {
   useEffect(() => {
     if (isEdit || title.trim().length < 2) {
       setReplayDetected(false)
-      setIsReplay(false)
+      if (!isEdit) setIsReplay(false)
       return
     }
 
