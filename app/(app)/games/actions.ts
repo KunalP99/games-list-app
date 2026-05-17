@@ -35,6 +35,7 @@ export async function createGame(formData: FormData) {
   const achievementProgress = formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
+  const dlc = JSON.parse((formData.get('dlc') as string) || '[]') as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
 
   const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
   const releaseDate = releaseDatePrecision === 'year'
@@ -84,6 +85,7 @@ export async function createGame(formData: FormData) {
     is_sequel: formData.get('is_sequel') === 'on',
     in_wheel: false,
     youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
+    dlc,
   }).select('id').single()
 
   if (error) return { error: error.message }
@@ -125,6 +127,7 @@ export async function updateGame(id: string, formData: FormData) {
   const achievementProgress = formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
+  const dlc = JSON.parse((formData.get('dlc') as string) || '[]') as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
 
   const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
   const releaseDate = releaseDatePrecision === 'year'
@@ -174,6 +177,7 @@ export async function updateGame(id: string, formData: FormData) {
     is_sequel: formData.get('is_sequel') === 'on',
     in_wheel: false,
     youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
+    dlc,
   }).eq('id', id).eq('user_id', user.id)
 
   if (error) return { error: error.message }

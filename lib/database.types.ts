@@ -106,6 +106,7 @@ export type Database = {
           in_wheel: boolean
           assigned_by: string | null
           youtube_playlist_url: string | null
+          dlc: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at: string
           updated_at: string
         }
@@ -136,6 +137,7 @@ export type Database = {
           in_wheel?: boolean
           assigned_by?: string | null
           youtube_playlist_url?: string | null
+          dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
         }
@@ -166,6 +168,7 @@ export type Database = {
           in_wheel?: boolean
           assigned_by?: string | null
           youtube_playlist_url?: string | null
+          dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
         }
