@@ -38,6 +38,14 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
   const [completionYear, setCompletionYear] = useState(
     (game?.completion_date_precision === 'year') ? (game?.completion_date?.slice(0, 4) ?? '') : ''
   )
+  type DlcEntry = { name: string; rawgId: number | null; owned: boolean; removed?: boolean }
+  const [dlcEntries, setDlcEntries] = useState<DlcEntry[]>(
+    (game as any)?.dlc?.map((d: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }) => ({
+      name: d.name, rawgId: d.rawg_id, owned: d.owned, removed: d.removed ?? false,
+    })) ?? []
+  )
+  const [dlcLoading, setDlcLoading] = useState(false)
+  const [customDlcInput, setCustomDlcInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -126,6 +134,39 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     return () => document.removeEventListener('mousedown', handleOutsideClick)
   }, [])
 
+  async function fetchDlc(rawgId: number, existingEntries: DlcEntry[] = []) {
+    setDlcLoading(true)
+    try {
+      const res = await fetch(`/api/rawg/additions/${rawgId}`)
+      const data: { id: number; name: string }[] = await res.json()
+      if (!Array.isArray(data)) { setDlcLoading(false); return }
+      // Merge: RAWG additions as base, preserve owned/removed state from existing entries
+      const existingByRawgId = new Map(existingEntries.filter(e => e.rawgId !== null).map(e => [e.rawgId, e]))
+      const rawgEntries: DlcEntry[] = data.map(d => {
+        const existing = existingByRawgId.get(d.id)
+        return {
+          name: d.name,
+          rawgId: d.id,
+          owned: existing?.owned ?? false,
+          removed: existing?.removed ?? false,
+        }
+      })
+      // Keep any custom entries (no rawgId) from existing
+      const customEntries = existingEntries.filter(e => e.rawgId === null)
+      setDlcEntries([...rawgEntries, ...customEntries])
+    } catch {
+      // keep existing entries on error
+    } finally {
+      setDlcLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isEdit && game?.rawg_id) {
+      fetchDlc(game.rawg_id, dlcEntries)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleRawgSelect(result: RawgSearchResult) {
     setTitle(result.name)
     setReleaseDate(result.released ?? '')
@@ -148,6 +189,10 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     } catch {
       // silently ignore — user can fill manually
     }
+
+    // Fetch DLC list for the selected game (fresh — no existing entries to preserve)
+    setDlcEntries([])
+    fetchDlc(result.id, [])
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -574,7 +619,108 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
         {isReplay && <input type="hidden" name="is_replay" value="on" />}
         {isSequel && <input type="hidden" name="is_sequel" value="on" />}
         {rawgId !== null && <input type="hidden" name="rawg_id" value={rawgId} />}
+        <input type="hidden" name="dlc" value={JSON.stringify(
+          dlcEntries.map(e => ({ name: e.name, rawg_id: e.rawgId, owned: e.owned, removed: e.removed ?? false }))
+        )} />
       </section>
+
+      {/* DLC & Expansions */}
+      {(dlcLoading || dlcEntries.length > 0 || rawgId !== null) && (
+        <section className="bg-surface-base border border-edge-base rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-1">DLC &amp; Expansions</h2>
+          <p className="text-xs text-fg-subtle mb-4">Check the DLC you own, remove ones you don&apos;t want to track, or add your own</p>
+          {dlcLoading ? (
+            <div className="space-y-2 animate-pulse">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-9 bg-surface-active rounded-lg" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {dlcEntries.map((dlc, i) => {
+                if (dlc.removed) {
+                  // Greyed-out RAWG entry — show with restore button
+                  return (
+                    <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg opacity-40">
+                      <span className="w-4 h-4 shrink-0 flex items-center justify-center text-fg-subtle text-sm">–</span>
+                      <span className="text-sm text-fg-muted flex-1 min-w-0 truncate line-through">{dlc.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDlcEntries(prev => prev.map((e, j) => j === i ? { ...e, removed: false } : e))}
+                        className="shrink-0 text-fg-subtle hover:text-brand-600 transition-colors text-sm font-medium"
+                        aria-label={`Restore ${dlc.name}`}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  )
+                }
+                return (
+                  <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors group">
+                    <input
+                      type="checkbox"
+                      checked={dlc.owned}
+                      onChange={() =>
+                        setDlcEntries(prev => prev.map((e, j) => j === i ? { ...e, owned: !e.owned } : e))
+                      }
+                      className="w-4 h-4 rounded accent-brand-600 shrink-0 cursor-pointer"
+                    />
+                    <span className="text-sm text-fg-base flex-1 min-w-0 truncate">{dlc.name}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        dlc.rawgId !== null
+                          ? setDlcEntries(prev => prev.map((e, j) => j === i ? { ...e, removed: true } : e))
+                          : setDlcEntries(prev => prev.filter((_, j) => j !== i))
+                      }
+                      className="shrink-0 text-fg-subtle hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 text-lg leading-none"
+                      aria-label={`Remove ${dlc.name}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Add custom DLC */}
+          {!dlcLoading && (
+            <div className="flex gap-2 mt-3">
+              <input
+                type="text"
+                value={customDlcInput}
+                onChange={e => setCustomDlcInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const name = customDlcInput.trim()
+                    if (name) {
+                      setDlcEntries(prev => [...prev, { name, rawgId: null, owned: false }])
+                      setCustomDlcInput('')
+                    }
+                  }
+                }}
+                placeholder="Add a DLC manually…"
+                className="flex-1 px-3 py-2 text-sm border border-edge-base rounded-lg bg-surface-sunken text-fg-base placeholder:text-fg-subtle focus:outline-none focus:border-brand-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const name = customDlcInput.trim()
+                  if (name) {
+                    setDlcEntries(prev => [...prev, { name, rawgId: null, owned: false }])
+                    setCustomDlcInput('')
+                  }
+                }}
+                className="px-3 py-2 text-sm font-medium border border-edge-base rounded-lg text-fg-secondary hover:bg-surface-hover transition-colors"
+              >
+                Add
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Notes — always visible, private */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6">

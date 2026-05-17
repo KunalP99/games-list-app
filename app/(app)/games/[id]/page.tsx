@@ -33,6 +33,9 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         .single() as { data: { display_name: string | null; username: string; accent_colour: string | null } | null }
     : { data: null }
 
+  const dlcEntries = (((game as any).dlc ?? []) as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[])
+    .filter(d => !d.removed)
+
   const [{ data: sameGames }, screenshots, achievements] = await Promise.all([
     supabase
       .from('games')
@@ -285,6 +288,37 @@ export default async function GameDetailPage({ params }: { params: { id: string 
             <span className="text-xs text-fg-subtle">{achievements.length} total</span>
           </div>
           <AchievementGrid achievements={achievements} />
+        </div>
+      )}
+
+      {/* DLC & Expansions — stored on the game record */}
+      {dlcEntries.length > 0 && (
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">DLC &amp; Expansions</p>
+            <span className="text-xs text-fg-subtle">
+              {dlcEntries.filter(d => d.owned).length} / {dlcEntries.length} owned
+            </span>
+          </div>
+          <div className="space-y-1">
+            {dlcEntries.map((dlc, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
+                  dlc.owned
+                    ? 'border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-brand-900/20'
+                    : 'border-edge-base bg-surface-sunken opacity-60'
+                }`}
+              >
+                <span className={`text-sm shrink-0 ${dlc.owned ? 'text-brand-600 dark:text-brand-400' : 'text-fg-subtle'}`}>
+                  {dlc.owned ? '✓' : '○'}
+                </span>
+                <span className={`text-sm flex-1 min-w-0 truncate ${dlc.owned ? 'font-medium text-fg-base' : 'text-fg-muted'}`}>
+                  {dlc.name}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

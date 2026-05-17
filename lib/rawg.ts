@@ -87,3 +87,24 @@ export async function getRawgAchievements(rawgId: number): Promise<RawgAchieveme
     return []
   }
 }
+
+export type RawgAddition = {
+  id: number
+  name: string
+  background_image: string | null
+  released: string | null
+}
+
+export async function getRawgAdditions(rawgId: number): Promise<RawgAddition[]> {
+  const key = process.env.RAWG_API_KEY
+  if (!key) return []
+  try {
+    const url = `${RAWG_BASE}/games/${rawgId}/additions?key=${key}&page_size=50`
+    const res = await fetch(url, { next: { revalidate: 3600 } })
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.results ?? []
+  } catch {
+    return []
+  }
+}
