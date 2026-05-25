@@ -259,10 +259,20 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       {/* YouTube Playlist */}
       {game.youtube_playlist_url && extractPlaylistId(game.youtube_playlist_url) && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-4 space-y-3">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Playlist</p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Playlist</p>
+            <a
+              href={game.youtube_playlist_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-brand-500 hover:text-brand-400 transition-colors"
+            >
+              View full playlist ↗
+            </a>
+          </div>
           <div className="relative w-full aspect-video rounded-lg overflow-hidden">
             <iframe
-              src={`https://www.youtube.com/embed/videoseries?list=${extractPlaylistId(game.youtube_playlist_url)}`}
+              src={`https://www.youtube.com/embed/videoseries?list=${extractPlaylistId(game.youtube_playlist_url)}&listType=playlist`}
               title={`${game.title} playlist`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
