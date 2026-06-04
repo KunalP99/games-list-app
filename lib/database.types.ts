@@ -88,12 +88,14 @@ export type Database = {
           release_date_precision: 'full' | 'year'
           status: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played: number | null
+          start_date: string | null
           completion_date: string | null
           completion_date_precision: 'full' | 'year'
           rating: number | null
           achievement_progress: number | null
           review: string | null
           notes: string | null
+          notes_public: boolean
           image_url: string | null
           rawg_id: number | null
           description: string | null
@@ -119,12 +121,14 @@ export type Database = {
           release_date_precision?: 'full' | 'year'
           status?: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played?: number | null
+          start_date?: string | null
           completion_date?: string | null
           completion_date_precision?: 'full' | 'year'
           rating?: number | null
           achievement_progress?: number | null
           review?: string | null
           notes?: string | null
+          notes_public?: boolean
           image_url?: string | null
           rawg_id?: number | null
           description?: string | null
@@ -150,12 +154,14 @@ export type Database = {
           release_date_precision?: 'full' | 'year'
           status?: 'playing' | 'completed' | 'backlog' | 'dnf'
           hours_played?: number | null
+          start_date?: string | null
           completion_date?: string | null
           completion_date_precision?: 'full' | 'year'
           rating?: number | null
           achievement_progress?: number | null
           review?: string | null
           notes?: string | null
+          notes_public?: boolean
           image_url?: string | null
           rawg_id?: number | null
           description?: string | null

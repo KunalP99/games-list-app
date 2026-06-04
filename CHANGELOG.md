@@ -7,6 +7,9 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- "What's New" popup — appears on authenticated pages after a new release for 7 days, backed by the `changelog_entries` table; includes a "Don't show again" checkbox that stores the dismissed entry's id in localStorage
+- "Date Started" field on the game form (shown for any non-backlog status); on the game detail page, completed games now show how many days it took to complete (start date → completion date)
+- Public/private toggle for notes on the game form — defaults to Public for new games; public notes are visible to everyone viewing the game, private notes only to the owner. Existing notes remain private by default.
 - User dropdown on the navbar — clicking the avatar circle opens a panel with user info, Settings link, theme toggle, and sign out
 - `/settings` page with three sections: Profile (display name), Security (password change), and Appearance (theme preference + accent colour picker)
 - `ThemeInitialiser` component — applies the user's saved theme preference from the database on every page load, keeping localStorage in sync
