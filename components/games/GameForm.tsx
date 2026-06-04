@@ -411,6 +411,18 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
           </div>
         </div>
 
+        {status === 'playing' && (
+          <div>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">Date Started</label>
+            <input
+              name="start_date"
+              type="date"
+              defaultValue={game?.start_date ?? ''}
+              className={input}
+            />
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-medium text-fg-secondary mb-1">
             Achievement Progress (%)
@@ -431,6 +443,15 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
         {status === 'completed' && (
           <div className="space-y-4 pt-2 border-t border-edge-subtle">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Date Started</label>
+                <input
+                  name="start_date"
+                  type="date"
+                  defaultValue={game?.start_date ?? ''}
+                  className={input}
+                />
+              </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-medium text-fg-secondary">Completion Date</label>
@@ -468,22 +489,23 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
                 )}
                 <input type="hidden" name="completion_date_precision" value={completionDatePrecision} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">
-                  Rating (1–5) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  name="rating"
-                  type="number"
-                  required
-                  min={1}
-                  max={5}
-                  step={0.5}
-                  defaultValue={game?.rating ?? ''}
-                  className={input}
-                  placeholder="e.g. 3.5"
-                />
-              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">
+                Rating (1–5) <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="rating"
+                type="number"
+                required
+                min={1}
+                max={5}
+                step={0.5}
+                defaultValue={game?.rating ?? ''}
+                className={input}
+                placeholder="e.g. 3.5"
+              />
             </div>
 
             <div>
@@ -506,6 +528,15 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
               Did Not Finish — mark games you started but decided to stop playing.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Date Started</label>
+                <input
+                  name="start_date"
+                  type="date"
+                  defaultValue={game?.start_date ?? ''}
+                  className={input}
+                />
+              </div>
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-sm font-medium text-fg-secondary">Date Dropped</label>
@@ -543,19 +574,20 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
                 )}
                 <input type="hidden" name="completion_date_precision" value={completionDatePrecision} />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Rating (1–5) <span className="text-xs text-fg-subtle font-normal">optional</span></label>
-                <input
-                  name="rating"
-                  type="number"
-                  min={1}
-                  max={5}
-                  step={0.5}
-                  defaultValue={game?.rating ?? ''}
-                  className={input}
-                  placeholder="e.g. 2.5"
-                />
-              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Rating (1–5) <span className="text-xs text-fg-subtle font-normal">optional</span></label>
+              <input
+                name="rating"
+                type="number"
+                min={1}
+                max={5}
+                step={0.5}
+                defaultValue={game?.rating ?? ''}
+                className={input}
+                placeholder="e.g. 2.5"
+              />
             </div>
 
             <div>
@@ -722,18 +754,26 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
         </section>
       )}
 
-      {/* Notes — always visible, private */}
+      {/* Notes */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6">
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-4">Notes</h2>
-        <label className="block text-sm font-medium text-fg-secondary mb-1">
-          Personal notes <span className="text-xs text-fg-subtle">(private)</span>
-        </label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-fg-secondary">Notes</label>
+          <select
+            name="notes_public"
+            defaultValue={(game?.notes_public ?? (isEdit ? false : true)) ? 'public' : 'private'}
+            className="text-xs bg-surface-sunken border border-edge-base rounded px-2 py-1 text-fg-secondary"
+          >
+            <option value="public">Public</option>
+            <option value="private">Private</option>
+          </select>
+        </div>
         <textarea
           name="notes"
           rows={3}
           defaultValue={game?.notes ?? ''}
           className={input}
-          placeholder="Personal reminders, tips, etc."
+          placeholder="Reminders, tips, etc."
         />
       </section>
 

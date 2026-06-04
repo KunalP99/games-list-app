@@ -60,6 +60,8 @@ export async function createGame(formData: FormData) {
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
   }
 
+  const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
+
   const { data: game, error } = await (supabase.from('games') as any).insert({
     user_id: user.id,
     title: (formData.get('title') as string).trim(),
@@ -68,12 +70,14 @@ export async function createGame(formData: FormData) {
     release_date_precision: releaseDatePrecision,
     status,
     hours_played: hours,
+    start_date: startDate,
     completion_date: completionDate,
     completion_date_precision: (status === 'completed' || status === 'dnf') ? completionDatePrecision : 'full',
     rating: (status === 'completed' || status === 'dnf') && formData.get('rating') ? Number(formData.get('rating')) : null,
     achievement_progress: achievementProgress,
     review: (formData.get('review') as string)?.trim() || null,
     notes: (formData.get('notes') as string)?.trim() || null,
+    notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
     rawg_id: rawgId,
     description,
@@ -153,6 +157,8 @@ export async function updateGame(id: string, formData: FormData) {
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
   }
 
+  const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
+
   const { error } = await (supabase.from('games') as any).update({
     title: (formData.get('title') as string).trim(),
     developer: (formData.get('developer') as string)?.trim() || null,
@@ -160,12 +166,14 @@ export async function updateGame(id: string, formData: FormData) {
     release_date_precision: releaseDatePrecision,
     status,
     hours_played: hours,
+    start_date: startDate,
     completion_date: completionDate,
     completion_date_precision: (status === 'completed' || status === 'dnf') ? completionDatePrecision : 'full',
     rating: (status === 'completed' || status === 'dnf') && formData.get('rating') ? Number(formData.get('rating')) : null,
     achievement_progress: achievementProgress,
     review: (formData.get('review') as string)?.trim() || null,
     notes: (formData.get('notes') as string)?.trim() || null,
+    notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
     rawg_id: rawgId,
     description,

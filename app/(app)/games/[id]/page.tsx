@@ -224,6 +224,14 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         <AchievementStat progress={game.achievement_progress} />
       </div>
 
+      {/* Date Started */}
+      {(game as any).start_date && game.status !== 'backlog' && (
+        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">Date Started</p>
+          <p className="text-fg-base text-sm">{formatDate((game as any).start_date, 'full')}</p>
+        </div>
+      )}
+
       {/* Completion date */}
       {game.completion_date && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-4">
@@ -233,6 +241,15 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           <p className="text-fg-base text-sm">
             {formatDate(game.completion_date, game.completion_date_precision)}
           </p>
+          {game.status === 'completed' && (game as any).start_date && game.completion_date_precision === 'full' && (() => {
+            const days = daysBetween((game as any).start_date, game.completion_date)
+            if (days == null) return null
+            return (
+              <p className="text-xs text-fg-muted mt-2">
+                Took <span className="text-brand-500 font-medium">{days}</span> {days === 1 ? 'day' : 'days'} to complete
+              </p>
+            )
+          })()}
         </div>
       )}
 
@@ -246,11 +263,11 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
-      {/* Notes — only visible to owner */}
-      {isOwner && game.notes && (
+      {/* Notes — public to everyone, private only to owner */}
+      {game.notes && ((game as any).notes_public || isOwner) && (
         <div className="bg-surface-sunken border border-edge-base rounded-xl p-4">
           <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">
-            Notes <span className="normal-case font-normal">(private)</span>
+            Notes <span className="normal-case font-normal">({(game as any).notes_public ? 'public' : 'private'})</span>
           </p>
           <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.notes}</p>
         </div>
@@ -377,6 +394,14 @@ function formatDate(date: string | null, precision: 'full' | 'year' = 'full'): s
   if (!date) return null
   if (precision === 'year') return date.slice(0, 4)
   return new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function daysBetween(start: string, end: string): number | null {
+  const startMs = new Date(start).getTime()
+  const endMs = new Date(end).getTime()
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return null
+  const diff = Math.round((endMs - startMs) / (1000 * 60 * 60 * 24))
+  return diff < 0 ? null : diff
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
