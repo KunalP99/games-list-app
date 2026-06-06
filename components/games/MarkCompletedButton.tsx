@@ -82,6 +82,7 @@ export default function MarkCompletedButton({
   const [rating, setRating] = useState<number | null>(null)
   const [achievementProgress, setAchievementProgress] = useState('')
   const [completionDate, setCompletionDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [review, setReview] = useState('')
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -99,6 +100,7 @@ export default function MarkCompletedButton({
         rating,
         achievementProgress: achievementProgress ? Number(achievementProgress) : null,
         completionDate,
+        review: review.trim() || null,
       })
     })
   }
@@ -171,6 +173,18 @@ export default function MarkCompletedButton({
                   type="date"
                   value={completionDate}
                   onChange={e => setCompletionDate(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              {/* Review */}
+              <div>
+                <label className="block text-sm font-medium text-fg-secondary mb-1">Review</label>
+                <textarea
+                  rows={3}
+                  value={review}
+                  onChange={e => setReview(e.target.value)}
+                  placeholder="What did you think?"
                   className={inputClass}
                 />
               </div>
@@ -265,6 +279,17 @@ export default function MarkCompletedButton({
                 type="date"
                 value={completionDate}
                 onChange={e => setCompletionDate(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Review</label>
+              <textarea
+                rows={3}
+                value={review}
+                onChange={e => setReview(e.target.value)}
+                placeholder="What did you think?"
                 className={inputClass}
               />
             </div>
