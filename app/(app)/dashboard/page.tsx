@@ -1,13 +1,11 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/data/profile'
 import type { Profile, Game } from '@/lib/types'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import StatusBadge from '@/components/games/StatusBadge'
-import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
-import FriendActivityFeed from '@/components/dashboard/FriendActivityFeed'
-import { buildActivityItems, type RawAchievementUnlock } from '@/lib/activity'
-import { ACHIEVEMENTS } from '@/lib/achievements'
+import FriendsActivitySection, { FriendsActivitySkeleton } from './FriendsActivitySection'
 import { GREETINGS } from '@/lib/greetings'
 
 const GamesPerYearChart = dynamic(() => import('@/components/dashboard/GamesPerYearChart'), { ssr: false })
@@ -114,14 +112,12 @@ export default async function DashboardPage() {
     .map(([key, count]) => ({ platform: platformDisplayNames[key] ?? key, count }))
     .sort((a, b) => b.count - a.count)
 
-  // Wave 2: queries that depend on Wave 1 IDs — all run in parallel
+  // Wave 2: only the fast queries needed for the immediate render
+  // Slow friend-data queries (recommendations + activity feed) are streamed
+  // via <FriendsActivitySection> below
   const [
     ticketRowsRes,
     friendGameCountsRes,
-    friendCompletedGamesRes,
-    friendGamesRes,
-    friendSpinsRes,
-    rawFriendUnlocksRes,
   ] = await Promise.all([
     recentGameIds.length > 0
       ? supabase
@@ -134,44 +130,10 @@ export default async function DashboardPage() {
       .from('games')
       .select('user_id, status')
       .in('user_id', allUserIds),
-    friendIds.length > 0
-      ? supabase
-          .from('games')
-          .select('id, title, genres, rating, image_url, developer, user_id')
-          .in('user_id', friendIds)
-          .eq('status', 'completed')
-      : Promise.resolve({ data: [] as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] }),
-    friendIds.length > 0
-      ? supabase
-          .from('games')
-          .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
-          .in('user_id', friendIds)
-          .order('updated_at', { ascending: false })
-          .limit(40)
-      : Promise.resolve({ data: [] as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] }),
-    friendIds.length > 0
-      ? supabase
-          .from('wheel_spins')
-          .select('id, user_id, result_name, created_at')
-          .in('user_id', friendIds)
-          .order('created_at', { ascending: false })
-          .limit(20)
-      : Promise.resolve({ data: [] as { id: string; user_id: string; result_name: string | null; created_at: string }[] }),
-    friendIds.length > 0
-      ? (supabase.from('user_achievements') as any)
-          .select('user_id, achievement_id, unlocked_at')
-          .in('user_id', friendIds)
-          .order('unlocked_at', { ascending: false })
-          .limit(20)
-      : Promise.resolve({ data: [] as { user_id: string; achievement_id: string; unlocked_at: string }[] }),
   ])
 
   const ticketRows = ticketRowsRes.data as { game_id: string; amount: number }[] | null
   const friendGameCounts = friendGameCountsRes.data as { user_id: string; status: string }[] | null
-  const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] | null
-  const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
-  const friendSpins = friendSpinsRes.data as { id: string; user_id: string; result_name: string | null; created_at: string }[] | null
-  const rawFriendUnlocks = rawFriendUnlocksRes.data as { user_id: string; achievement_id: string; unlocked_at: string }[] | null
 
   const ticketsByGame = (ticketRows ?? []).reduce<Record<string, number>>((acc, row) => {
     if (!row.game_id) return acc
@@ -179,57 +141,12 @@ export default async function DashboardPage() {
     return acc
   }, {})
 
-  // Wave 3: depends on friendGames (needed to compute completedFriendGameIds)
-  const completedFriendGameIds = (friendGames ?? []).filter(g => g.status === 'completed').map(g => g.id)
-  const { data: friendTicketRows } = completedFriendGameIds.length > 0
-    ? await supabase
-        .from('ticket_transactions')
-        .select('game_id, amount')
-        .in('game_id', completedFriendGameIds)
-        .gt('amount', 0) as { data: { game_id: string; amount: number }[] | null }
-    : { data: [] as { game_id: string; amount: number }[] }
-
-  const friendTicketsByGame = (friendTicketRows ?? []).reduce<Record<string, number>>((acc, r) => {
-    acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
-    return acc
-  }, {})
-
   const myTitles = new Set((allGames ?? []).map(g => g.title.trim().toLowerCase()))
-  const friendMap = Object.fromEntries((friendProfiles ?? []).map(f => [f.id, f.display_name ?? f.username]))
-
-  const recommendationPool = (friendCompletedGames ?? [])
-    .filter(g => !myTitles.has(g.title.trim().toLowerCase()))
-    .filter(g => g.rating == null || g.rating >= 3)
-    .map(g => {
-      const base = g.rating ?? 3
-      const bonus = (g.genres ?? []).reduce((s: number, genre: string) => s + (genreCounts[genre] ?? 0) * 0.5, 0)
-      return { ...g, score: base + bonus, recommendedBy: friendMap[g.user_id] ?? 'A friend' }
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 25)
-
-  const recommendations = seededShuffle(recommendationPool, weekSeed()).slice(0, 10)
-
-  const achievementLookup = new Map(ACHIEVEMENTS.map(a => [a.id, a]))
-  const friendAchievementUnlocks: RawAchievementUnlock[] = (rawFriendUnlocks ?? []).flatMap(r => {
-    const ach = achievementLookup.get(r.achievement_id)
-    if (!ach) return []
-    return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, xp: ach.xp, unlocked_at: r.unlocked_at }]
-  })
 
   const friendProfileMap = new Map((friendProfiles ?? []).map(f => [
     f.id,
     { displayName: f.display_name ?? f.username, username: f.username, accentColour: f.accent_colour ?? null },
   ]))
-
-  const friendActivityItems = buildActivityItems(
-    friendGames ?? [],
-    friendSpins ?? [],
-    friendProfileMap,
-    friendTicketsByGame,
-    user!.id,
-    friendAchievementUnlocks,
-  )
 
   const friendCountsByUser = (friendGameCounts ?? []).reduce<Record<string, { completed: number; playing: number }>>((acc, g) => {
     if (!acc[g.user_id]) acc[g.user_id] = { completed: 0, playing: 0 }
@@ -398,19 +315,16 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Recommendations + Friends Activity */}
-      {(recommendations.length > 0 || friendActivityItems.length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-          {recommendations.length > 0 && (
-            <div className="flex flex-col min-h-0">
-              <RecommendationsCarousel games={recommendations} />
-            </div>
-          )}
-          {friendActivityItems.length > 0 && (
-            <FriendActivityFeed items={friendActivityItems.slice(0, 6)} />
-          )}
-        </div>
-      )}
+      {/* Recommendations + Friends Activity — streamed */}
+      <Suspense fallback={<FriendsActivitySkeleton />}>
+        <FriendsActivitySection
+          userId={user!.id}
+          friendIds={friendIds}
+          myTitles={myTitles}
+          genreCounts={genreCounts}
+          friendProfileMap={friendProfileMap}
+        />
+      </Suspense>
 
       {/* Charts */}
       <GamesPerYearChart data={gamesPerYear} />
@@ -464,24 +378,6 @@ function colorGradient(pct: number): string {
   if (pct >= 50)   return 'bg-gradient-to-r from-amber-400 to-orange-400'
   if (pct >= 20)   return 'bg-gradient-to-r from-orange-400 to-red-400'
   return                  'bg-gradient-to-r from-red-500 to-rose-600'
-}
-
-function weekSeed(): number {
-  const now = new Date()
-  const startOfYear = new Date(now.getFullYear(), 0, 1)
-  const week = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7)
-  return now.getFullYear() * 53 + week
-}
-
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const result = [...arr]
-  let s = seed
-  for (let i = result.length - 1; i > 0; i--) {
-    s = Math.imul(1664525, s) + 1013904223 | 0
-    const j = (s >>> 0) % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]]
-  }
-  return result
 }
 
 function formatTurn(turn: string): string {
