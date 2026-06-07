@@ -937,7 +937,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
               type="text"
               value={chooseInput}
               onChange={e => setChooseInput(e.target.value)}
-              placeholder="Search RAWG or type any title…"
+              placeholder="Search for a game…"
               className="w-full border border-edge-input rounded-lg px-3 py-2 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
               onKeyDown={e => e.key === 'Enter' && handleChooseGame()}
             />

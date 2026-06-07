@@ -19,7 +19,7 @@ export default async function GamesPage({
   const { data: { user } } = await supabase.auth.getUser()
 
   const status = searchParams.status === 'all' ? undefined : searchParams.status
-  const sort = searchParams.sort ?? 'completion_date'
+  const sort = searchParams.sort ?? (status === 'backlog' ? 'created_at' : 'completion_date')
   const sortAsc = sort === 'title'
   const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
   const q = searchParams.q?.trim()

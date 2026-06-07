@@ -25,7 +25,11 @@ export default function GameFilters() {
   const searchParams = useSearchParams()
 
   const activeStatus = searchParams.get('status') ?? 'all'
-  const activeSort = searchParams.get('sort') ?? 'completion_date'
+  const defaultSort = activeStatus === 'backlog' ? 'created_at' : 'completion_date'
+  const activeSort = searchParams.get('sort') ?? defaultSort
+  const visibleSortOptions = activeStatus === 'backlog'
+    ? SORT_OPTIONS.filter(o => o.value !== 'completion_date')
+    : SORT_OPTIONS
   const [activeView, setActiveView] = useState<'grid' | 'table'>(
     (searchParams.get('view') as 'grid' | 'table') ?? 'grid'
   )
@@ -71,6 +75,10 @@ export default function GameFilters() {
     if (key === 'view') {
       setActiveView(value as 'grid' | 'table')
       document.cookie = `gameView=${value}; path=/; max-age=31536000; SameSite=Lax`
+    }
+    // Reset sort when switching to Backlog if current sort is completion_date
+    if (key === 'status' && value === 'backlog' && params.get('sort') === 'completion_date') {
+      params.set('sort', 'created_at')
     }
     router.push(`${pathname}?${params.toString()}`)
   }
@@ -136,7 +144,7 @@ export default function GameFilters() {
           onChange={e => update('sort', e.target.value)}
           className="border border-edge-base rounded-lg px-2 py-1.5 text-sm text-fg-secondary bg-surface-base focus:outline-none focus:ring-2 focus:ring-brand-500"
         >
-          {SORT_OPTIONS.map(o => (
+          {visibleSortOptions.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>

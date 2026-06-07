@@ -39,7 +39,7 @@ export default async function UserProfilePage({
   const isOwner = user?.id === profile.id
 
   const status = searchParams.status === 'all' ? undefined : searchParams.status
-  const sort = searchParams.sort ?? 'completion_date'
+  const sort = searchParams.sort ?? (status === 'backlog' ? 'created_at' : 'completion_date')
   const sortAsc = sort === 'title'
 
   let gamesQuery = supabase
