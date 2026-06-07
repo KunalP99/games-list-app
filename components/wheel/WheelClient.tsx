@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useCallback, useEffect } from 'react'
+import { useState, useTransition, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import WheelAnimation, { WheelStatic } from './WheelAnimation'
 import {
@@ -14,10 +14,12 @@ import {
   performReroll,
   finalizeSpinReroll,
   chooseGame,
+  chooseGameWithRawg,
   skipChooseTurn,
 } from '@/app/(app)/wheel/actions'
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_TURN_LABELS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import type { WheelTurn } from '@/lib/types'
+import type { RawgSearchResult } from '@/lib/rawg'
 
 type Phase =
   | 'setup'
@@ -64,6 +66,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const [rawGames, setRawGames] = useState('')
   const [mode, setMode] = useState<'elimination' | 'first_land'>('elimination')
   const [chooseInput, setChooseInput] = useState('')
+  const [chooseSearchResults, setChooseSearchResults] = useState<RawgSearchResult[]>([])
+  const [chooseSelectedRawg, setChooseSelectedRawg] = useState<RawgSearchResult | null>(null)
+  const [chooseSearching, setChooseSearching] = useState(false)
+  const chooseSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [error, setError] = useState('')
   const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
 
@@ -73,6 +79,38 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const [spentThisTurn, setSpentThisTurn] = useState(0)
 
   useEffect(() => { setLocalBalance(balance) }, [balance])
+
+  // Debounced RAWG search for the CHOOSE turn input
+  useEffect(() => {
+    const q = chooseInput.trim()
+    if (chooseSelectedRawg && q === chooseSelectedRawg.name) {
+      setChooseSearchResults([])
+      return
+    }
+    if (chooseSelectedRawg && q !== chooseSelectedRawg.name) {
+      setChooseSelectedRawg(null)
+    }
+    if (q.length < 2) {
+      setChooseSearchResults([])
+      return
+    }
+    if (chooseSearchDebounce.current) clearTimeout(chooseSearchDebounce.current)
+    chooseSearchDebounce.current = setTimeout(async () => {
+      setChooseSearching(true)
+      try {
+        const res = await fetch(`/api/rawg/search?q=${encodeURIComponent(q)}`)
+        const data = await res.json()
+        setChooseSearchResults(Array.isArray(data?.results) ? data.results : [])
+      } catch {
+        setChooseSearchResults([])
+      } finally {
+        setChooseSearching(false)
+      }
+    }, 300)
+    return () => {
+      if (chooseSearchDebounce.current) clearTimeout(chooseSearchDebounce.current)
+    }
+  }, [chooseInput, chooseSelectedRawg])
 
   // Animation state
   const [animTarget, setAnimTarget] = useState('')
@@ -412,9 +450,16 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     if (!chooseInput.trim()) return
     setError('')
     startTransition(async () => {
-      const res = await chooseGame(chooseInput.trim())
+      const res = chooseSelectedRawg
+        ? await chooseGameWithRawg({
+            id: chooseSelectedRawg.id,
+            name: chooseSelectedRawg.name,
+            released: chooseSelectedRawg.released,
+            background_image: chooseSelectedRawg.background_image,
+          })
+        : await chooseGame(chooseInput.trim())
       if (res && 'error' in res) { setError(res.error as string); return }
-      setFinalChosen(chooseInput.trim())
+      setFinalChosen(chooseSelectedRawg?.name ?? chooseInput.trim())
       setPhase('done')
     })
   }
@@ -887,14 +932,56 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             <p className="text-base font-semibold text-fg-base">Choose your next game</p>
             <p className="text-sm text-fg-muted mt-0.5">Pick any game you want to play</p>
           </div>
-          <input
-            type="text"
-            value={chooseInput}
-            onChange={e => setChooseInput(e.target.value)}
-            placeholder="Game title…"
-            className="w-full border border-edge-input rounded-lg px-3 py-2 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
-            onKeyDown={e => e.key === 'Enter' && handleChooseGame()}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={chooseInput}
+              onChange={e => setChooseInput(e.target.value)}
+              placeholder="Search RAWG or type any title…"
+              className="w-full border border-edge-input rounded-lg px-3 py-2 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
+              onKeyDown={e => e.key === 'Enter' && handleChooseGame()}
+            />
+            {chooseSearchResults.length > 0 && (
+              <div className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg">
+                {chooseSearchResults.map(result => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    onClick={() => {
+                      setChooseInput(result.name)
+                      setChooseSelectedRawg(result)
+                      setChooseSearchResults([])
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors border-b border-edge-subtle last:border-b-0"
+                  >
+                    {result.background_image ? (
+                      <img
+                        src={result.background_image}
+                        alt=""
+                        className="w-10 h-10 rounded object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-surface-sunken flex-shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
+                      {result.released && (
+                        <p className="text-xs text-fg-muted">{result.released.slice(0, 4)}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {chooseSearching && (
+            <p className="text-xs text-fg-muted">Searching RAWG…</p>
+          )}
+          {chooseSelectedRawg && (
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              ✓ {chooseSelectedRawg.name} will be added to your library as Playing
+            </p>
+          )}
           {error && <p className="text-xs text-red-600">{error}</p>}
           <button
             onClick={handleChooseGame}

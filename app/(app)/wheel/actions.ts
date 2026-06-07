@@ -255,6 +255,67 @@ export async function finalizeSpinReroll(
 
 // ─── CHOOSE turn ─────────────────────────────────────────────────────────────
 
+export async function chooseGameWithRawg(rawgGame: {
+  id: number
+  name: string
+  released: string | null
+  background_image: string | null
+}) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const profile = await getProfile(supabase, user.id)
+  if (!profile) return { error: 'Profile not found' }
+  if (profile.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
+
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: existing } = await (supabase.from('games') as any)
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('rawg_id', rawgGame.id)
+    .maybeSingle() as { data: { id: string } | null }
+
+  if (existing) {
+    await (supabase.from('games') as any)
+      .update({ status: 'playing', start_date: today })
+      .eq('id', existing.id)
+      .eq('user_id', user.id)
+  } else {
+    const { getRawgGameDetail } = await import('@/lib/rawg')
+    const detail = await getRawgGameDetail(rawgGame.id)
+
+    await (supabase.from('games') as any).insert({
+      user_id: user.id,
+      title: rawgGame.name,
+      release_date: rawgGame.released,
+      release_date_precision: 'full',
+      status: 'playing',
+      start_date: today,
+      image_url: rawgGame.background_image,
+      rawg_id: rawgGame.id,
+      description: detail?.description_raw ?? null,
+      genres: detail?.genres?.map(g => g.name) ?? null,
+      dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
+    })
+  }
+
+  await (supabase.from('wheel_spins') as any).insert({
+    user_id: user.id,
+    spin_type: 'choose',
+    result_name: rawgGame.name,
+  })
+
+  await advanceTurn(supabase, user.id, 'choose')
+  await checkAndAwardAchievements(supabase, user.id)
+  revalidatePath('/wheel')
+  revalidatePath('/games')
+  revalidatePath('/dashboard')
+  revalidatePath('/achievements')
+  return { success: true }
+}
+
 export async function chooseGame(gameName: string) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()

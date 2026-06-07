@@ -26,9 +26,11 @@ export default async function GamesPage({
 
   const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
 
+  const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at, image_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date'
+
   let gamesQuery = supabase
     .from('games')
-    .select('*')
+    .select(GAME_LIST_COLS)
     .eq('user_id', user!.id)
     .neq('status', 'playing')
     .order(sort === 'status' ? 'created_at' : sort, { ascending: !sortDesc, nullsFirst: false })
@@ -40,7 +42,7 @@ export default async function GamesPage({
   const [playingGamesRes, gamesRes] = await Promise.all([
     supabase
       .from('games')
-      .select('*')
+      .select(GAME_LIST_COLS)
       .eq('user_id', user!.id)
       .eq('status', 'playing')
       .order('created_at', { ascending: false }),
