@@ -9,7 +9,7 @@ const REASON_BADGE: Record<string, { label: string; className: string }> = {
   game_completed_long:      { label: 'CL',    className: 'bg-brand-300 text-brand-900 border border-brand-400' },
   game_completed_bonus_hours: { label: '+h',  className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
   achievement_100_percent:  { label: '100%',   className: 'bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 text-white border-0 shadow-md shadow-teal-500/50 ring-1 ring-white/25' },
-  sequel_back_to_back:      { label: 'SQ',    className: 'bg-blue-50 text-blue-700 border border-blue-200' },
+  sequel_back_to_back:      { label: 'SQ',    className: 'bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-900/40 dark:text-violet-300 dark:border-violet-700' },
   series_back_to_back:      { label: 'SE',    className: 'bg-blue-100 text-blue-800 border border-blue-200' },
   turn_skipped:             { label: 'SKIP',  className: 'bg-amber-50 text-amber-700 border border-amber-200' },
   objective_completed:      { label: 'OBJ',   className: 'bg-violet-50 text-violet-700 border border-violet-200' },
@@ -243,10 +243,9 @@ export default async function TicketsPage({
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
                         <div className="flex flex-wrap gap-1">
-                          {reasonsFromNote(
-                            group.transactions[0]?.note ?? null,
-                            group.transactions[0]?.reason ?? '',
-                          ).map((reason, i) => (
+                          {Array.from(new Set(
+                            group.transactions.flatMap(tx => reasonsFromNote(tx.note, tx.reason))
+                          )).map((reason, i) => (
                             <ReasonBadge key={i} reason={reason} amount={group.totalAmount} />
                           ))}
                         </div>
