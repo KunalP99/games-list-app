@@ -37,7 +37,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
       .limit(40),
     supabase
       .from('wheel_spins')
-      .select('id, user_id, result_name, created_at')
+      .select('id, user_id, spin_type, result_name, created_at')
       .in('user_id', friendIds)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -50,7 +50,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
 
   const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] | null
   const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
-  const friendSpins = friendSpinsRes.data as { id: string; user_id: string; result_name: string | null; created_at: string }[] | null
+  const friendSpins = friendSpinsRes.data as { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null
   const rawFriendUnlocks = rawFriendUnlocksRes.data as { user_id: string; achievement_id: string; unlocked_at: string }[] | null
 
   // Wave B — needs friendGames to compute the IDs

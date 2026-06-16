@@ -34,10 +34,10 @@ export default async function ActivityPage() {
 
   const { data: allSpins } = await supabase
     .from('wheel_spins')
-    .select('id, user_id, result_name, created_at')
+    .select('id, user_id, spin_type, result_name, created_at')
     .in('user_id', allUserIds)
     .order('created_at', { ascending: false })
-    .limit(30) as { data: { id: string; user_id: string; result_name: string | null; created_at: string }[] | null }
+    .limit(30) as { data: { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null }
 
   const { data: rawUnlocks } = await (supabase.from('user_achievements') as any)
     .select('user_id, achievement_id, unlocked_at')
@@ -96,8 +96,8 @@ export default async function ActivityPage() {
                   {getInitials(item.displayName)}
                 </div>
 
-                {/* Game thumbnail (not for wheel spins or achievement unlocks) */}
-                {item.gameImageUrl && item.type !== 'wheel_spin' && item.type !== 'achievement_unlock' && (
+                {/* Game thumbnail (not for wheel spins, choose skips, or achievement unlocks) */}
+                {item.gameImageUrl && item.type !== 'wheel_spin' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
                   <img
                     src={item.gameImageUrl}
                     alt={item.gameTitle}
@@ -113,7 +113,7 @@ export default async function ActivityPage() {
                     </span>
                     {' '}
                     <span className="text-fg-muted">{activityVerb(item)}</span>
-                    {item.gameTitle && item.type !== 'wheel_spin' && (
+                    {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'choose_skip' && (
                       <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                     )}
                     {item.achievementName && (

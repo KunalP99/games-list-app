@@ -1,5 +1,5 @@
 export type ActivityItem = {
-  type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'achievement_unlock'
+  type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'choose_skip' | 'achievement_unlock'
   userId: string
   displayName: string
   username: string
@@ -33,6 +33,7 @@ type RawGame = {
 type RawWheelSpin = {
   id: string
   user_id: string
+  spin_type: string
   result_name: string | null
   created_at: string
 }
@@ -109,7 +110,7 @@ export function buildActivityItems(
     const profile = profiles.get(spin.user_id)
     if (!profile) continue
     items.push({
-      type: 'wheel_spin',
+      type: spin.spin_type === 'choose_skip' ? 'choose_skip' : 'wheel_spin',
       userId: spin.user_id,
       displayName: profile.displayName,
       username: profile.username,
@@ -148,6 +149,7 @@ export function activityVerb(item: ActivityItem): string {
     case 'backlog':            return 'added to backlog'
     case 'playing':            return 'started playing'
     case 'wheel_spin':         return item.wheelResult ? `spun the wheel → ${item.wheelResult}` : 'spun the wheel'
+    case 'choose_skip':        return 'skipped a choose game turn'
     case 'achievement_unlock': return 'unlocked'
   }
 }

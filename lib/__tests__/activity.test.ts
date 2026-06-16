@@ -214,7 +214,7 @@ describe('buildActivityItems', () => {
   })
 
   it('maps wheel spins correctly', () => {
-    const spin = { id: 'spin-1', user_id: 'user-1', result_name: 'Celeste', created_at: '2024-03-20T10:00:00Z' }
+    const spin = { id: 'spin-1', user_id: 'user-1', spin_type: 'spin', result_name: 'Celeste', created_at: '2024-03-20T10:00:00Z' }
     const items = buildActivityItems([], [spin], profiles, {}, 'user-2')
     expect(items[0].type).toBe('wheel_spin')
     expect(items[0].wheelResult).toBe('Celeste')
@@ -222,13 +222,13 @@ describe('buildActivityItems', () => {
   })
 
   it('sets wheelResult to undefined when result_name is null', () => {
-    const spin = { id: 'spin-1', user_id: 'user-1', result_name: null, created_at: '2024-03-20T10:00:00Z' }
+    const spin = { id: 'spin-1', user_id: 'user-1', spin_type: 'spin', result_name: null, created_at: '2024-03-20T10:00:00Z' }
     const items = buildActivityItems([], [spin], profiles, {}, 'user-2')
     expect(items[0].wheelResult).toBeUndefined()
   })
 
   it('skips wheel spins whose user_id has no matching profile', () => {
-    const spin = { id: 'spin-1', user_id: 'unknown', result_name: 'Game', created_at: '2024-03-20T10:00:00Z' }
+    const spin = { id: 'spin-1', user_id: 'unknown', spin_type: 'spin', result_name: 'Game', created_at: '2024-03-20T10:00:00Z' }
     const items = buildActivityItems([], [spin], profiles, {}, 'user-2')
     expect(items).toHaveLength(0)
   })
@@ -274,7 +274,7 @@ describe('buildActivityItems', () => {
 
   it('merges games, spins, and achievement unlocks in chronological order', () => {
     const game = { ...baseGame, status: 'playing', created_at: '2024-02-01T00:00:00Z', updated_at: '2024-02-01T00:00:00Z' }
-    const spin = { id: 'spin-1', user_id: 'user-1', result_name: 'Game', created_at: '2024-03-01T00:00:00Z' }
+    const spin = { id: 'spin-1', user_id: 'user-1', spin_type: 'spin', result_name: 'Game', created_at: '2024-03-01T00:00:00Z' }
     const unlock: RawAchievementUnlock = {
       user_id: 'user-1', achievement_id: 'x', achievement_name: 'X', achievement_icon: '🏆', xp: 100, unlocked_at: '2024-01-01T00:00:00Z',
     }
