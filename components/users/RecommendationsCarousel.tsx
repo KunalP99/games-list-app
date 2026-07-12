@@ -13,6 +13,8 @@ type Recommendation = {
   rating: number | null
   image_url: string | null
   developer: string | null
+  rawg_id: number | null
+  release_date: string | null
   recommendedBy: string
 }
 
@@ -39,9 +41,12 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
     <div className="flex-1 min-h-0 relative">
       <div ref={emblaRef} className="overflow-hidden rounded-xl h-full">
         <div className="flex h-full">
-          {games.map((game, i) => (
+          {games.map((game) => (
             <Link
-              key={i}
+              // Keyed by game id, not index: after an add the dashboard
+              // revalidates and the added game drops out of the list, so an
+              // index key would hand its "Added" state to a different game.
+              key={game.id}
               href={`/games/${game.id}`}
               className="flex-[0_0_100%] min-w-0 relative block"
             >

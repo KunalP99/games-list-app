@@ -230,6 +230,8 @@ export type Database = {
           option_b_name: string | null
           games_list: string[] | null
           tickets_spent: number | null
+          finalized_via: 'accept' | 'spin_again' | 'reroll_choice' | 'upgrade_choice' | 'choose_any' | 'choose' | 'skip' | null
+          ticket_spends: { action: string; amount: number }[] | null
           created_at: string
         }
         Insert: {
@@ -242,6 +244,8 @@ export type Database = {
           option_b_name?: string | null
           games_list?: string[] | null
           tickets_spent?: number | null
+          finalized_via?: 'accept' | 'spin_again' | 'reroll_choice' | 'upgrade_choice' | 'choose_any' | 'choose' | 'skip' | null
+          ticket_spends?: { action: string; amount: number }[] | null
           created_at?: string
         }
         Update: {
@@ -254,6 +258,8 @@ export type Database = {
           option_b_name?: string | null
           games_list?: string[] | null
           tickets_spent?: number | null
+          finalized_via?: 'accept' | 'spin_again' | 'reroll_choice' | 'upgrade_choice' | 'choose_any' | 'choose' | 'skip' | null
+          ticket_spends?: { action: string; amount: number }[] | null
           created_at?: string
         }
         Relationships: []

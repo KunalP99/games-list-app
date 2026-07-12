@@ -26,7 +26,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
   ] = await Promise.all([
     supabase
       .from('games')
-      .select('id, title, genres, rating, image_url, developer, user_id')
+      .select('id, title, genres, rating, image_url, developer, user_id, rawg_id, release_date')
       .in('user_id', friendIds)
       .eq('status', 'completed'),
     supabase
@@ -48,7 +48,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
       .limit(20),
   ])
 
-  const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string }[] | null
+  const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string; rawg_id: number | null; release_date: string | null }[] | null
   const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
   const friendSpins = friendSpinsRes.data as { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null
   const rawFriendUnlocks = rawFriendUnlocksRes.data as { user_id: string; achievement_id: string; unlocked_at: string }[] | null

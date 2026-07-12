@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { SPIN_TYPE_BADGE, SPIN_TYPE_LABEL, inferCost, spinModeLabel, type SpinType, type SpinMode } from '@/lib/wheel-history'
+import { SPIN_TYPE_BADGE, SPIN_TYPE_LABEL, spinModeLabel, rerollRunnerUp, summariseSpends, type SpinType, type SpinMode, type FinalizedVia, type TicketSpend } from '@/lib/wheel-history'
 import { TICKET_AWARDS } from '@/lib/constants'
 import { getInitials } from '@/lib/activity'
 
@@ -16,6 +16,8 @@ type RawSpin = {
   option_b_name: string | null
   games_list: string[] | null
   tickets_spent: number | null
+  finalized_via: FinalizedVia | null
+  ticket_spends: TicketSpend[] | null
   created_at: string
   profiles: {
     id: string
@@ -75,11 +77,12 @@ export default async function WheelHistoryPage({
               const initials = getInitials(spin.profiles?.display_name ?? spin.profiles?.username ?? '?')
               const badge = SPIN_TYPE_BADGE[spin.spin_type]
               const label = SPIN_TYPE_LABEL[spin.spin_type]
-              const cost = inferCost(spin.spin_type, spin.tickets_spent)
+              const spendRows = summariseSpends(spin.ticket_spends, spin.finalized_via, spin.tickets_spent)
               const modeLabel = spinModeLabel(spin.spin_mode)
               const otherGames = spin.games_list
                 ? spin.games_list.filter(g => g.toLowerCase() !== (spin.result_name ?? '').toLowerCase())
                 : [spin.option_a_name, spin.option_b_name].filter(Boolean) as string[]
+              const runnerUp = rerollRunnerUp(spin.spin_type, spin.finalized_via, spin.option_a_name, spin.option_b_name, spin.result_name)
 
               return (
                 <div
@@ -133,9 +136,21 @@ export default async function WheelHistoryPage({
                           </svg>
                           Choose turn skipped
                         </p>
-                        <span className="text-[11px] font-semibold text-fg-muted">+{TICKET_AWARDS.turn_skipped} 🎟️</span>
+                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">+{TICKET_AWARDS.turn_skipped} 🎟️</span>
                       </div>
                     )}
+                    {/* One row per paid action — same treatment as the skip note */}
+                    {spendRows.map((row, i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <p className="text-[11px] text-fg-muted font-medium flex items-center gap-1">
+                          <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 11.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5zm.75-3.5a.75.75 0 0 1-1.5 0v-4a.75.75 0 0 1 1.5 0v4z"/>
+                          </svg>
+                          {row.note}{row.count > 1 ? ` (×${row.count})` : ''}
+                        </p>
+                        <span className="text-[11px] font-semibold text-red-500 dark:text-red-400">−{row.amount} 🎟️</span>
+                      </div>
+                    ))}
                     {/* Result */}
                     <div>
                       <p className="text-[10px] font-semibold text-fg-subtle uppercase tracking-wider mb-1">Result</p>
@@ -153,27 +168,27 @@ export default async function WheelHistoryPage({
                           {spin.games_list ? 'Also on the wheel' : 'Also considered'}
                         </p>
                         <div className="flex flex-wrap gap-1.5">
-                          {otherGames.map((opt, i) => (
-                            <span
-                              key={i}
-                              className="text-xs text-fg-secondary bg-surface-active border border-edge-base rounded-lg px-2.5 py-1"
-                            >
-                              {opt}
-                            </span>
-                          ))}
+                          {otherGames.map((opt, i) => {
+                            const isRunnerUp = runnerUp != null && opt.toLowerCase() === runnerUp.toLowerCase()
+                            return (
+                              <span
+                                key={i}
+                                title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
+                                className={
+                                  isRunnerUp
+                                    ? 'text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-lg px-2.5 py-1 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
+                                    : 'text-xs text-fg-secondary bg-surface-active border border-edge-base rounded-lg px-2.5 py-1'
+                                }
+                              >
+                                {opt}
+                              </span>
+                            )
+                          })}
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Card footer — cost */}
-                  {cost && (
-                    <div className="px-4 py-2.5 border-t border-edge-subtle bg-surface-sunken">
-                      <span className={`text-xs font-semibold ${cost.startsWith('+') ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {cost}
-                      </span>
-                    </div>
-                  )}
                 </div>
               )
             })}

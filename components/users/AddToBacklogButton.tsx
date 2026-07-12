@@ -8,6 +8,8 @@ type Game = {
   developer: string | null
   image_url: string | null
   genres: string[] | null
+  rawg_id: number | null
+  release_date: string | null
 }
 
 export default function AddToBacklogButton({ game, variant = 'overlay' }: { game: Game; variant?: 'overlay' | 'outline' | 'glass' }) {
@@ -23,6 +25,8 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
       formData.set('developer', game.developer ?? '')
       formData.set('image_url', game.image_url ?? '')
       formData.set('genres', JSON.stringify(game.genres ?? []))
+      formData.set('rawg_id', game.rawg_id != null ? String(game.rawg_id) : '')
+      formData.set('release_date', game.release_date ?? '')
       const result = await addRecommendationToBacklog(formData)
       if (result.success) setAdded(true)
     })

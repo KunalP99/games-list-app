@@ -20,6 +20,7 @@ import {
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_TURN_LABELS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import type { WheelTurn } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
+import type { TicketSpend } from '@/lib/wheel-history'
 
 type Phase =
   | 'setup'
@@ -81,11 +82,17 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const builderSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [error, setError] = useState('')
   const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
+  // True once a paid Spin Again has happened this turn — the eventual Accept is
+  // then recorded as 'spin_again' rather than a plain 'accept' in wheel history.
+  const [paidRespin, setPaidRespin] = useState(false)
 
   // Optimistic balance — updated immediately on spend, synced from server after revalidation
   const [localBalance, setLocalBalance] = useState(balance)
   const [ticketFlash, setTicketFlash] = useState<{ amount: number; id: number } | null>(null)
   const [spentThisTurn, setSpentThisTurn] = useState(0)
+  // Every paid action this turn, in order — a turn can stack several (e.g. Spin
+  // Again then Choose a Game). Recorded so history shows the full breakdown.
+  const [spends, setSpends] = useState<TicketSpend[]>([])
 
   useEffect(() => { setLocalBalance(balance) }, [balance])
 
@@ -186,10 +193,11 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  function spendTickets(amount: number) {
+  function spendTickets(amount: number, action: TicketSpend['action']) {
     setLocalBalance(prev => prev - amount)
     setTicketFlash(prev => ({ amount, id: (prev?.id ?? 0) + 1 }))
     setSpentThisTurn(prev => prev + amount)
+    setSpends(prev => [...prev, { action, amount }])
   }
 
   function startAnimation(
@@ -219,6 +227,8 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleSpin() {
     setError('')
+    setPaidRespin(false)
+    setSpends([])
     startTransition(async () => {
       const res = await performSpin(uniqueGames, mode)
       if ('error' in res) { setError(res.error ?? ''); return }
@@ -265,7 +275,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleAccept() {
     startTransition(async () => {
-      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner))
+      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner), paidRespin ? 'spin_again' : 'accept', spends)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(winner)
       setPhase('done')
@@ -276,7 +286,8 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handlePaySpinAgain() {
     setError('')
-    spendTickets(TICKET_COSTS.spin)
+    setPaidRespin(true)
+    spendTickets(TICKET_COSTS.spin, 'spin_again')
     startTransition(async () => {
       const res = await paySpinAgain(uniqueGames)
       if ('error' in res) { setError(res.error ?? ''); return }
@@ -332,7 +343,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handlePayUpgradeToReroll(existingGames: string[], maxGames: number) {
     setError('')
-    spendTickets(TICKET_COSTS.spin_reroll)
+    spendTickets(TICKET_COSTS.spin_reroll, 'upgrade_choice')
     startTransition(async () => {
       const res = await payUpgradeToSpinReroll(uniqueGames, existingGames)
       if ('error' in res) { setError(res.error ?? ''); return }
@@ -436,7 +447,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleFinalUpgradeChoice(chosen: string) {
     startTransition(async () => {
-      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn, wonGameFor(chosen))
+      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn, wonGameFor(chosen), spends)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chosen)
       setPhase('done')
@@ -447,7 +458,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handlePayChooseAny() {
     if (!chooseInput.trim()) return
-    spendTickets(TICKET_COSTS.choose_game)
+    spendTickets(TICKET_COSTS.choose_game, 'choose_any')
     const wonGame = chooseSelectedRawg
       ? {
           id: chooseSelectedRawg.id,
@@ -456,8 +467,11 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
           background_image: chooseSelectedRawg.background_image,
         }
       : null
+    // spendTickets' state update isn't visible in this closure, so append the
+    // choose spend explicitly — earlier spends (e.g. Spin Again) are already in.
+    const allSpends: TicketSpend[] = [...spends, { action: 'choose_any', amount: TICKET_COSTS.choose_game }]
     startTransition(async () => {
-      const res = await payChooseAnyGame(chooseInput.trim(), uniqueGames, spentThisTurn, wonGame)
+      const res = await payChooseAnyGame(chooseInput.trim(), mode, uniqueGames, spentThisTurn, wonGame, allSpends)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chooseSelectedRawg?.name ?? chooseInput.trim())
       setPhase('done')
@@ -472,7 +486,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleKeep() {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner))
+      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner), spends)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(winner)
       setPhase('done')
@@ -494,7 +508,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleFinalChoice(chosen: string) {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn, wonGameFor(chosen))
+      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn, wonGameFor(chosen), spends)
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chosen)
       setPhase('done')
@@ -546,6 +560,8 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     setEliminated([])
     setError('')
     setSpentThisTurn(0)
+    setPaidRespin(false)
+    setSpends([])
     router.refresh()
   }
 

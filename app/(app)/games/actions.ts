@@ -332,16 +332,39 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   const developer = formData.get('developer') as string | null
   const image_url = formData.get('image_url') as string | null
   const genres = JSON.parse((formData.get('genres') as string) || '[]')
+  const rawgIdRaw = formData.get('rawg_id')
+  const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
+  let releaseDate = (formData.get('release_date') as string) || null
+
+  // Enrich from RAWG when the recommended game carries a rawg_id — keeps the
+  // backlog row consistent with games added via the form/wheel (description,
+  // colour, precise release date) and lets the wheel show cover art + auto-add
+  // the game to the library on a win (matched by rawg_id).
+  let description: string | null = null
+  let dominantColor: string | null = null
+  let finalGenres: string[] = genres || []
+  if (rawgId) {
+    const { getRawgGameDetail } = await import('@/lib/rawg')
+    const detail = await getRawgGameDetail(rawgId)
+    description = detail?.description_raw ?? null
+    dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
+    if (detail?.genres?.length) finalGenres = detail.genres.map(g => g.name)
+    releaseDate = detail?.released ?? releaseDate
+  }
 
   const { error } = await supabase.from('games').insert({
     user_id: user.id,
     title,
     developer: developer || null,
     image_url: image_url || null,
-    genres: genres || [],
+    genres: finalGenres,
     status: 'backlog',
-    release_date_precision: 'year',
+    rawg_id: rawgId,
+    release_date: releaseDate,
+    release_date_precision: releaseDate ? 'full' : 'year',
     completion_date_precision: 'year',
+    description,
+    dominant_color: dominantColor,
   })
 
   if (error) return { success: false, error: error.message }

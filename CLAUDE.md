@@ -189,6 +189,21 @@ CREATE TABLE IF NOT EXISTS public.wheel_spins (
 );
 ALTER TABLE public.wheel_spins ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users manage own wheel spins" ON public.wheel_spins USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Later additions (run if missing):
+ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS games_list TEXT[];
+ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS tickets_spent INTEGER;
+-- Records how a turn was actually finalized (accurate history label even when a
+-- paid action overrode the turn's normal flow). Nullable — old rows fall back to
+-- the turn-based label.
+ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS finalized_via TEXT
+  CHECK (finalized_via IN ('accept','spin_again','reroll_choice','upgrade_choice','choose_any','choose','skip'));
+-- Ordered list of every paid action in the turn, e.g.
+-- [{"action":"spin_again","amount":3},{"action":"choose_any","amount":9}].
+-- A turn can stack several paid actions; tickets_spent holds only the total, so
+-- this is what lets history show the full breakdown. Nullable — old rows fall
+-- back to a single aggregate row.
+ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS ticket_spends JSONB;
 ```
 
 ---

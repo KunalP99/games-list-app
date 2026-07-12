@@ -42,6 +42,12 @@ async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, us
 
 type WonGame = { id: number; name: string; released: string | null; background_image: string | null }
 
+// Every paid action taken during the turn, in order (e.g. Spin Again then
+// Choose a Game), so history can show the full spend breakdown rather than a
+// single aggregate total.
+type TicketSpend = { action: string; amount: number }
+const spendsOrNull = (spends?: TicketSpend[] | null) => (spends && spends.length > 0 ? spends : null)
+
 async function addWonGameToLibrary(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -121,7 +127,7 @@ export async function performSpin(games: string[], mode: 'elimination' | 'first_
 
 // ─── SPIN turn — free accept ─────────────────────────────────────────────────
 
-export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land', gamesList: string[], ticketsSpent: number, wonGame?: WonGame | null) {
+export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land', gamesList: string[], ticketsSpent: number, wonGame?: WonGame | null, finalizedVia: 'accept' | 'spin_again' = 'accept', spends?: TicketSpend[]) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -139,6 +145,8 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
     result_name: resultName,
     games_list: gamesList,
     tickets_spent: ticketsSpent > 0 ? ticketsSpent : null,
+    finalized_via: finalizedVia,
+    ticket_spends: spendsOrNull(spends),
   })
   await advanceTurn(supabase, user.id, turn)
   await checkAndAwardAchievements(supabase, user.id)
@@ -220,6 +228,7 @@ export async function finalizeUpgradeChoice(
   gamesList: string[],
   ticketsSpent: number,
   wonGame?: WonGame | null,
+  spends?: TicketSpend[],
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -240,6 +249,8 @@ export async function finalizeUpgradeChoice(
     result_name: chosen,
     games_list: gamesList,
     tickets_spent: ticketsSpent > 0 ? ticketsSpent : null,
+    finalized_via: 'upgrade_choice',
+    ticket_spends: spendsOrNull(spends),
   })
   await advanceTurn(supabase, user.id, turn)
   await checkAndAwardAchievements(supabase, user.id)
@@ -252,7 +263,7 @@ export async function finalizeUpgradeChoice(
 
 // ─── SPIN turn — paid: Choose Any Game (−9) ──────────────────────────────────
 
-export async function payChooseAnyGame(gameName: string, gamesList: string[], priorTicketsSpent: number, wonGame?: WonGame | null) {
+export async function payChooseAnyGame(gameName: string, mode: 'elimination' | 'first_land', gamesList: string[], priorTicketsSpent: number, wonGame?: WonGame | null, spends?: TicketSpend[]) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -277,10 +288,14 @@ export async function payChooseAnyGame(gameName: string, gamesList: string[], pr
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: turn,
-    spin_mode: null,
+    // The wheel was still spun this turn before paying to override the result,
+    // so keep the mode — a genuine CHOOSE turn (chooseGame) is what leaves it null.
+    spin_mode: mode,
     result_name: gameName.trim(),
     games_list: gamesList,
     tickets_spent: priorTicketsSpent + TICKET_COSTS.choose_game,
+    finalized_via: 'choose_any',
+    ticket_spends: spendsOrNull(spends),
   })
 
   await advanceTurn(supabase, user.id, turn)
@@ -314,6 +329,7 @@ export async function finalizeSpinReroll(
   gamesList: string[],
   ticketsSpent: number,
   wonGame?: WonGame | null,
+  spends?: TicketSpend[],
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -333,6 +349,8 @@ export async function finalizeSpinReroll(
     result_name: chosen,
     games_list: gamesList,
     tickets_spent: ticketsSpent > 0 ? ticketsSpent : null,
+    finalized_via: 'reroll_choice',
+    ticket_spends: spendsOrNull(spends),
   })
 
   await advanceTurn(supabase, user.id, 'spin_reroll')
@@ -366,6 +384,7 @@ export async function chooseGameWithRawg(rawgGame: {
     user_id: user.id,
     spin_type: 'choose',
     result_name: rawgGame.name,
+    finalized_via: 'choose',
   })
 
   await advanceTurn(supabase, user.id, 'choose')
@@ -391,6 +410,7 @@ export async function chooseGame(gameName: string) {
     user_id: user.id,
     spin_type: 'choose',
     result_name: gameName.trim(),
+    finalized_via: 'choose',
   })
 
   await advanceTurn(supabase, user.id, 'choose')
@@ -417,6 +437,7 @@ export async function skipChooseTurn() {
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: 'choose_skip',
+    finalized_via: 'skip',
   })
 
   await advanceTurn(supabase, user.id, 'choose')
