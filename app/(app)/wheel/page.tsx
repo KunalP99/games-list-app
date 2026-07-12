@@ -16,14 +16,20 @@ export default async function WheelPage() {
       .single(),
     supabase
       .from('games')
-      .select('id, title')
+      .select('id, title, rawg_id, image_url, release_date')
       .eq('user_id', user.id)
       .eq('status', 'backlog')
       .order('title', { ascending: true }),
   ])
 
   const profile = profileRes.data as { wheel_turn: WheelTurn; ticket_balance: number; accent_colour: string | null } | null
-  const backlogGames = backlogGamesRes.data as { id: string; title: string }[] | null
+  const backlogGames = backlogGamesRes.data as {
+    id: string
+    title: string
+    rawg_id: number | null
+    image_url: string | null
+    release_date: string | null
+  }[] | null
 
   if (!profile) redirect('/login')
 
@@ -37,7 +43,12 @@ export default async function WheelPage() {
         turn={profile.wheel_turn}
         balance={profile.ticket_balance}
         accentColour={profile.accent_colour ?? '#7c3aed'}
-        backlogGames={(backlogGames ?? []).map(g => g.title)}
+        backlogGames={(backlogGames ?? []).map(g => ({
+          name: g.title,
+          rawg: g.rawg_id
+            ? { id: g.rawg_id, name: g.title, released: g.release_date, background_image: g.image_url }
+            : null,
+        }))}
       />
     </div>
   )

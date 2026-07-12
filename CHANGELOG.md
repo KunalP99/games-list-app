@@ -7,6 +7,8 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- Wheel now builds its list from RAWG search — a search box with a live dropdown replaces the free-text games box; picking a result adds a real game (with cover art), and you can still press Enter to add a custom title for anything not on RAWG. Backlog games can be one-click added and carry their RAWG identity.
+- Wheel winners auto-add to your library as "Playing" — on the **spin**, **spin & reroll**, and **choose** turns, the game you end up with (including the paid "Choose a Game" option, now RAWG-searchable) is added to your library. A won game already in your **backlog** flips to Playing; a game you've already **Completed** starts a fresh entry flagged as a replay; games already Playing (or a replay in progress) or DNF are left untouched. Custom free-text entries still win but aren't added. This applies to both the wheel result and the Choose turn. Existing copies are matched by RAWG id, falling back to a case-insensitive title match so older/imported entries without a RAWG link are still recognised.
 - "What's New" popup — appears on authenticated pages after a new release for 7 days, backed by the `changelog_entries` table; includes a "Don't show again" checkbox that stores the dismissed entry's id in localStorage
 - "Date Started" field on the game form (shown for any non-backlog status); on the game detail page, completed games now show how many days it took to complete (start date → completion date)
 - Public/private toggle for notes on the game form — defaults to Public for new games; public notes are visible to everyone viewing the game, private notes only to the owner. Existing notes remain private by default.

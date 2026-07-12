@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextWheelTurn, pickWinner } from '../wheel'
+import { nextWheelTurn, pickWinner, decideWonGameAction } from '../wheel'
 
 describe('nextWheelTurn', () => {
   it('advances spin → spin_reroll', () => {
@@ -41,5 +41,82 @@ describe('pickWinner', () => {
       seen.add(pickWinner(games))
     }
     expect(seen.size).toBe(3)
+  })
+})
+
+describe('decideWonGameAction', () => {
+  it('inserts a plain (non-replay) entry when the game is not owned', () => {
+    expect(decideWonGameAction([])).toEqual({ action: 'insert', isReplay: false })
+  })
+
+  it('flips a backlog copy into playing', () => {
+    expect(decideWonGameAction([{ id: 'b1', status: 'backlog' }]))
+      .toEqual({ action: 'flip', gameId: 'b1' })
+  })
+
+  it('inserts a replay entry when the game is owned only as completed', () => {
+    expect(decideWonGameAction([{ id: 'c1', status: 'completed' }]))
+      .toEqual({ action: 'insert', isReplay: true })
+  })
+
+  it('inserts a replay entry when there are several completed copies', () => {
+    expect(decideWonGameAction([
+      { id: 'c1', status: 'completed' },
+      { id: 'c2', status: 'completed' },
+    ])).toEqual({ action: 'insert', isReplay: true })
+  })
+
+  it('is a no-op when the game is already playing (avoids duplicates)', () => {
+    expect(decideWonGameAction([{ id: 'p1', status: 'playing' }]))
+      .toEqual({ action: 'noop' })
+  })
+
+  it('is a no-op when a replay is in progress (completed + playing)', () => {
+    expect(decideWonGameAction([
+      { id: 'c1', status: 'completed' },
+      { id: 'p1', status: 'playing' },
+    ])).toEqual({ action: 'noop' })
+  })
+
+  it('leaves a dnf-only game untouched', () => {
+    expect(decideWonGameAction([{ id: 'd1', status: 'dnf' }]))
+      .toEqual({ action: 'noop' })
+  })
+
+  it('leaves a game untouched when owned only as dnf alongside... still dnf', () => {
+    expect(decideWonGameAction([
+      { id: 'd1', status: 'dnf' },
+      { id: 'd2', status: 'dnf' },
+    ])).toEqual({ action: 'noop' })
+  })
+
+  it('starts a replay when owned as completed + dnf (dnf does not block)', () => {
+    expect(decideWonGameAction([
+      { id: 'd1', status: 'dnf' },
+      { id: 'c1', status: 'completed' },
+    ])).toEqual({ action: 'insert', isReplay: true })
+  })
+
+  it('prefers flipping backlog over starting a completed replay', () => {
+    expect(decideWonGameAction([
+      { id: 'c1', status: 'completed' },
+      { id: 'b1', status: 'backlog' },
+    ])).toEqual({ action: 'flip', gameId: 'b1' })
+  })
+
+  it('playing takes precedence over an existing backlog copy', () => {
+    expect(decideWonGameAction([
+      { id: 'b1', status: 'backlog' },
+      { id: 'p1', status: 'playing' },
+    ])).toEqual({ action: 'noop' })
+  })
+
+  it('flips the specific backlog row id, not another status row', () => {
+    const result = decideWonGameAction([
+      { id: 'c1', status: 'completed' },
+      { id: 'b7', status: 'backlog' },
+      { id: 'd1', status: 'dnf' },
+    ])
+    expect(result).toEqual({ action: 'flip', gameId: 'b7' })
   })
 })

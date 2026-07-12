@@ -51,11 +51,15 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
+// A wheel entry carries the display name plus its RAWG identity (null for
+// free-text games not found in RAWG — those win but don't auto-add to library).
+export type WheelEntry = { name: string; rawg: RawgSearchResult | null }
+
 interface Props {
   turn: WheelTurn
   balance: number
   accentColour: string
-  backlogGames: string[]
+  backlogGames: WheelEntry[]
 }
 
 export default function WheelClient({ turn, balance, accentColour, backlogGames }: Props) {
@@ -63,13 +67,18 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const [isPending, startTransition] = useTransition()
 
   const [phase, setPhase] = useState<Phase>(turn === 'choose' ? 'choose_input' : 'setup')
-  const [rawGames, setRawGames] = useState('')
+  const [entries, setEntries] = useState<WheelEntry[]>([])
   const [mode, setMode] = useState<'elimination' | 'first_land'>('elimination')
   const [chooseInput, setChooseInput] = useState('')
   const [chooseSearchResults, setChooseSearchResults] = useState<RawgSearchResult[]>([])
   const [chooseSelectedRawg, setChooseSelectedRawg] = useState<RawgSearchResult | null>(null)
   const [chooseSearching, setChooseSearching] = useState(false)
   const chooseSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Builder search (setup phase) — independent of the choose-turn search
+  const [builderInput, setBuilderInput] = useState('')
+  const [builderResults, setBuilderResults] = useState<RawgSearchResult[]>([])
+  const [builderSearching, setBuilderSearching] = useState(false)
+  const builderSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [error, setError] = useState('')
   const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
 
@@ -112,6 +121,31 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     }
   }, [chooseInput, chooseSelectedRawg])
 
+  // Debounced RAWG search for the setup-phase wheel builder
+  useEffect(() => {
+    const q = builderInput.trim()
+    if (q.length < 2) {
+      setBuilderResults([])
+      return
+    }
+    if (builderSearchDebounce.current) clearTimeout(builderSearchDebounce.current)
+    builderSearchDebounce.current = setTimeout(async () => {
+      setBuilderSearching(true)
+      try {
+        const res = await fetch(`/api/rawg/search?q=${encodeURIComponent(q)}`)
+        const data = await res.json()
+        setBuilderResults(Array.isArray(data?.results) ? data.results : [])
+      } catch {
+        setBuilderResults([])
+      } finally {
+        setBuilderSearching(false)
+      }
+    }, 300)
+    return () => {
+      if (builderSearchDebounce.current) clearTimeout(builderSearchDebounce.current)
+    }
+  }, [builderInput])
+
   // Animation state
   const [animTarget, setAnimTarget] = useState('')
   const [currentAnimGames, setCurrentAnimGames] = useState<string[]>([])
@@ -128,12 +162,27 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const [finalChosen, setFinalChosen] = useState('')
   const [chooseAnyReturnPhase, setChooseAnyReturnPhase] = useState<Phase>('spin_result')
 
-  const gamesList = rawGames.split(/\r?\n/).map(g => g.trim()).filter(Boolean)
-  const uniqueGames = Array.from(new Set(gamesList.map(g => g.toLowerCase()))).map(
-    lower => gamesList.find(g => g.toLowerCase() === lower)!
-  )
-  const duplicateCount = gamesList.length - uniqueGames.length
+  // Entries are kept unique by name (dedup enforced in addEntry), so the wire
+  // format for actions/animation stays a plain string[] of names.
+  const uniqueGames = entries.map(e => e.name)
   const canSpin = uniqueGames.length >= WHEEL_MIN_GAMES
+
+  // Resolve a winning name back to its RAWG object to auto-add it to the library.
+  const rawgByName = new Map(entries.filter(e => e.rawg).map(e => [e.name, e.rawg!]))
+  function wonGameFor(name: string) {
+    const r = rawgByName.get(name)
+    return r ? { id: r.id, name: r.name, released: r.released, background_image: r.background_image } : null
+  }
+
+  function addEntry(entry: WheelEntry) {
+    setEntries(prev =>
+      prev.some(e => e.name.toLowerCase() === entry.name.toLowerCase()) ? prev : [...prev, entry]
+    )
+  }
+
+  function removeEntry(name: string) {
+    setEntries(prev => prev.filter(e => e.name.toLowerCase() !== name.toLowerCase()))
+  }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -216,7 +265,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleAccept() {
     startTransition(async () => {
-      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn)
+      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner))
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(winner)
       setPhase('done')
@@ -387,7 +436,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleFinalUpgradeChoice(chosen: string) {
     startTransition(async () => {
-      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn)
+      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn, wonGameFor(chosen))
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chosen)
       setPhase('done')
@@ -399,10 +448,18 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   function handlePayChooseAny() {
     if (!chooseInput.trim()) return
     spendTickets(TICKET_COSTS.choose_game)
+    const wonGame = chooseSelectedRawg
+      ? {
+          id: chooseSelectedRawg.id,
+          name: chooseSelectedRawg.name,
+          released: chooseSelectedRawg.released,
+          background_image: chooseSelectedRawg.background_image,
+        }
+      : null
     startTransition(async () => {
-      const res = await payChooseAnyGame(chooseInput.trim(), uniqueGames, spentThisTurn)
+      const res = await payChooseAnyGame(chooseInput.trim(), uniqueGames, spentThisTurn, wonGame)
       if (res && 'error' in res) { setError(res.error as string); return }
-      setFinalChosen(chooseInput.trim())
+      setFinalChosen(chooseSelectedRawg?.name ?? chooseInput.trim())
       setPhase('done')
     })
   }
@@ -415,7 +472,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleKeep() {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn)
+      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner))
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(winner)
       setPhase('done')
@@ -437,7 +494,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleFinalChoice(chosen: string) {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn)
+      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn, wonGameFor(chosen))
       if (res && 'error' in res) { setError(res.error as string); return }
       setFinalChosen(chosen)
       setPhase('done')
@@ -477,12 +534,15 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handleReset() {
     setPhase(turn === 'choose' ? 'choose_input' : 'setup')
-    setRawGames('')
+    setEntries([])
+    setBuilderInput('')
+    setBuilderResults([])
     setWinner('')
     setRerollWinner('')
     setUpgradeGames([])
     setFinalChosen('')
     setChooseInput('')
+    setChooseSelectedRawg(null)
     setEliminated([])
     setError('')
     setSpentThisTurn(0)
@@ -691,7 +751,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
             {/* Choose any game */}
             <button
-              onClick={() => { setChooseAnyReturnPhase('spin_result'); setPhase('spin_choose_any') }}
+              onClick={() => { setChooseInput(''); setChooseSelectedRawg(null); setChooseSearchResults([]); setChooseAnyReturnPhase('spin_result'); setPhase('spin_choose_any') }}
               disabled={isPending || localBalance < TICKET_COSTS.choose_game}
               className="flex items-center justify-between px-4 py-3 rounded-lg border border-edge-base hover:border-green-300 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:hover:border-green-700 dark:hover:bg-green-900/30"
             >
@@ -720,14 +780,54 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             <p className="text-base font-semibold text-fg-base">Choose your game</p>
             <p className="text-sm text-fg-muted mt-0.5">Costs {TICKET_COSTS.choose_game} 🎟️</p>
           </div>
-          <input
-            type="text"
-            value={chooseInput}
-            onChange={e => setChooseInput(e.target.value)}
-            placeholder="Game title…"
-            className="w-full border border-edge-input rounded-lg px-3 py-2 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
-            onKeyDown={e => e.key === 'Enter' && handlePayChooseAny()}
-          />
+          <div className="relative">
+            <input
+              type="text"
+              value={chooseInput}
+              onChange={e => setChooseInput(e.target.value)}
+              placeholder="Search for a game…"
+              className="w-full border border-edge-input rounded-lg px-3 py-2 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
+              onKeyDown={e => e.key === 'Enter' && handlePayChooseAny()}
+            />
+            {chooseSearchResults.length > 0 && (
+              <div className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg">
+                {chooseSearchResults.map(result => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    onClick={() => {
+                      setChooseInput(result.name)
+                      setChooseSelectedRawg(result)
+                      setChooseSearchResults([])
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors border-b border-edge-subtle last:border-b-0"
+                  >
+                    {result.background_image ? (
+                      <img
+                        src={result.background_image}
+                        alt=""
+                        className="w-10 h-10 rounded object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-surface-sunken flex-shrink-0" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
+                      {result.released && (
+                        <p className="text-xs text-fg-muted">{result.released.slice(0, 4)}</p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {chooseSearching && <p className="text-xs text-fg-muted">Searching RAWG…</p>}
+          {chooseSelectedRawg && (
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              ✓ {chooseSelectedRawg.name} will be added to your library as Playing
+            </p>
+          )}
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button
@@ -903,7 +1003,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             </button>
 
             <button
-              onClick={() => { setChooseAnyReturnPhase('final_choice'); setPhase('spin_choose_any') }}
+              onClick={() => { setChooseInput(''); setChooseSelectedRawg(null); setChooseSearchResults([]); setChooseAnyReturnPhase('final_choice'); setPhase('spin_choose_any') }}
               disabled={isPending || localBalance < TICKET_COSTS.choose_game}
               className="flex items-center justify-between px-4 py-3 rounded-lg border border-edge-base hover:border-green-300 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:hover:border-green-700 dark:hover:bg-green-900/30"
             >
@@ -1046,42 +1146,113 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const gameCount = uniqueGames.length
   const countOk = gameCount >= WHEEL_MIN_GAMES
 
-  function addFromBacklog(title: string) {
-    setRawGames(prev => {
-      const lines = prev.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-      if (lines.map(l => l.toLowerCase()).includes(title.toLowerCase())) return prev
-      return lines.length > 0 ? prev.trimEnd() + '\n' + title : title
-    })
-  }
-
   return (
     <div className="space-y-5">
       {turnBadge}
       <div className={`grid gap-4 items-stretch ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-2' : ''}`}>
 
-        {/* Main card: textarea + mode + spin */}
+        {/* Main card: RAWG search builder + mode + spin */}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-fg-secondary">Games (one per line)</label>
+              <label className="text-sm font-medium text-fg-secondary">Add games to the wheel</label>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                 countOk ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'
               }`}>
                 {gameCount} / {WHEEL_MIN_GAMES}+
               </span>
             </div>
-            {duplicateCount > 0 && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                {duplicateCount} duplicate{duplicateCount > 1 ? 's' : ''} removed — {uniqueGames.length} unique game{uniqueGames.length !== 1 ? 's' : ''} will be used
-              </p>
+
+            {/* Search box with RAWG dropdown */}
+            <div className="relative">
+              <input
+                type="text"
+                value={builderInput}
+                onChange={e => setBuilderInput(e.target.value)}
+                placeholder="Search for a game…"
+                className="w-full border border-edge-input rounded-lg px-3 py-2 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && builderInput.trim()) {
+                    addEntry({ name: builderInput.trim(), rawg: null })
+                    setBuilderInput('')
+                    setBuilderResults([])
+                  }
+                }}
+              />
+              {builderResults.length > 0 && (
+                <div className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg">
+                  {builderResults.map(result => {
+                    const added = uniqueGames.some(g => g.toLowerCase() === result.name.toLowerCase())
+                    return (
+                      <button
+                        key={result.id}
+                        type="button"
+                        disabled={added}
+                        onClick={() => {
+                          addEntry({ name: result.name, rawg: result })
+                          setBuilderInput('')
+                          setBuilderResults([])
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors border-b border-edge-subtle last:border-b-0 disabled:opacity-50 disabled:cursor-default"
+                      >
+                        {result.background_image ? (
+                          <img src={result.background_image} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-surface-sunken flex-shrink-0" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
+                          {result.released && (
+                            <p className="text-xs text-fg-muted">{result.released.slice(0, 4)}</p>
+                          )}
+                        </div>
+                        {added && <span className="text-xs text-fg-subtle shrink-0">Added</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-3 min-h-[1rem]">
+              {builderSearching
+                ? <p className="text-xs text-fg-muted">Searching RAWG…</p>
+                : <p className="text-xs text-fg-subtle">Search RAWG, or press Enter to add a custom title.</p>}
+              {builderInput.trim() && !uniqueGames.some(g => g.toLowerCase() === builderInput.trim().toLowerCase()) && (
+                <button
+                  type="button"
+                  onClick={() => { addEntry({ name: builderInput.trim(), rawg: null }); setBuilderInput(''); setBuilderResults([]) }}
+                  className="shrink-0 text-xs font-semibold text-brand-600 hover:text-brand-800 dark:hover:text-brand-400 transition-colors"
+                >
+                  + Add &ldquo;{builderInput.trim()}&rdquo;
+                </button>
+              )}
+            </div>
+
+            {/* Current entries */}
+            {entries.length > 0 ? (
+              <ul className="flex flex-col divide-y divide-edge-subtle max-h-52 overflow-y-auto pr-1">
+                {entries.map(entry => (
+                  <li key={entry.name} className="flex items-center gap-3 py-2">
+                    {entry.rawg?.background_image ? (
+                      <img src={entry.rawg.background_image} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-surface-sunken shrink-0 flex items-center justify-center text-xs text-fg-subtle">✎</div>
+                    )}
+                    <span className="text-sm text-fg-base truncate flex-1">{entry.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeEntry(entry.name)}
+                      className="shrink-0 text-fg-subtle hover:text-red-500 transition-colors text-sm px-1"
+                      aria-label={`Remove ${entry.name}`}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-fg-subtle py-2">No games yet — add at least {WHEEL_MIN_GAMES}.</p>
             )}
-            <textarea
-              value={rawGames}
-              onChange={e => setRawGames(e.target.value)}
-              placeholder={`Enter at least ${WHEEL_MIN_GAMES} games, one per line…`}
-              rows={5}
-              className="w-full border border-edge-input rounded-lg px-3 py-2.5 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none bg-surface-input"
-            />
           </div>
 
           <div className="space-y-2">
@@ -1134,14 +1305,14 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
           <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-80">
             <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
             <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto flex-1 min-h-0 pr-3">
-              {backlogGames.map(title => {
-                const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(title.toLowerCase())
+              {backlogGames.map(game => {
+                const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(game.name.toLowerCase())
                 return (
-                  <div key={title} className="flex items-center justify-between gap-2 py-2">
-                    <span className="text-sm text-fg-base truncate">{title}</span>
+                  <div key={game.name} className="flex items-center justify-between gap-2 py-2">
+                    <span className="text-sm text-fg-base truncate">{game.name}</span>
                     <button
                       type="button"
-                      onClick={() => addFromBacklog(title)}
+                      onClick={() => addEntry(game)}
                       disabled={alreadyAdded}
                       className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md transition-colors ${
                         alreadyAdded

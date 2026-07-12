@@ -223,7 +223,7 @@ export type Database = {
         Row: {
           id: string
           user_id: string
-          spin_type: 'spin' | 'spin_reroll' | 'choose'
+          spin_type: 'spin' | 'spin_reroll' | 'choose' | 'choose_skip'
           spin_mode: 'elimination' | 'first_land' | null
           result_name: string | null
           option_a_name: string | null
@@ -235,7 +235,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
-          spin_type: 'spin' | 'spin_reroll' | 'choose'
+          spin_type: 'spin' | 'spin_reroll' | 'choose' | 'choose_skip'
           spin_mode?: 'elimination' | 'first_land' | null
           result_name?: string | null
           option_a_name?: string | null
@@ -247,11 +247,12 @@ export type Database = {
         Update: {
           id?: string
           user_id?: string
-          spin_type?: 'spin' | 'spin_reroll' | 'choose'
+          spin_type?: 'spin' | 'spin_reroll' | 'choose' | 'choose_skip'
           spin_mode?: 'elimination' | 'first_land' | null
           result_name?: string | null
           option_a_name?: string | null
           option_b_name?: string | null
+          games_list?: string[] | null
           tickets_spent?: number | null
           created_at?: string
         }
