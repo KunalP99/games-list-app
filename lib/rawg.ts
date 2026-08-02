@@ -1,4 +1,7 @@
 const RAWG_BASE = 'https://api.rawg.io/api'
+// Fail fast if RAWG is slow/down (it returns 522s during outages) so a page
+// that awaits a RAWG call doesn't hang ~20s waiting for the socket to time out.
+const RAWG_TIMEOUT_MS = 7000
 
 export type RawgSearchResult = {
   id: number
@@ -30,7 +33,7 @@ export async function searchRawgGames(query: string): Promise<RawgSearchResult[]
   if (!key) return []
   try {
     const url = `${RAWG_BASE}/games?key=${key}&search=${encodeURIComponent(query)}&page_size=8&search_precise=true`
-    const res = await fetch(url, { cache: 'no-store' })
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return []
     const data = await res.json()
     return data.results ?? []
@@ -44,7 +47,7 @@ export async function getRawgGameDetail(rawgId: number): Promise<RawgGameDetail 
   if (!key) return null
   try {
     const url = `${RAWG_BASE}/games/${rawgId}?key=${key}`
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const res = await fetch(url, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return null
     return await res.json()
   } catch {
@@ -57,7 +60,7 @@ export async function getRawgScreenshots(rawgId: number): Promise<RawgScreenshot
   if (!key) return []
   try {
     const url = `${RAWG_BASE}/games/${rawgId}/screenshots?key=${key}&page_size=8`
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const res = await fetch(url, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return []
     const data = await res.json()
     return data.results ?? []
@@ -79,7 +82,7 @@ export async function getRawgAchievements(rawgId: number): Promise<RawgAchieveme
   if (!key) return []
   try {
     const url = `${RAWG_BASE}/games/${rawgId}/achievements?key=${key}&page_size=50`
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const res = await fetch(url, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return []
     const data = await res.json()
     return data.results ?? []
@@ -100,7 +103,7 @@ export async function getRawgAdditions(rawgId: number): Promise<RawgAddition[]> 
   if (!key) return []
   try {
     const url = `${RAWG_BASE}/games/${rawgId}/additions?key=${key}&page_size=50`
-    const res = await fetch(url, { next: { revalidate: 3600 } })
+    const res = await fetch(url, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return []
     const data = await res.json()
     return data.results ?? []
