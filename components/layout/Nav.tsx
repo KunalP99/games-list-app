@@ -16,6 +16,7 @@ const navItemsBefore = [
 const navItemsAfter = [
   { href: '/achievements', label: 'Achievements' },
   { href: '/stats', label: 'Stats' },
+  { href: '/videos', label: 'Videos' },
 ]
 
 const historyItems = [

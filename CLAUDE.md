@@ -81,6 +81,7 @@ The full implementation plan (including all database SQL per phase) is at:
 - **Year grouping on Completed tab** — `GameListView` renders `CompletedByYear` when `status === 'completed'`, grouping cards by `completion_date` year, newest first.
 - **Search bar** — `GameFilters` includes a debounced search input (300ms) that sets `?q=` in the URL. The games query filters with `.or('title.ilike.%q%,developer.ilike.%q%')`.
 - **Ticket recalculation on edit** — When a completed game's hours/achievements are edited, the old completion transactions are deleted and new ones issued via the `reverse_game_completion_tickets` Postgres RPC, keeping the ledger clean.
+- **Game YouTube media** — The game form's Media section takes a single "video or playlist" URL (`fetchGameMedia` in `games/actions.ts`): a playlist pulls all its videos (`fetchYouTubePlaylistItems`, needs `YOUTUBE_API_KEY`), a single video uses keyless oEmbed. Videos are stored inline as `games.youtube_videos` JSONB (same hidden-field pattern as `dlc`); a playlist also sets `youtube_playlist_url` (watch-on-YouTube link). The reusable `components/games/GameVideos.tsx` renders them: 2+ → `VideoRow` carousel, 1 → a single `VideoCard`, 0 + legacy `youtube_playlist_url` → the classic `videoseries` embed. **The Videos page mirrors game media live** — it reads all games with `youtube_videos` and shows one `VideoRow` per game (titled + linked to the game, read-only); since games are world-readable, no duplication/sync. `mapGameVideos` (`lib/youtube.ts`) adapts stored items to the card shape. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_videos JSONB;`
 
 ---
 
@@ -97,6 +98,7 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/users/[username]` | `app/(app)/users/[username]/page.tsx` | Read-only profile. `isOwner` controls Mark Complete button visibility |
 | `/tickets` | `app/(app)/tickets/page.tsx` | Full ticket ledger for all users, grouped by game, paginated 20/page |
 | `/wheel` | `app/(app)/wheel/page.tsx` | Wheel spin — shows current turn, game input, spin animation, result flow |
+| `/videos` | `app/(app)/videos/page.tsx` | Curated YouTube library. Everyone views; only `profiles.is_admin` curators add/remove. Click-to-play thumbnails. |
 
 ---
 
@@ -204,6 +206,71 @@ ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS finalized_via TEXT
 -- this is what lets history show the full breakdown. Nullable — old rows fall
 -- back to a single aggregate row.
 ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS ticket_spends JSONB;
+```
+
+---
+
+## Videos system (`app/(app)/videos/`)
+
+A curated library of YouTube videos and **in-site playlists**. YouTube-only.
+Everyone signed in can view; only curators (`profiles.is_admin = true`) can
+add/remove — enforced in the UI, the server actions, and RLS. Video cards are
+click-to-play (thumbnail → inline autoplay iframe). A **playlist** is an in-site
+collection of individual videos (`playlists` row owning `videos` rows via
+`videos.playlist_id`), each video's title auto-fetched. Playlist cards expand
+inline to reveal their videos and can carry an optional `youtube_url` for a
+"watch on YouTube" link. A standalone YouTube-playlist link can **no longer** be
+added on its own — `createVideo` rejects playlist URLs and directs the user to
+the playlist builder. (Legacy standalone `kind='playlist'` video rows from before
+this change still render.)
+
+- `lib/youtube.ts` — pure helpers: `parseYouTubeUrl` (watch / youtu.be / shorts / embed / live / v / playlist; hosts youtube.com, m., music., youtu.be), `youtubeEmbedUrl`, `youtubeThumbnail`, `youtubeCanonicalUrl`. Tested in `lib/__tests__/youtube.test.ts`.
+- `app/(app)/videos/actions.ts` — `createVideo` (single video; rejects playlist URLs), `createPlaylist` (title + optional YouTube link + N video URLs; oEmbed per video with bounded concurrency + batch insert; rolls back if a video fails), `fetchPlaylistForImport` (pulls a YouTube playlist's videos for the preview), `deleteVideo`, `deletePlaylist` (child videos cascade). All admin-gated; per-video metadata via YouTube **oEmbed** (no key).
+- `lib/youtube-api.ts` — **server-only** YouTube Data API v3 access (`YOUTUBE_API_KEY`), `fetchYouTubePlaylistItems` (paginated `playlistItems.list`, filters deleted/private). Only used to enumerate a playlist's videos for import; everything else stays keyless. Mirrors `lib/rawg.ts`.
+- Components: `VideoCard` (click-to-play + admin remove), `PlaylistCard` (expand-inline collection + admin delete), `AddVideoForm` (modal with a "Make a playlist" toggle → dynamic video-URL rows), `DeleteVideoButton`, `DeletePlaylistButton`.
+- Thumbnails use plain `<img>` with `i.ytimg.com` URLs — no `next.config.mjs` change needed. No CSP exists, so the embed iframes work.
+
+**SQL required** (run in Supabase):
+```sql
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
+-- Grant the curator(s):
+UPDATE public.profiles SET is_admin = true WHERE id = '<curator-user-id>';
+
+CREATE TABLE IF NOT EXISTS public.videos (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('video','playlist')),
+  youtube_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  author_name TEXT,
+  thumbnail_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.videos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Signed-in users can view videos" ON public.videos
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admins manage videos" ON public.videos
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin));
+
+-- In-site playlists (added later):
+CREATE TABLE IF NOT EXISTS public.playlists (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  youtube_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.playlists ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Signed-in users can view playlists" ON public.playlists
+  FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Admins manage playlists" ON public.playlists
+  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin));
+
+ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS playlist_id UUID REFERENCES public.playlists(id) ON DELETE CASCADE;
+ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;
 ```
 
 ---

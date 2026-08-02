@@ -10,6 +10,8 @@ import DeleteGameButton from '@/components/games/DeleteGameButton'
 import MarkCompletedButton from '@/components/games/MarkCompletedButton'
 import AchievementGrid from '@/components/games/AchievementGrid'
 import AddToBacklogButton from '@/components/users/AddToBacklogButton'
+import GameVideos from '@/components/games/GameVideos'
+import { mapGameVideos } from '@/lib/youtube'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -49,6 +51,17 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
   const totalPlaythroughs = sameGames?.length ?? 1
   const playthroughNumber = (sameGames?.findIndex(g => g.id === game.id) ?? 0) + 1
+
+  const gameVideos = mapGameVideos(game.youtube_videos ?? [])
+
+  const startDate = (game as any).start_date as string | null
+  const completionDate = game.completion_date as string | null
+  const showStartDate = Boolean(startDate) && game.status !== 'backlog'
+  const showCompletionDate = Boolean(completionDate)
+  const daysToComplete =
+    game.status === 'completed' && startDate && completionDate && game.completion_date_precision === 'full'
+      ? daysBetween(startDate, completionDate)
+      : null
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -224,32 +237,36 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         <AchievementStat progress={game.achievement_progress} />
       </div>
 
-      {/* Date Started */}
-      {(game as any).start_date && game.status !== 'backlog' && (
-        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">Date Started</p>
-          <p className="text-fg-base text-sm">{formatDate((game as any).start_date, 'full')}</p>
-        </div>
-      )}
+      {/* Dates — side by side when both are present, full width when only one is */}
+      {(showStartDate || showCompletionDate) && (
+        <div className={`grid gap-3 ${showStartDate && showCompletionDate ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+          {showStartDate && startDate && (
+            <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+              <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">Date Started</p>
+              <p className="text-fg-base text-sm">{formatDate(startDate, 'full')}</p>
+            </div>
+          )}
 
-      {/* Completion date */}
-      {game.completion_date && (
-        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">
-            {game.status === 'dnf' ? 'Date Dropped' : 'Completed'}
-          </p>
-          <p className="text-fg-base text-sm">
-            {formatDate(game.completion_date, game.completion_date_precision)}
-          </p>
-          {game.status === 'completed' && (game as any).start_date && game.completion_date_precision === 'full' && (() => {
-            const days = daysBetween((game as any).start_date, game.completion_date)
-            if (days == null) return null
-            return (
-              <p className="text-xs text-fg-muted mt-2">
-                Took <span className="text-brand-500 font-medium">{days}</span> {days === 1 ? 'day' : 'days'} to complete
+          {completionDate && (
+            <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">
+                  {game.status === 'dnf' ? 'Date Dropped' : 'Completed'}
+                </p>
+                {daysToComplete != null && (
+                  <p
+                    className="text-xs text-fg-muted shrink-0"
+                    title={`Took ${daysToComplete} ${daysToComplete === 1 ? 'day' : 'days'} to complete`}
+                  >
+                    Took <span className="text-brand-500 font-medium">{daysToComplete}</span> {daysToComplete === 1 ? 'day' : 'days'}
+                  </p>
+                )}
+              </div>
+              <p className="text-fg-base text-sm">
+                {formatDate(completionDate, game.completion_date_precision)}
               </p>
-            )
-          })()}
+            </div>
+          )}
         </div>
       )}
 
@@ -273,31 +290,8 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
-      {/* YouTube Playlist */}
-      {game.youtube_playlist_url && extractPlaylistId(game.youtube_playlist_url) && (
-        <div className="bg-surface-base border border-edge-base rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Playlist</p>
-            <a
-              href={game.youtube_playlist_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-brand-500 hover:text-brand-400 transition-colors"
-            >
-              View full playlist ↗
-            </a>
-          </div>
-          <div className="relative w-full aspect-video rounded-lg overflow-hidden">
-            <iframe
-              src={`https://www.youtube.com/embed/videoseries?list=${extractPlaylistId(game.youtube_playlist_url)}&listType=playlist`}
-              title={`${game.title} playlist`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="absolute inset-0 w-full h-full"
-            />
-          </div>
-        </div>
-      )}
+      {/* YouTube media — carousel / single card / legacy embed (reusable) */}
+      <GameVideos videos={gameVideos} playlistUrl={game.youtube_playlist_url} />
 
       {/* About — from RAWG description stored at save time */}
       {game.description && (
@@ -380,14 +374,6 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       ) : null}
     </div>
   )
-}
-
-function extractPlaylistId(url: string): string | null {
-  try {
-    return new URL(url).searchParams.get('list')
-  } catch {
-    return null
-  }
 }
 
 function formatDate(date: string | null, precision: 'full' | 'year' = 'full'): string | null {

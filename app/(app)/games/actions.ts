@@ -5,6 +5,57 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/lib/tickets'
 import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
+import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
+
+type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
+
+// Fetch media for a game from a YouTube URL — a whole playlist (all its videos,
+// via the Data API) or a single video (via keyless oEmbed). Auth-gated only;
+// any user manages their own game's media. Playlists need YOUTUBE_API_KEY.
+export async function fetchGameMedia(url: string): Promise<
+  { success: true; videos: GameVideo[]; playlistUrl: string | null } | { success: false; error: string }
+> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const parsed = parseYouTubeUrl((url ?? '').trim())
+  if (!parsed) return { success: false, error: 'Enter a valid YouTube video or playlist URL.' }
+
+  if (parsed.kind === 'playlist') {
+    const { fetchYouTubePlaylistItems } = await import('@/lib/youtube-api')
+    const items = await fetchYouTubePlaylistItems(parsed.id)
+    if (items.length === 0) {
+      return { success: false, error: 'No videos found — check the playlist is public/unlisted and that YOUTUBE_API_KEY is set.' }
+    }
+    return {
+      success: true,
+      playlistUrl: youtubeCanonicalUrl('playlist', parsed.id),
+      videos: items.map(it => ({
+        youtube_id: it.videoId,
+        title: it.title,
+        author_name: it.author,
+        thumbnail_url: it.thumbnail,
+      })),
+    }
+  }
+
+  // Single video → keyless oEmbed for title/thumbnail/channel.
+  const { fetchYouTubeOEmbed } = await import('@/lib/youtube-api')
+  const { youtubeThumbnail } = await import('@/lib/youtube')
+  const canonical = youtubeCanonicalUrl('video', parsed.id)
+  const oembed = await fetchYouTubeOEmbed(canonical)
+  return {
+    success: true,
+    playlistUrl: null,
+    videos: [{
+      youtube_id: parsed.id,
+      title: oembed?.title ?? 'YouTube video',
+      author_name: oembed?.author_name ?? null,
+      thumbnail_url: oembed?.thumbnail_url ?? youtubeThumbnail('video', parsed.id),
+    }],
+  }
+}
 
 async function awardGameCompletionXp(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -36,6 +87,7 @@ export async function createGame(formData: FormData) {
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
   const dlc = JSON.parse((formData.get('dlc') as string) || '[]') as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
+  const youtubeVideos = JSON.parse((formData.get('youtube_videos') as string) || '[]') as GameVideo[]
 
   const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
   const releaseDate = releaseDatePrecision === 'year'
@@ -89,6 +141,7 @@ export async function createGame(formData: FormData) {
     is_sequel: formData.get('is_sequel') === 'on',
     in_wheel: false,
     youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
+    youtube_videos: youtubeVideos,
     dlc,
   }).select('id').single()
 
@@ -132,6 +185,7 @@ export async function updateGame(id: string, formData: FormData) {
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
   const dlc = JSON.parse((formData.get('dlc') as string) || '[]') as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
+  const youtubeVideos = JSON.parse((formData.get('youtube_videos') as string) || '[]') as GameVideo[]
 
   const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
   const releaseDate = releaseDatePrecision === 'year'
@@ -185,6 +239,7 @@ export async function updateGame(id: string, formData: FormData) {
     is_sequel: formData.get('is_sequel') === 'on',
     in_wheel: false,
     youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
+    youtube_videos: youtubeVideos,
     dlc,
   }).eq('id', id).eq('user_id', user.id)
 

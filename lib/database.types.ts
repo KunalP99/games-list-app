@@ -24,6 +24,7 @@ export type Database = {
           wheel_turn: 'spin' | 'spin_reroll' | 'choose'
           theme_preference: 'light' | 'dark' | 'system'
           accent_colour: string | null
+          is_admin: boolean
           created_at: string
           updated_at: string
         }
@@ -38,6 +39,7 @@ export type Database = {
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
+          is_admin?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -52,6 +54,7 @@ export type Database = {
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
+          is_admin?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -108,6 +111,7 @@ export type Database = {
           in_wheel: boolean
           assigned_by: string | null
           youtube_playlist_url: string | null
+          youtube_videos: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
           dlc: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at: string
           updated_at: string
@@ -141,6 +145,7 @@ export type Database = {
           in_wheel?: boolean
           assigned_by?: string | null
           youtube_playlist_url?: string | null
+          youtube_videos?: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
           dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
@@ -174,6 +179,7 @@ export type Database = {
           in_wheel?: boolean
           assigned_by?: string | null
           youtube_playlist_url?: string | null
+          youtube_videos?: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
           dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
@@ -260,6 +266,72 @@ export type Database = {
           tickets_spent?: number | null
           finalized_via?: 'accept' | 'spin_again' | 'reroll_choice' | 'upgrade_choice' | 'choose_any' | 'choose' | 'skip' | null
           ticket_spends?: { action: string; amount: number }[] | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      videos: {
+        Row: {
+          id: string
+          user_id: string
+          url: string
+          kind: 'video' | 'playlist'
+          youtube_id: string
+          title: string
+          author_name: string | null
+          thumbnail_url: string | null
+          playlist_id: string | null
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          url: string
+          kind: 'video' | 'playlist'
+          youtube_id: string
+          title: string
+          author_name?: string | null
+          thumbnail_url?: string | null
+          playlist_id?: string | null
+          position?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          url?: string
+          kind?: 'video' | 'playlist'
+          youtube_id?: string
+          title?: string
+          author_name?: string | null
+          thumbnail_url?: string | null
+          playlist_id?: string | null
+          position?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      playlists: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          youtube_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          youtube_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          youtube_url?: string | null
           created_at?: string
         }
         Relationships: []

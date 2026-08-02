@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { createGame, updateGame } from '@/app/(app)/games/actions'
+import { createGame, updateGame, fetchGameMedia } from '@/app/(app)/games/actions'
 import { createClient } from '@/lib/supabase/client'
 import PlatformSelect from './PlatformSelect'
 import type { Game } from '@/lib/types'
@@ -46,6 +46,13 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
   )
   const [dlcLoading, setDlcLoading] = useState(false)
   const [customDlcInput, setCustomDlcInput] = useState('')
+  type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
+  const [youtubePlaylistUrl, setYoutubePlaylistUrl] = useState(game?.youtube_playlist_url ?? '')
+  const [youtubeVideos, setYoutubeVideos] = useState<GameVideo[]>(game?.youtube_videos ?? [])
+  const [mediaInput, setMediaInput] = useState('')
+  const [ytImporting, setYtImporting] = useState(false)
+  const [ytImportNote, setYtImportNote] = useState<string | null>(null)
+  const [ytImportError, setYtImportError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -193,6 +200,25 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     // Fetch DLC list for the selected game (fresh — no existing entries to preserve)
     setDlcEntries([])
     fetchDlc(result.id, [])
+  }
+
+  async function handleAddMedia() {
+    if (!mediaInput.trim()) return
+    setYtImportError(null)
+    setYtImportNote(null)
+    setYtImporting(true)
+    const res = await fetchGameMedia(mediaInput.trim())
+    setYtImporting(false)
+    if (!res.success) { setYtImportError(res.error); return }
+    // Append, de-duping by youtube_id so re-adding is safe.
+    setYoutubeVideos(prev => {
+      const existing = new Set(prev.map(v => v.youtube_id))
+      return [...prev, ...res.videos.filter(v => !existing.has(v.youtube_id))]
+    })
+    if (res.playlistUrl) setYoutubePlaylistUrl(res.playlistUrl)
+    setMediaInput('')
+    const n = res.videos.length
+    setYtImportNote(n > 1 ? `Added ${n} videos from the playlist.` : 'Added 1 video.')
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -366,17 +392,63 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Media</h2>
         <div>
           <label className="block text-sm font-medium text-fg-secondary mb-1">
-            YouTube Playlist URL{' '}
-            <span className="text-xs text-fg-subtle font-normal">(optional — shown on the game page)</span>
+            YouTube video or playlist{' '}
+            <span className="text-xs text-fg-subtle font-normal">(optional — shown on the game page and the Videos page)</span>
           </label>
-          <input
-            name="youtube_playlist_url"
-            type="url"
-            defaultValue={game?.youtube_playlist_url ?? ''}
-            className={input}
-            placeholder="https://www.youtube.com/playlist?list=PLxxxxx"
-          />
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={mediaInput}
+              onChange={e => setMediaInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMedia() } }}
+              className={input}
+              placeholder="Paste a video or playlist URL…"
+            />
+            <button
+              type="button"
+              onClick={handleAddMedia}
+              disabled={ytImporting || !mediaInput.trim()}
+              className="shrink-0 px-3 py-2 text-sm font-semibold text-brand-700 bg-brand-100 rounded-lg hover:bg-brand-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
+            >
+              {ytImporting ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+          {ytImportError && <p className="text-xs text-red-600 mt-1">{ytImportError}</p>}
+          {ytImportNote && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{ytImportNote}</p>}
         </div>
+
+        {/* Hidden fields carrying the media (mirror the dlc field) */}
+        <input type="hidden" name="youtube_playlist_url" value={youtubePlaylistUrl} />
+        <input type="hidden" name="youtube_videos" value={JSON.stringify(youtubeVideos)} />
+
+        {youtubeVideos.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">
+              {youtubeVideos.length} video{youtubeVideos.length !== 1 ? 's' : ''}
+            </p>
+            <ul className="flex flex-col divide-y divide-edge-subtle max-h-64 overflow-y-auto pr-1">
+              {youtubeVideos.map((v, i) => (
+                <li key={`${v.youtube_id}-${i}`} className="flex items-center gap-3 py-2">
+                  {v.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.thumbnail_url} alt="" className="w-14 h-8 rounded object-cover shrink-0" />
+                  ) : (
+                    <div className="w-14 h-8 rounded bg-surface-sunken shrink-0" />
+                  )}
+                  <span className="text-sm text-fg-base truncate flex-1">{v.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => setYoutubeVideos(prev => prev.filter((_, j) => j !== i))}
+                    className="shrink-0 text-fg-subtle hover:text-red-500 transition-colors text-sm px-1"
+                    aria-label={`Remove ${v.title}`}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* Status & Progress */}
