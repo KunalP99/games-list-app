@@ -71,7 +71,8 @@ export default async function UserProfilePage({
   const playingGames = playingGamesRes.data as Game[] | null
 
   const rawView = searchParams.view ?? cookies().get('gameView')?.value
-  const view: 'grid' | 'table' | 'cover' = rawView === 'table' || rawView === 'cover' ? rawView : 'grid'
+  // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
+  const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 
   const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
   const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0

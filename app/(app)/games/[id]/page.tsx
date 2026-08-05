@@ -64,7 +64,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       : null
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="w-[min(70rem,calc(100vw-2rem))] space-y-6">
       {/* Owner attribution */}
       {!isOwner && ownerProfile && (
         <div className="flex items-center gap-2 text-sm text-fg-muted">
@@ -236,6 +236,10 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         )
       })()}
 
+      {/* Body — main content on the left, About in a right sidebar */}
+      <div className={game.description ? 'grid grid-cols-1 lg:grid-cols-3 gap-6 items-start' : ''}>
+      <div className={game.description ? 'lg:col-span-2 space-y-6' : 'max-w-2xl space-y-6'}>
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Stat label="Hours Played" value={game.hours_played != null ? `${game.hours_played}h` : '—'} />
@@ -276,6 +280,14 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
+      {/* About (small screens) — shown right under Dates; the sidebar copy takes over at lg+ */}
+      {game.description && (
+        <div className="lg:hidden bg-surface-base border border-edge-base rounded-xl p-4">
+          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
+          <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
+        </div>
+      )}
+
       {/* Review */}
       {game.review && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-4">
@@ -298,14 +310,6 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
       {/* YouTube media — carousel / single card / legacy embed (reusable) */}
       <GameVideos videos={gameVideos} playlistUrl={game.youtube_playlist_url} />
-
-      {/* About — from RAWG description stored at save time */}
-      {game.description && (
-        <div className="bg-surface-base border border-edge-base rounded-xl p-4">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
-          <p className="text-fg-secondary text-sm leading-relaxed line-clamp-6">{game.description}</p>
-        </div>
-      )}
 
       {/* Achievements — fetched live from RAWG */}
       {achievements.length > 0 && (
@@ -368,6 +372,19 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           </div>
         </div>
       )}
+
+      </div>{/* /main column */}
+
+      {/* About — from RAWG description stored at save time (sidebar, lg+ only) */}
+      {game.description && (
+        <aside className="hidden lg:block space-y-6 lg:sticky lg:top-24">
+          <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
+            <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
+          </div>
+        </aside>
+      )}
+      </div>{/* /body grid */}
 
       {isOwner ? (
         <Link href="/games" className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">

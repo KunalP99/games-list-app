@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Pick a game's image** in the add/edit form — after choosing a game from search, a gallery of its IGDB artworks and screenshots appears; click one to set the game's banner (used on the list card and the detail-page hero). Defaults to the auto-selected key art, so leaving it alone keeps the previous behaviour. Backed by a new `/api/rawg/images/[id]` route and `getGameImages`.
 - **Artwork banner** on the game detail page — the hero now uses IGDB's official landscape key art (like igdb.com game pages), falling back to a screenshot. Stored in a new `games.artwork_url`.
 - **Box Art view** for the games list — a third layout alongside the capsule and list views: a grid of portrait cover art with the same info (title, developer, status, hours, rating, achievements, badges) below each. Games without a cover show a placeholder tile. Covers come from IGDB and are stored in a new `games.cover_image_url`; the toggle persists via the `gameView` cookie.
 - **IGDB metadata provider** — game search, enrichment, cover art, and screenshots can now be sourced from IGDB instead of RAWG (set `METADATA_PROVIDER=igdb` with `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`), added because RAWG's API went down. Same shapes and UI; games store an `igdb_id`. Note: IGDB has no achievements data (that section is hidden) or dominant colour. Flip the flag back to `rawg` if RAWG returns — existing data is untouched.
@@ -37,6 +38,8 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- **Box Art (portrait) is now the default games-list view** for everyone — new users, and anyone who hasn't explicitly switched, land on the cover-art grid instead of the capsule grid. Anyone who previously chose a different view keeps it (their `gameView` cookie), and the grid/table toggles still work.
+- Game detail page now uses a two-column layout on wide screens — the **About** section moves into a sticky right-hand sidebar, with stats, dates, review, achievements, DLC, and screenshots in the main column on the left. On narrow screens it stacks as before.
 - Nav logo icon replaced with an abstract play-triangle + list-bars mark (unique, abstract, reads clearly at small sizes)
 - Desktop navbar right section replaced: ThemeToggle + username span + sign-out form → compact `UserDropdown` component
 - Mobile sidebar footer now includes a Settings link alongside sign out

@@ -151,6 +151,25 @@ export async function getGameDetail(id: number): Promise<RawgGameDetail | null> 
   }
 }
 
+// All of a game's landscape images (for the form's image chooser): landscape
+// artworks (highest-resolution first — the same order artworkImage() prefers)
+// followed by screenshots. De-duped, all at t_1080p so a picked URL matches what
+// getGameDetail would store. Returns [] on failure or if the game has none.
+export async function getGameImages(id: number): Promise<string[]> {
+  const games = await igdbQuery<IgdbGame>('games',
+    `fields artworks.image_id, artworks.width, artworks.height, screenshots.image_id; where id = ${id}; limit 1;`)
+  const g = games[0]
+  if (!g) return []
+  const artworks = (g.artworks ?? [])
+    .filter(a => a.image_id && a.width && a.height && a.width / a.height >= 1.3)
+    .sort((a, b) => (b.width! * b.height!) - (a.width! * a.height!))
+    .map(a => bannerUrl(a.image_id!))
+  const shots = (g.screenshots ?? [])
+    .filter(s => s.image_id)
+    .map(s => screenshotUrl(s.image_id!))
+  return Array.from(new Set([...artworks, ...shots]))
+}
+
 export async function getGameScreenshots(id: number): Promise<RawgScreenshot[]> {
   const shots = await igdbQuery<{ id: number; image_id: string }>('screenshots',
     `fields image_id; where game = ${id}; limit 8;`)

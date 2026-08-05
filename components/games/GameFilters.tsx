@@ -31,7 +31,7 @@ export default function GameFilters() {
     ? SORT_OPTIONS.filter(o => o.value !== 'completion_date')
     : SORT_OPTIONS
   const [activeView, setActiveView] = useState<'grid' | 'table' | 'cover'>(
-    (searchParams.get('view') as 'grid' | 'table' | 'cover') ?? 'grid'
+    (searchParams.get('view') as 'grid' | 'table' | 'cover') ?? 'cover'
   )
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
 
@@ -41,7 +41,7 @@ export default function GameFilters() {
     if (!searchParams.get('view')) {
       const m = document.cookie.match(/\bgameView=(grid|table|cover)\b/)
       const saved = m?.[1] as 'grid' | 'table' | 'cover' | undefined
-      if (saved && saved !== 'grid') {
+      if (saved && saved !== 'cover') {
         setActiveView(saved)
         const params = new URLSearchParams(searchParams.toString())
         params.set('view', saved)

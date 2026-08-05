@@ -28,6 +28,11 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     (game?.release_date_precision === 'year') ? (game?.release_date?.slice(0, 4) ?? '') : ''
   )
   const [imageUrl, setImageUrl] = useState(game?.image_url ?? '')
+  // The game's banner (shown on the list card + detail hero). Chosen from the
+  // image gallery; falls back to the manual image_url. Submitted as artwork_url.
+  const [bannerImage, setBannerImage] = useState(game?.artwork_url ?? game?.image_url ?? '')
+  const [bannerOptions, setBannerOptions] = useState<string[]>([])
+  const [bannerLoading, setBannerLoading] = useState(false)
   const [rawgId, setRawgId] = useState<number | null>(game?.igdb_id ?? game?.rawg_id ?? null)
   const [status, setStatus] = useState(game?.status ?? defaultStatus ?? 'playing')
   const [isFavourite, setIsFavourite] = useState(game?.is_favourite ?? false)
@@ -168,9 +173,31 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     }
   }
 
+  // Load the game's selectable banner images. `defaultFirst` = also set the
+  // banner to the first (auto key-art) option — used when picking a new game;
+  // on edit we keep the game's existing banner selected.
+  async function fetchBannerImages(id: number, defaultFirst: boolean) {
+    setBannerLoading(true)
+    try {
+      const res = await fetch(`/api/rawg/images/${id}`)
+      const data: string[] = await res.json()
+      const options = Array.isArray(data) ? data : []
+      setBannerOptions(options)
+      if (defaultFirst && options[0]) setBannerImage(options[0])
+    } catch {
+      setBannerOptions([])
+    } finally {
+      setBannerLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (isEdit && game?.rawg_id) {
       fetchDlc(game.rawg_id, dlcEntries)
+    }
+    const existingId = game?.igdb_id ?? game?.rawg_id
+    if (isEdit && existingId) {
+      fetchBannerImages(existingId, false)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -179,9 +206,14 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     setReleaseDate(result.released ?? '')
     setReleaseDatePrecision('full')
     setImageUrl(result.background_image ?? '')
+    setBannerImage(result.background_image ?? '')
     setRawgId(result.id)
     setSuggestions([])
     setShowDropdown(false)
+
+    // Fetch the selectable banner images; default to the first (auto key-art).
+    setBannerOptions([])
+    fetchBannerImages(result.id, true)
 
     // Fetch full detail to get developer (not included in search results)
     try {
@@ -359,32 +391,67 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
 
       {/* Cover Image */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Cover Image</h2>
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Banner Image</h2>
+
+        {/* Banner (submitted as artwork_url) — shown on the list card + detail hero */}
+        <input type="hidden" name="artwork_url" value={bannerImage} />
+
         <div className="flex gap-3 items-start">
-          {imageUrl && (
+          {(bannerImage || imageUrl) && (
             <img
-              src={imageUrl}
-              alt="Cover preview"
-              className="w-20 h-14 object-cover rounded-lg border border-edge-base shrink-0 bg-surface-active"
+              src={bannerImage || imageUrl}
+              alt="Banner preview"
+              className="w-32 h-[72px] object-cover rounded-lg border border-edge-base shrink-0 bg-surface-active"
             />
           )}
           <div className="flex-1">
             <label className="block text-sm font-medium text-fg-secondary mb-1">
               Image URL{' '}
               <span className="text-xs text-fg-subtle font-normal">
-                (auto-filled from RAWG, or paste your own)
+                (auto-filled, or paste your own)
               </span>
             </label>
             <input
               name="image_url"
               type="url"
               value={imageUrl}
-              onChange={e => setImageUrl(e.target.value)}
+              onChange={e => { setImageUrl(e.target.value); setBannerImage(e.target.value) }}
               className={input}
               placeholder="https://example.com/cover.jpg"
             />
           </div>
         </div>
+
+        {/* Image chooser — pick which of the game's images is the banner */}
+        {bannerLoading && (
+          <p className="text-xs text-fg-subtle">Loading images…</p>
+        )}
+        {bannerOptions.length > 0 && (
+          <div>
+            <p className="text-xs text-fg-subtle mb-2">Choose an image for this game</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {bannerOptions.map(url => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setBannerImage(url)}
+                  className={`relative aspect-video rounded-lg bg-cover bg-center border transition-all ${
+                    bannerImage === url
+                      ? 'ring-2 ring-brand-500 border-brand-500'
+                      : 'border-edge-base hover:border-brand-300'
+                  }`}
+                  style={{ backgroundImage: `url(${url})` }}
+                  aria-label="Select this image"
+                  aria-pressed={bannerImage === url}
+                >
+                  {bannerImage === url && (
+                    <span className="absolute top-1 right-1 bg-brand-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Media */}

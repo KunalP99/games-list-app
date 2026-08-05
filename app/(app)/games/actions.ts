@@ -137,7 +137,8 @@ export async function createGame(formData: FormData) {
     notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
     cover_image_url: coverImage,
-    artwork_url: artworkImage,
+    // User-chosen banner from the form's image chooser; auto key-art as fallback.
+    artwork_url: (formData.get('artwork_url') as string)?.trim() || artworkImage,
     [PROVIDER_ID_COLUMN]: rawgId,
     description,
     genres,
@@ -242,7 +243,8 @@ export async function updateGame(id: string, formData: FormData) {
     notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
     cover_image_url: coverImage,
-    artwork_url: artworkImage,
+    // User-chosen banner from the form's image chooser; auto key-art as fallback.
+    artwork_url: (formData.get('artwork_url') as string)?.trim() || artworkImage,
     [PROVIDER_ID_COLUMN]: rawgId,
     description,
     genres,

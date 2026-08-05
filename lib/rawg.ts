@@ -84,6 +84,14 @@ export async function getRawgScreenshots(rawgId: number): Promise<RawgScreenshot
   }
 }
 
+// Landscape images (artworks + screenshots) a user can pick from as a game's
+// banner in the add/edit form. IGDB has artworks; RAWG only has screenshots.
+export async function getGameImages(id: number): Promise<string[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getGameImages(id)
+  const shots = await getRawgScreenshots(id)
+  return shots.map(s => s.image)
+}
+
 export type RawgAchievement = {
   id: number
   name: string

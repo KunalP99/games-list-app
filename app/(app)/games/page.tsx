@@ -27,10 +27,11 @@ export default async function GamesPage({
 
   const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
 
-  const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at, image_url, cover_image_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date'
+  const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at, image_url, cover_image_url, artwork_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date'
 
   const rawView = searchParams.view ?? cookies().get('gameView')?.value
-  const view: 'grid' | 'table' | 'cover' = rawView === 'table' || rawView === 'cover' ? rawView : 'grid'
+  // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
+  const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 
   let gamesQuery = supabase
     .from('games')
