@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Infinite scroll on game search** — every game search bar (the add/edit form, and both wheel search boxes) now loads more results as you scroll to the bottom of the dropdown, instead of stopping at the first handful. Backed by a paginated `/api/rawg/search` (`page` param + `hasMore`) shared via `fetchGameSearchPage`.
 - **Pick a game's image** in the add/edit form — after choosing a game from search, a gallery of its IGDB artworks and screenshots appears; click one to set the game's banner (used on the list card and the detail-page hero). Defaults to the auto-selected key art, so leaving it alone keeps the previous behaviour. Backed by a new `/api/rawg/images/[id]` route and `getGameImages`.
 - **Artwork banner** on the game detail page — the hero now uses IGDB's official landscape key art (like igdb.com game pages), falling back to a screenshot. Stored in a new `games.artwork_url`.
 - **Box Art view** for the games list — a third layout alongside the capsule and list views: a grid of portrait cover art with the same info (title, developer, status, hours, rating, achievements, badges) below each. Games without a cover show a placeholder tile. Covers come from IGDB and are stored in a new `games.cover_image_url`; the toggle persists via the `gameView` cookie.

@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import PlatformSelect from './PlatformSelect'
 import type { Game } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
+import { fetchGameSearchPage } from '@/lib/searchGamesClient'
 
 const STATUS_OPTIONS = [
   { value: 'playing', label: 'Playing' },
@@ -65,6 +66,9 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
   const [suggestions, setSuggestions] = useState<RawgSearchResult[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+  const [hasMoreSuggestions, setHasMoreSuggestions] = useState(false)
+  const [loadingMoreSuggestions, setLoadingMoreSuggestions] = useState(false)
+  const suggestionsPageRef = useRef(1)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const replayDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -82,17 +86,12 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
 
     rawgDebounceRef.current = setTimeout(async () => {
       setSearchLoading(true)
-      try {
-        const res = await fetch(`/api/rawg/search?q=${encodeURIComponent(title.trim())}`)
-        const { results } = await res.json()
-        setSuggestions(results ?? [])
-        setShowDropdown((results ?? []).length > 0)
-      } catch {
-        setSuggestions([])
-        setShowDropdown(false)
-      } finally {
-        setSearchLoading(false)
-      }
+      suggestionsPageRef.current = 1
+      const { results, hasMore } = await fetchGameSearchPage(title.trim(), 1)
+      setSuggestions(results)
+      setShowDropdown(results.length > 0)
+      setHasMoreSuggestions(hasMore)
+      setSearchLoading(false)
     }, 300)
 
     return () => {
@@ -201,6 +200,23 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Append the next page of search results when the dropdown is scrolled near
+  // its end, de-duping by id so scroll overlap can't repeat an entry.
+  async function loadMoreSuggestions() {
+    const q = title.trim()
+    if (loadingMoreSuggestions || !hasMoreSuggestions || q.length < 2) return
+    setLoadingMoreSuggestions(true)
+    const next = suggestionsPageRef.current + 1
+    const { results, hasMore } = await fetchGameSearchPage(q, next)
+    suggestionsPageRef.current = next
+    setSuggestions(prev => {
+      const seen = new Set(prev.map(x => x.id))
+      return [...prev, ...results.filter(r => !seen.has(r.id))]
+    })
+    setHasMoreSuggestions(hasMore)
+    setLoadingMoreSuggestions(false)
+  }
+
   async function handleRawgSelect(result: RawgSearchResult) {
     setTitle(result.name)
     setReleaseDate(result.released ?? '')
@@ -298,7 +314,13 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
           </div>
 
           {showDropdown && (
-            <div className="absolute z-20 mt-1 w-full bg-surface-base border border-edge-base rounded-lg shadow-lg overflow-hidden">
+            <div
+              className="absolute z-20 mt-1 w-full bg-surface-base border border-edge-base rounded-lg shadow-lg overflow-y-auto max-h-80"
+              onScroll={e => {
+                const el = e.currentTarget
+                if (el.scrollHeight - el.scrollTop - el.clientHeight < 60) loadMoreSuggestions()
+              }}
+            >
               {suggestions.map(result => (
                 <button
                   key={result.id}
@@ -323,6 +345,9 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
                   </div>
                 </button>
               ))}
+              {loadingMoreSuggestions && (
+                <div className="px-3 py-2 text-xs text-fg-subtle text-center">Loading more…</div>
+              )}
             </div>
           )}
 

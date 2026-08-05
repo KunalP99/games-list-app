@@ -20,6 +20,7 @@ import {
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_TURN_LABELS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import type { WheelTurn } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
+import { fetchGameSearchPage } from '@/lib/searchGamesClient'
 import type { TicketSpend } from '@/lib/wheel-history'
 
 type Phase =
@@ -75,11 +76,17 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const [chooseSelectedRawg, setChooseSelectedRawg] = useState<RawgSearchResult | null>(null)
   const [chooseSearching, setChooseSearching] = useState(false)
   const chooseSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const choosePageRef = useRef(1)
+  const [chooseHasMore, setChooseHasMore] = useState(false)
+  const [chooseLoadingMore, setChooseLoadingMore] = useState(false)
   // Builder search (setup phase) — independent of the choose-turn search
   const [builderInput, setBuilderInput] = useState('')
   const [builderResults, setBuilderResults] = useState<RawgSearchResult[]>([])
   const [builderSearching, setBuilderSearching] = useState(false)
   const builderSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const builderPageRef = useRef(1)
+  const [builderHasMore, setBuilderHasMore] = useState(false)
+  const [builderLoadingMore, setBuilderLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
   // True once a paid Spin Again has happened this turn — the eventual Accept is
@@ -113,15 +120,11 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     if (chooseSearchDebounce.current) clearTimeout(chooseSearchDebounce.current)
     chooseSearchDebounce.current = setTimeout(async () => {
       setChooseSearching(true)
-      try {
-        const res = await fetch(`/api/rawg/search?q=${encodeURIComponent(q)}`)
-        const data = await res.json()
-        setChooseSearchResults(Array.isArray(data?.results) ? data.results : [])
-      } catch {
-        setChooseSearchResults([])
-      } finally {
-        setChooseSearching(false)
-      }
+      choosePageRef.current = 1
+      const { results, hasMore } = await fetchGameSearchPage(q, 1)
+      setChooseSearchResults(results)
+      setChooseHasMore(hasMore)
+      setChooseSearching(false)
     }, 300)
     return () => {
       if (chooseSearchDebounce.current) clearTimeout(chooseSearchDebounce.current)
@@ -138,20 +141,48 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     if (builderSearchDebounce.current) clearTimeout(builderSearchDebounce.current)
     builderSearchDebounce.current = setTimeout(async () => {
       setBuilderSearching(true)
-      try {
-        const res = await fetch(`/api/rawg/search?q=${encodeURIComponent(q)}`)
-        const data = await res.json()
-        setBuilderResults(Array.isArray(data?.results) ? data.results : [])
-      } catch {
-        setBuilderResults([])
-      } finally {
-        setBuilderSearching(false)
-      }
+      builderPageRef.current = 1
+      const { results, hasMore } = await fetchGameSearchPage(q, 1)
+      setBuilderResults(results)
+      setBuilderHasMore(hasMore)
+      setBuilderSearching(false)
     }, 300)
     return () => {
       if (builderSearchDebounce.current) clearTimeout(builderSearchDebounce.current)
     }
   }, [builderInput])
+
+  // Load-more-on-scroll for the two wheel search dropdowns. Both append the next
+  // page and de-dupe by id so scroll overlap can't repeat a result.
+  async function loadMoreChoose() {
+    const q = chooseInput.trim()
+    if (chooseLoadingMore || !chooseHasMore || q.length < 2) return
+    setChooseLoadingMore(true)
+    const next = choosePageRef.current + 1
+    const { results, hasMore } = await fetchGameSearchPage(q, next)
+    choosePageRef.current = next
+    setChooseSearchResults(prev => {
+      const seen = new Set(prev.map(x => x.id))
+      return [...prev, ...results.filter(r => !seen.has(r.id))]
+    })
+    setChooseHasMore(hasMore)
+    setChooseLoadingMore(false)
+  }
+
+  async function loadMoreBuilder() {
+    const q = builderInput.trim()
+    if (builderLoadingMore || !builderHasMore || q.length < 2) return
+    setBuilderLoadingMore(true)
+    const next = builderPageRef.current + 1
+    const { results, hasMore } = await fetchGameSearchPage(q, next)
+    builderPageRef.current = next
+    setBuilderResults(prev => {
+      const seen = new Set(prev.map(x => x.id))
+      return [...prev, ...results.filter(r => !seen.has(r.id))]
+    })
+    setBuilderHasMore(hasMore)
+    setBuilderLoadingMore(false)
+  }
 
   // Animation state
   const [animTarget, setAnimTarget] = useState('')
@@ -806,7 +837,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
               onKeyDown={e => e.key === 'Enter' && handlePayChooseAny()}
             />
             {chooseSearchResults.length > 0 && (
-              <div className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg">
+              <div
+                className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg"
+                onScroll={e => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 60) loadMoreChoose() }}
+              >
                 {chooseSearchResults.map(result => (
                   <button
                     key={result.id}
@@ -835,6 +869,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                     </div>
                   </button>
                 ))}
+                {chooseLoadingMore && (
+                  <div className="px-3 py-2 text-xs text-fg-muted text-center">Loading more…</div>
+                )}
               </div>
             )}
           </div>
@@ -1058,7 +1095,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
               onKeyDown={e => e.key === 'Enter' && handleChooseGame()}
             />
             {chooseSearchResults.length > 0 && (
-              <div className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg">
+              <div
+                className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg"
+                onScroll={e => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 60) loadMoreChoose() }}
+              >
                 {chooseSearchResults.map(result => (
                   <button
                     key={result.id}
@@ -1087,6 +1127,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                     </div>
                   </button>
                 ))}
+                {chooseLoadingMore && (
+                  <div className="px-3 py-2 text-xs text-fg-muted text-center">Loading more…</div>
+                )}
               </div>
             )}
           </div>
@@ -1196,7 +1239,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                 }}
               />
               {builderResults.length > 0 && (
-                <div className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg">
+                <div
+                  className="absolute z-10 left-0 right-0 mt-1 max-h-72 overflow-y-auto bg-surface-base border border-edge-base rounded-lg shadow-lg"
+                  onScroll={e => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 60) loadMoreBuilder() }}
+                >
                   {builderResults.map(result => {
                     const added = uniqueGames.some(g => g.toLowerCase() === result.name.toLowerCase())
                     return (
@@ -1226,6 +1272,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                       </button>
                     )
                   })}
+                  {builderLoadingMore && (
+                    <div className="px-3 py-2 text-xs text-fg-muted text-center">Loading more…</div>
+                  )}
                 </div>
               )}
             </div>

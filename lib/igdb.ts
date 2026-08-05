@@ -3,6 +3,7 @@
 // Auth: client-credentials app token (cached). Requests: POST apicalypse bodies.
 
 import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition } from './rawg'
+import { SEARCH_PAGE_SIZE } from './rawg'
 
 const TIMEOUT_MS = 8000
 
@@ -118,10 +119,10 @@ type IgdbGame = {
 
 // ── Public API (mirrors lib/rawg.ts) ────────────────────────────────────────
 
-export async function searchGames(query: string): Promise<RawgSearchResult[]> {
+export async function searchGames(query: string, page = 1): Promise<RawgSearchResult[]> {
   const q = query.replace(/"/g, '\\"')
   const games = await igdbQuery<IgdbGame>('games',
-    `search "${q}"; fields ${DETAIL_FIELDS}; limit 8;`)
+    `search "${q}"; fields ${DETAIL_FIELDS}; limit ${SEARCH_PAGE_SIZE}; offset ${(page - 1) * SEARCH_PAGE_SIZE};`)
   return games.map(g => ({
     id: g.id,
     name: g.name,

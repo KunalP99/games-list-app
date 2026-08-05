@@ -40,12 +40,15 @@ export type RawgScreenshot = {
   image: string
 }
 
-export async function searchRawgGames(query: string): Promise<RawgSearchResult[]> {
-  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).searchGames(query)
+// Results per search page (shared by the API route so it can report `hasMore`).
+export const SEARCH_PAGE_SIZE = 12
+
+export async function searchRawgGames(query: string, page = 1): Promise<RawgSearchResult[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).searchGames(query, page)
   const key = process.env.RAWG_API_KEY
   if (!key) return []
   try {
-    const url = `${RAWG_BASE}/games?key=${key}&search=${encodeURIComponent(query)}&page_size=8&search_precise=true`
+    const url = `${RAWG_BASE}/games?key=${key}&search=${encodeURIComponent(query)}&page_size=${SEARCH_PAGE_SIZE}&page=${page}&search_precise=true`
     const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return []
     const data = await res.json()
