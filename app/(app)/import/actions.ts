@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { searchRawgGames, getRawgGameDetail } from '@/lib/rawg'
+import { searchRawgGames, getRawgGameDetail, PROVIDER_ID_COLUMN } from '@/lib/rawg'
 
 export type CompletedGameRow = {
   title: string
@@ -115,8 +115,7 @@ export async function bulkImportGames(
       const releaseDate = rawg?.release_date ?? (g.release_year ? `${g.release_year}-01-01` : null)
       const releasePrecision = rawg?.release_date ? 'full' : 'year'
 
-      const { data: game, error } = await supabase
-        .from('games')
+      const { data: game, error } = await (supabase.from('games') as any)
         .insert({
           user_id: user.id,
           title: g.title,
@@ -132,7 +131,7 @@ export async function bulkImportGames(
           release_date: releaseDate,
           release_date_precision: releasePrecision,
           image_url: rawg?.image_url ?? null,
-          rawg_id: rawg?.rawg_id ?? null,
+          [PROVIDER_ID_COLUMN]: rawg?.rawg_id ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
           dominant_color: rawg?.dominant_color ?? null,
@@ -160,8 +159,7 @@ export async function bulkImportGames(
     try {
       const rawg = enrichWithRawg ? backlogRawgMap.get(g.title) : null
 
-      const { error } = await supabase
-        .from('games')
+      const { error } = await (supabase.from('games') as any)
         .insert({
           user_id: user.id,
           title: g.title,
@@ -169,7 +167,7 @@ export async function bulkImportGames(
           platform: g.platform ?? null,
           developer: rawg?.developer ?? null,
           image_url: rawg?.image_url ?? null,
-          rawg_id: rawg?.rawg_id ?? null,
+          [PROVIDER_ID_COLUMN]: rawg?.rawg_id ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
           dominant_color: rawg?.dominant_color ?? null,

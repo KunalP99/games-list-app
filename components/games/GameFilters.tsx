@@ -30,8 +30,8 @@ export default function GameFilters() {
   const visibleSortOptions = activeStatus === 'backlog'
     ? SORT_OPTIONS.filter(o => o.value !== 'completion_date')
     : SORT_OPTIONS
-  const [activeView, setActiveView] = useState<'grid' | 'table'>(
-    (searchParams.get('view') as 'grid' | 'table') ?? 'grid'
+  const [activeView, setActiveView] = useState<'grid' | 'table' | 'cover'>(
+    (searchParams.get('view') as 'grid' | 'table' | 'cover') ?? 'grid'
   )
   const [search, setSearch] = useState(searchParams.get('q') ?? '')
 
@@ -39,12 +39,12 @@ export default function GameFilters() {
   // the URL so subsequent filter changes continue to preserve the view param.
   useEffect(() => {
     if (!searchParams.get('view')) {
-      const m = document.cookie.match(/\bgameView=(grid|table)\b/)
-      const saved = m?.[1] as 'grid' | 'table' | undefined
-      if (saved === 'table') {
-        setActiveView('table')
+      const m = document.cookie.match(/\bgameView=(grid|table|cover)\b/)
+      const saved = m?.[1] as 'grid' | 'table' | 'cover' | undefined
+      if (saved && saved !== 'grid') {
+        setActiveView(saved)
         const params = new URLSearchParams(searchParams.toString())
-        params.set('view', 'table')
+        params.set('view', saved)
         router.replace(`${pathname}?${params.toString()}`)
       }
     }
@@ -73,7 +73,7 @@ export default function GameFilters() {
     const params = new URLSearchParams(searchParams.toString())
     params.set(key, value)
     if (key === 'view') {
-      setActiveView(value as 'grid' | 'table')
+      setActiveView(value as 'grid' | 'table' | 'cover')
       document.cookie = `gameView=${value}; path=/; max-age=31536000; SameSite=Lax`
     }
     // Reset sort when switching to Backlog if current sort is completion_date
@@ -161,6 +161,16 @@ export default function GameFilters() {
               <rect x="14" y="3" width="7" height="7" rx="1" />
               <rect x="3" y="14" width="7" height="7" rx="1" />
               <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+          </button>
+          <button
+            onClick={() => update('view', 'cover')}
+            aria-label="Cover view"
+            className={`p-1 rounded transition-colors ${activeView === 'cover' ? 'text-brand-500' : 'text-fg-subtle hover:text-fg-secondary'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <rect x="4" y="3" width="6" height="18" rx="1" />
+              <rect x="14" y="3" width="6" height="18" rx="1" />
             </svg>
           </button>
           <button

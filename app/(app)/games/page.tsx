@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameCard from '@/components/games/GameCard'
+import CoverCard from '@/components/games/CoverCard'
 import GameFilters from '@/components/games/GameFilters'
 import { Suspense } from 'react'
 
@@ -26,7 +27,10 @@ export default async function GamesPage({
 
   const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
 
-  const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at, image_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date'
+  const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, created_at, updated_at, image_url, cover_image_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date'
+
+  const rawView = searchParams.view ?? cookies().get('gameView')?.value
+  const view: 'grid' | 'table' | 'cover' = rawView === 'table' || rawView === 'cover' ? rawView : 'grid'
 
   let gamesQuery = supabase
     .from('games')
@@ -85,9 +89,11 @@ export default async function GamesPage({
           <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
             Now Playing · {playingGames.length}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={view === 'cover' ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'}>
             {playingGames.map(game => (
-              <GameCard key={game.id} game={game} isOwner={true} />
+              view === 'cover'
+                ? <CoverCard key={game.id} game={game} isOwner={true} />
+                : <GameCard key={game.id} game={game} isOwner={true} />
             ))}
           </div>
         </div>
@@ -98,7 +104,7 @@ export default async function GamesPage({
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={true} view={(searchParams.view ?? cookies().get('gameView')?.value) === 'table' ? 'table' : 'grid'} />
+        <GameListView games={games} status={searchParams.status} isOwner={true} view={view} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>

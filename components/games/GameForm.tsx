@@ -28,7 +28,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
     (game?.release_date_precision === 'year') ? (game?.release_date?.slice(0, 4) ?? '') : ''
   )
   const [imageUrl, setImageUrl] = useState(game?.image_url ?? '')
-  const [rawgId, setRawgId] = useState<number | null>(game?.rawg_id ?? null)
+  const [rawgId, setRawgId] = useState<number | null>(game?.igdb_id ?? game?.rawg_id ?? null)
   const [status, setStatus] = useState(game?.status ?? defaultStatus ?? 'playing')
   const [isFavourite, setIsFavourite] = useState(game?.is_favourite ?? false)
   const [isReplay, setIsReplay] = useState(game?.is_replay ?? false)

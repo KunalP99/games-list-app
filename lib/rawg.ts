@@ -3,6 +3,16 @@ const RAWG_BASE = 'https://api.rawg.io/api'
 // that awaits a RAWG call doesn't hang ~20s waiting for the socket to time out.
 const RAWG_TIMEOUT_MS = 7000
 
+// Active game-metadata provider. IGDB stands in for RAWG (same return shapes)
+// behind this flag; existing RAWG-linked games keep working when it's 'rawg'.
+export const METADATA_PROVIDER: 'rawg' | 'igdb' = process.env.METADATA_PROVIDER === 'igdb' ? 'igdb' : 'rawg'
+// The games column holding the active provider's id.
+export const PROVIDER_ID_COLUMN: 'rawg_id' | 'igdb_id' = METADATA_PROVIDER === 'igdb' ? 'igdb_id' : 'rawg_id'
+// The active provider's stored id for a game.
+export function providerIdOf(game: { rawg_id?: number | null; igdb_id?: number | null }): number | null {
+  return METADATA_PROVIDER === 'igdb' ? (game.igdb_id ?? null) : (game.rawg_id ?? null)
+}
+
 export type RawgSearchResult = {
   id: number
   name: string
@@ -16,6 +26,8 @@ export type RawgGameDetail = {
   name: string
   description_raw: string | null
   background_image: string | null
+  cover_image: string | null // portrait box art (IGDB); null for RAWG
+  artwork_image: string | null // landscape key-art banner (IGDB); null for RAWG
   released: string | null
   developers: Array<{ name: string }>
   genres: Array<{ name: string }>
@@ -29,6 +41,7 @@ export type RawgScreenshot = {
 }
 
 export async function searchRawgGames(query: string): Promise<RawgSearchResult[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).searchGames(query)
   const key = process.env.RAWG_API_KEY
   if (!key) return []
   try {
@@ -43,6 +56,7 @@ export async function searchRawgGames(query: string): Promise<RawgSearchResult[]
 }
 
 export async function getRawgGameDetail(rawgId: number): Promise<RawgGameDetail | null> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getGameDetail(rawgId)
   const key = process.env.RAWG_API_KEY
   if (!key) return null
   try {
@@ -56,6 +70,7 @@ export async function getRawgGameDetail(rawgId: number): Promise<RawgGameDetail 
 }
 
 export async function getRawgScreenshots(rawgId: number): Promise<RawgScreenshot[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getGameScreenshots(rawgId)
   const key = process.env.RAWG_API_KEY
   if (!key) return []
   try {
@@ -78,6 +93,7 @@ export type RawgAchievement = {
 }
 
 export async function getRawgAchievements(rawgId: number): Promise<RawgAchievement[]> {
+  if (METADATA_PROVIDER === 'igdb') return [] // IGDB has no achievement data
   const key = process.env.RAWG_API_KEY
   if (!key) return []
   try {
@@ -99,6 +115,7 @@ export type RawgAddition = {
 }
 
 export async function getRawgAdditions(rawgId: number): Promise<RawgAddition[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getGameAdditions(rawgId)
   const key = process.env.RAWG_API_KEY
   if (!key) return []
   try {

@@ -3,7 +3,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
-import { getRawgScreenshots, getRawgAchievements } from '@/lib/rawg'
+import { getRawgScreenshots, getRawgAchievements, providerIdOf } from '@/lib/rawg'
 import type { RawgScreenshot, RawgAchievement } from '@/lib/rawg'
 import StatusBadge from '@/components/games/StatusBadge'
 import DeleteGameButton from '@/components/games/DeleteGameButton'
@@ -45,8 +45,8 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       .eq('user_id', game.user_id)
       .ilike('title', game.title)
       .order('created_at', { ascending: true }) as unknown as Promise<{ data: { id: string; created_at: string }[] | null }>,
-    game.rawg_id ? getRawgScreenshots(game.rawg_id) : Promise.resolve([] as RawgScreenshot[]),
-    game.rawg_id ? getRawgAchievements(game.rawg_id) : Promise.resolve([] as RawgAchievement[]),
+    providerIdOf(game) ? getRawgScreenshots(providerIdOf(game)!) : Promise.resolve([] as RawgScreenshot[]),
+    providerIdOf(game) ? getRawgAchievements(providerIdOf(game)!) : Promise.resolve([] as RawgAchievement[]),
   ])
 
   const totalPlaythroughs = sameGames?.length ?? 1
@@ -87,87 +87,13 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
-      {/* Hero — banner with overlay when image exists, plain header otherwise */}
-      {game.image_url ? (
-        <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-md">
-          <img
-            src={game.image_url}
-            alt={game.title}
-            className="w-full h-full object-cover object-center"
-          />
-          {/* Strong gradient so text is always readable */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
+      {/* Hero — clean artwork banner (falls back to the screenshot) with the
+          game info in a block below it, so most of the banner stays visible */}
+      {(() => {
+        const banner = game.artwork_url ?? game.image_url
 
-          {/* Actions — top right */}
-          <div className="absolute top-3 right-3 flex items-center gap-2">
-            {isOwner ? (
-              <>
-                {game.status === 'playing' && (
-                  <MarkCompletedButton gameId={game.id} variant="detail" />
-                )}
-                <Link
-                  href={`/games/${game.id}/edit`}
-                  className="px-2.5 py-1 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-xs font-medium rounded-lg hover:bg-black/60 transition-colors"
-                >
-                  Edit
-                </Link>
-                <DeleteGameButton id={game.id} variant="overlay" />
-              </>
-            ) : (
-              <AddToBacklogButton
-                game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: game.rawg_id, release_date: game.release_date }}
-                variant="glass"
-              />
-            )}
-          </div>
-
-          {/* Title and metadata — bottom */}
-          <div className="absolute bottom-0 left-0 right-0 p-5">
-            <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
-              <h1 className="text-2xl font-bold text-white leading-tight">{game.title}</h1>
-              {game.is_favourite && (
-                <span className="text-amber-400 text-xl leading-none" title="Favourite">★</span>
-              )}
-              <StatusBadge status={game.status} />
-              {game.is_replay && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white border border-white/25">
-                  <span className="text-orange-400">↩</span> Replay
-                </span>
-              )}
-              {game.is_sequel && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white border border-white/25">
-                  <svg className="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg> Sequel
-                </span>
-              )}
-            </div>
-            {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
-              <p className="text-white/70 text-sm mb-2">
-                {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
-              </p>
-            )}
-            {game.genres && game.genres.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {game.genres.map(genre => (
-                  <span
-                    key={genre}
-                    className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white/90 border border-white/20"
-                  >
-                    {genre}
-                  </span>
-                ))}
-              </div>
-            )}
-            {totalPlaythroughs > 1 && (
-              <p className="text-xs text-white/50 mt-1.5">
-                Playthrough {playthroughNumber} of {totalPlaythroughs}
-              </p>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* Fallback plain header for games without an image */
-        <div className="flex items-start justify-between gap-4">
-          <div>
+        const meta = (
+          <div className="min-w-0">
             <div className="flex items-center gap-3 mb-1 flex-wrap">
               <h1 className="text-2xl font-bold text-fg-base">{game.title}</h1>
               {game.is_favourite && (
@@ -185,9 +111,11 @@ export default async function GameDetailPage({ params }: { params: { id: string 
                 </span>
               )}
             </div>
-            <p className="text-fg-muted text-sm">
-              {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
-            </p>
+            {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
+              <p className="text-fg-muted text-sm">
+                {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
+              </p>
+            )}
             {game.genres && game.genres.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {game.genres.map(genre => (
@@ -206,29 +134,107 @@ export default async function GameDetailPage({ params }: { params: { id: string 
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-            {isOwner ? (
-              <>
-                {game.status === 'playing' && (
-                  <MarkCompletedButton gameId={game.id} variant="detail" />
-                )}
-                <Link
-                  href={`/games/${game.id}/edit`}
-                  className="px-3 py-1.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
-                >
-                  Edit
-                </Link>
-                <DeleteGameButton id={game.id} />
-              </>
-            ) : (
-              <AddToBacklogButton
-                game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: game.rawg_id, release_date: game.release_date }}
-                variant="outline"
-              />
+        )
+
+        // White version of the meta, overlaid on the banner.
+        const overlayMeta = (
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+              <h1 className="text-2xl font-bold text-white leading-tight drop-shadow">{game.title}</h1>
+              {game.is_favourite && <span className="text-amber-400 text-xl leading-none" title="Favourite">★</span>}
+              <StatusBadge status={game.status} />
+              {game.is_replay && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white border border-white/25">
+                  <span className="text-orange-400">↩</span> Replay
+                </span>
+              )}
+              {game.is_sequel && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white border border-white/25">
+                  <svg className="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg> Sequel
+                </span>
+              )}
+            </div>
+            {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
+              <p className="text-white/80 text-sm drop-shadow">
+                {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
+              </p>
+            )}
+            {game.genres && game.genres.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {game.genres.map(genre => (
+                  <span key={genre} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white/15 text-white/90 border border-white/20">
+                    {genre}
+                  </span>
+                ))}
+              </div>
+            )}
+            {totalPlaythroughs > 1 && (
+              <p className="text-xs text-white/60 mt-1.5 drop-shadow">
+                Playthrough {playthroughNumber} of {totalPlaythroughs}
+              </p>
             )}
           </div>
-        </div>
-      )}
+        )
+
+        // Overlay actions (on the banner) — glass styling.
+        const overlayActions = isOwner ? (
+          <>
+            {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" />}
+            <Link
+              href={`/games/${game.id}/edit`}
+              className="px-2.5 py-1 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-xs font-medium rounded-lg hover:bg-black/60 transition-colors"
+            >
+              Edit
+            </Link>
+            <DeleteGameButton id={game.id} variant="overlay" />
+          </>
+        ) : (
+          <AddToBacklogButton
+            game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: game.rawg_id, release_date: game.release_date }}
+            variant="glass"
+          />
+        )
+
+        // Off-image actions (no banner) — normal styling.
+        const inlineActions = isOwner ? (
+          <>
+            {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" />}
+            <Link
+              href={`/games/${game.id}/edit`}
+              className="px-3 py-1.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              Edit
+            </Link>
+            <DeleteGameButton id={game.id} />
+          </>
+        ) : (
+          <AddToBacklogButton
+            game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: game.rawg_id, release_date: game.release_date }}
+            variant="outline"
+          />
+        )
+
+        if (banner) {
+          return (
+            /* Break the banner out of the max-w-2xl column to fill the main
+               content area (max-w-6xl = 72rem, minus the layout's px-4). */
+            <div className="relative w-[min(70rem,calc(100vw-2rem))] aspect-[21/9] rounded-xl overflow-hidden shadow-md">
+              <img src={banner} alt={game.title} className="w-full h-full object-cover object-center" />
+              {/* Gradient: strong at the bottom for the overlaid info, clear up top */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none" />
+              <div className="absolute top-3 right-3 flex items-center gap-2">{overlayActions}</div>
+              <div className="absolute bottom-0 left-0 right-0 p-5">{overlayMeta}</div>
+            </div>
+          )
+        }
+
+        return (
+          <div className="flex items-start justify-between gap-4">
+            {meta}
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">{inlineActions}</div>
+          </div>
+        )
+      })()}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

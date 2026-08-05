@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/lib/tickets'
 import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
+import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 
 type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
 
@@ -104,12 +105,16 @@ export async function createGame(formData: FormData) {
   let description: string | null = null
   let genres: string[] | null = null
   let dominantColor: string | null = null
+  let coverImage: string | null = null
+  let artworkImage: string | null = null
   if (rawgId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
     description = detail?.description_raw ?? null
     genres = detail?.genres?.map(g => g.name) ?? null
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
+    coverImage = detail?.cover_image ?? null
+    artworkImage = detail?.artwork_image ?? null
   }
 
   const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
@@ -131,7 +136,9 @@ export async function createGame(formData: FormData) {
     notes: (formData.get('notes') as string)?.trim() || null,
     notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
-    rawg_id: rawgId,
+    cover_image_url: coverImage,
+    artwork_url: artworkImage,
+    [PROVIDER_ID_COLUMN]: rawgId,
     description,
     genres,
     dominant_color: dominantColor,
@@ -174,10 +181,10 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Fetch current status, rawg_id, and description before updating to detect transitions
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status, rawg_id, description, genres, dominant_color, hours_played, achievement_progress')
+    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string; rawg_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; hours_played: number | null; achievement_progress: number | null } | null }
+    .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null } | null }
 
   const status = formData.get('status') as string
   const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
@@ -199,16 +206,21 @@ export async function updateGame(id: string, formData: FormData) {
         : ((formData.get('completion_date') as string) || null))
     : null
 
-  // Only re-fetch from RAWG if the rawg_id changed
+  // Only re-fetch metadata if the provider id changed
+  const existingProviderId = METADATA_PROVIDER === 'igdb' ? existing?.igdb_id : existing?.rawg_id
   let description: string | null = existing?.description ?? null
   let genres: string[] | null = existing?.genres ?? null
   let dominantColor: string | null = existing?.dominant_color ?? null
-  if (rawgId && rawgId !== existing?.rawg_id) {
+  let coverImage: string | null = existing?.cover_image_url ?? null
+  let artworkImage: string | null = existing?.artwork_url ?? null
+  if (rawgId && rawgId !== existingProviderId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
     description = detail?.description_raw ?? null
     genres = detail?.genres?.map(g => g.name) ?? null
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
+    coverImage = detail?.cover_image ?? null
+    artworkImage = detail?.artwork_image ?? null
   }
 
   const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
@@ -229,7 +241,9 @@ export async function updateGame(id: string, formData: FormData) {
     notes: (formData.get('notes') as string)?.trim() || null,
     notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
-    rawg_id: rawgId,
+    cover_image_url: coverImage,
+    artwork_url: artworkImage,
+    [PROVIDER_ID_COLUMN]: rawgId,
     description,
     genres,
     dominant_color: dominantColor,

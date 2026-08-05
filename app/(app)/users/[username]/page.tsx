@@ -70,6 +70,9 @@ export default async function UserProfilePage({
   const allGames = allGamesRes.data as { status: string; hours_played: number | null }[] | null
   const playingGames = playingGamesRes.data as Game[] | null
 
+  const rawView = searchParams.view ?? cookies().get('gameView')?.value
+  const view: 'grid' | 'table' | 'cover' = rawView === 'table' || rawView === 'cover' ? rawView : 'grid'
+
   const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
   const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0
   const totalBacklog   = allGames?.filter(g => g.status === 'backlog').length ?? 0
@@ -148,7 +151,7 @@ export default async function UserProfilePage({
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={isOwner} view={(searchParams.view ?? cookies().get('gameView')?.value) === 'table' ? 'table' : 'grid'} />
+        <GameListView games={games} status={searchParams.status} isOwner={isOwner} view={view} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>

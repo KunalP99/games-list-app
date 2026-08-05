@@ -100,7 +100,10 @@ export type Database = {
           notes: string | null
           notes_public: boolean
           image_url: string | null
+          cover_image_url: string | null
+          artwork_url: string | null
           rawg_id: number | null
+          igdb_id: number | null
           description: string | null
           genres: string[] | null
           platform: string | null
@@ -134,7 +137,10 @@ export type Database = {
           notes?: string | null
           notes_public?: boolean
           image_url?: string | null
+          cover_image_url?: string | null
+          artwork_url?: string | null
           rawg_id?: number | null
+          igdb_id?: number | null
           description?: string | null
           genres?: string[] | null
           platform?: string | null
@@ -168,7 +174,10 @@ export type Database = {
           notes?: string | null
           notes_public?: boolean
           image_url?: string | null
+          cover_image_url?: string | null
+          artwork_url?: string | null
           rawg_id?: number | null
+          igdb_id?: number | null
           description?: string | null
           genres?: string[] | null
           platform?: string | null

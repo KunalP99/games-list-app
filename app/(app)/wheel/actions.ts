@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import { nextWheelTurn, pickWinner, decideWonGameAction } from '@/lib/wheel'
+import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 
@@ -60,7 +61,7 @@ async function addWonGameToLibrary(
   const byId = await (supabase.from('games') as any)
     .select('id, status')
     .eq('user_id', userId)
-    .eq('rawg_id', rawgGame.id) as { data: { id: string; status: string }[] | null }
+    .eq(PROVIDER_ID_COLUMN, rawgGame.id) as { data: { id: string; status: string }[] | null }
   let rows = byId.data ?? []
 
   // Fallback: a copy may exist without this rawg_id (free-text add, un-enriched
@@ -98,7 +99,7 @@ async function addWonGameToLibrary(
     status: 'playing',
     start_date: today,
     image_url: rawgGame.background_image,
-    rawg_id: rawgGame.id,
+    [PROVIDER_ID_COLUMN]: rawgGame.id,
     description: detail?.description_raw ?? null,
     genres: detail?.genres?.map(g => g.name) ?? null,
     dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
