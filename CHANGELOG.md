@@ -39,6 +39,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- The **Now Playing** strip on the games list now always uses the capsule card, even in Box Art view — only the main list below it switches to portrait covers.
 - **Box Art (portrait) is now the default games-list view** for everyone — new users, and anyone who hasn't explicitly switched, land on the cover-art grid instead of the capsule grid. Anyone who previously chose a different view keeps it (their `gameView` cookie), and the grid/table toggles still work.
 - Game detail page now uses a two-column layout on wide screens — the **About** section moves into a sticky right-hand sidebar, with stats, dates, review, achievements, DLC, and screenshots in the main column on the left. On narrow screens it stacks as before.
 - Nav logo icon replaced with an abstract play-triangle + list-bars mark (unique, abstract, reads clearly at small sizes)

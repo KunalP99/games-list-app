@@ -5,7 +5,6 @@ import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameCard from '@/components/games/GameCard'
-import CoverCard from '@/components/games/CoverCard'
 import GameFilters from '@/components/games/GameFilters'
 import { Suspense } from 'react'
 
@@ -90,11 +89,10 @@ export default async function GamesPage({
           <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
             Now Playing · {playingGames.length}
           </h2>
-          <div className={view === 'cover' ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4' : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'}>
+          {/* Now Playing always uses the capsule card, regardless of the list view */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {playingGames.map(game => (
-              view === 'cover'
-                ? <CoverCard key={game.id} game={game} isOwner={true} />
-                : <GameCard key={game.id} game={game} isOwner={true} />
+              <GameCard key={game.id} game={game} isOwner={true} />
             ))}
           </div>
         </div>

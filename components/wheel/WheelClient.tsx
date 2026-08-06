@@ -875,7 +875,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
               </div>
             )}
           </div>
-          {chooseSearching && <p className="text-xs text-fg-muted">Searching RAWG…</p>}
+          {chooseSearching && <p className="text-xs text-fg-muted">Searching game database…</p>}
           {chooseSelectedRawg && (
             <p className="text-xs text-blue-700 dark:text-blue-300">
               ✓ {chooseSelectedRawg.name} will be added to your library as Playing
@@ -1134,7 +1134,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             )}
           </div>
           {chooseSearching && (
-            <p className="text-xs text-fg-muted">Searching RAWG…</p>
+            <p className="text-xs text-fg-muted">Searching game database…</p>
           )}
           {chooseSelectedRawg && (
             <p className="text-xs text-blue-700 dark:text-blue-300">
@@ -1280,8 +1280,8 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             </div>
             <div className="flex items-center justify-between gap-3 min-h-[1rem]">
               {builderSearching
-                ? <p className="text-xs text-fg-muted">Searching RAWG…</p>
-                : <p className="text-xs text-fg-subtle">Search RAWG, or press Enter to add a custom title.</p>}
+                ? <p className="text-xs text-fg-muted">Searching game database…</p>
+                : <p className="text-xs text-fg-subtle">Search the game database, or press Enter to add a custom title.</p>}
               {builderInput.trim() && !uniqueGames.some(g => g.toLowerCase() === builderInput.trim().toLowerCase()) && (
                 <button
                   type="button"
