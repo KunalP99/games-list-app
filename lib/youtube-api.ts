@@ -18,6 +18,33 @@ export async function fetchYouTubeOEmbed(canonicalUrl: string): Promise<{ title?
   }
 }
 
+// Cheap change-detection for many playlists at once: playlists.list accepts up
+// to 50 ids per call for 1 quota unit and returns each playlist's itemCount.
+// The cron compares these to the counts it stored last run and only re-fetches
+// the full item list for playlists whose count changed. Returns id → itemCount
+// (the raw YouTube count, which includes private/deleted entries — fine as a
+// change signal). Missing ids (private/deleted playlists) are simply absent.
+export async function fetchPlaylistItemCounts(ids: string[]): Promise<Map<string, number>> {
+  const key = process.env.YOUTUBE_API_KEY
+  const out = new Map<string, number>()
+  if (!key || ids.length === 0) return out
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50)
+    const url = `${API_BASE}/playlists?part=contentDetails&maxResults=50&id=${chunk.map(encodeURIComponent).join(',')}&key=${key}`
+    try {
+      const res = await fetch(url, { cache: 'no-store' })
+      if (!res.ok) continue
+      const data = await res.json() as { items?: { id?: string; contentDetails?: { itemCount?: number } }[] }
+      for (const it of data.items ?? []) {
+        if (it.id && typeof it.contentDetails?.itemCount === 'number') out.set(it.id, it.contentDetails.itemCount)
+      }
+    } catch {
+      // skip this chunk; a transient failure just means those sync next run
+    }
+  }
+  return out
+}
+
 export type YouTubePlaylistItem = {
   videoId: string
   title: string

@@ -100,6 +100,7 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/tickets` | `app/(app)/tickets/page.tsx` | Full ticket ledger for all users, grouped by game, paginated 20/page |
 | `/wheel` | `app/(app)/wheel/page.tsx` | Wheel spin — shows current turn, game input, spin animation, result flow |
 | `/videos` | `app/(app)/videos/page.tsx` | Curated YouTube library. Everyone views; only `profiles.is_admin` curators add/remove. Click-to-play thumbnails. |
+| `/api/cron/sync-playlists` | `app/api/cron/sync-playlists/route.ts` | Daily Vercel Cron. Mirrors YouTube-sourced playlists (in-site + game media) against their source. `CRON_SECRET`-guarded. |
 
 ---
 
@@ -228,7 +229,8 @@ this change still render.)
 
 - `lib/youtube.ts` — pure helpers: `parseYouTubeUrl` (watch / youtu.be / shorts / embed / live / v / playlist; hosts youtube.com, m., music., youtu.be), `youtubeEmbedUrl`, `youtubeThumbnail`, `youtubeCanonicalUrl`. Tested in `lib/__tests__/youtube.test.ts`.
 - `app/(app)/videos/actions.ts` — `createVideo` (single video; rejects playlist URLs), `createPlaylist` (title + optional YouTube link + N video URLs; oEmbed per video with bounded concurrency + batch insert; rolls back if a video fails), `fetchPlaylistForImport` (pulls a YouTube playlist's videos for the preview), `deleteVideo`, `deletePlaylist` (child videos cascade). All admin-gated; per-video metadata via YouTube **oEmbed** (no key).
-- `lib/youtube-api.ts` — **server-only** YouTube Data API v3 access (`YOUTUBE_API_KEY`), `fetchYouTubePlaylistItems` (paginated `playlistItems.list`, filters deleted/private). Only used to enumerate a playlist's videos for import; everything else stays keyless. Mirrors `lib/rawg.ts`.
+- `lib/youtube-api.ts` — **server-only** YouTube Data API v3 access (`YOUTUBE_API_KEY`): `fetchYouTubePlaylistItems` (paginated `playlistItems.list`, filters deleted/private) enumerates a playlist's videos; `fetchPlaylistItemCounts` batches up to 50 playlist ids into one `playlists.list` call (1 quota unit) returning each playlist's `itemCount` for cheap change-detection. Otherwise everything stays keyless. Mirrors `lib/rawg.ts`.
+- **Playlist auto-sync** (`app/api/cron/sync-playlists/route.ts`) — a daily Vercel Cron (`vercel.json`) mirrors every YouTube-sourced playlist against its source: in-site playlists whose `playlists.youtube_url` is a YouTube playlist (child `videos` rows replaced to match) **and** games whose `games.youtube_playlist_url` is a playlist (`games.youtube_videos` JSONB overwritten). Full mirror (adds new, drops removed, keeps order). Uses the service-role admin client (`lib/supabase/admin.ts`, bypasses RLS). Quota-cheap: one batched count-check reads all playlists' counts; only those whose count differs from the stored `youtube_item_count` are re-fetched. Guarded by `CRON_SECRET` (Vercel Cron sends it as `Authorization: Bearer`). Needs `YOUTUBE_API_KEY` + `SUPABASE_SERVICE_ROLE_KEY` on Vercel. SQL: `ALTER TABLE public.playlists ADD COLUMN IF NOT EXISTS youtube_item_count INTEGER, ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ; ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_item_count INTEGER;`
 - Components: `VideoCard` (click-to-play + admin remove), `PlaylistCard` (expand-inline collection + admin delete), `AddVideoForm` (modal with a "Make a playlist" toggle → dynamic video-URL rows), `DeleteVideoButton`, `DeletePlaylistButton`.
 - Thumbnails use plain `<img>` with `i.ytimg.com` URLs — no `next.config.mjs` change needed. No CSP exists, so the embed iframes work.
 

@@ -115,6 +115,7 @@ export type Database = {
           assigned_by: string | null
           youtube_playlist_url: string | null
           youtube_videos: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
+          youtube_item_count: number | null
           dlc: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at: string
           updated_at: string
@@ -152,6 +153,7 @@ export type Database = {
           assigned_by?: string | null
           youtube_playlist_url?: string | null
           youtube_videos?: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
+          youtube_item_count?: number | null
           dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
@@ -189,6 +191,7 @@ export type Database = {
           assigned_by?: string | null
           youtube_playlist_url?: string | null
           youtube_videos?: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
+          youtube_item_count?: number | null
           dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
@@ -327,6 +330,8 @@ export type Database = {
           user_id: string
           title: string
           youtube_url: string | null
+          youtube_item_count: number | null
+          synced_at: string | null
           created_at: string
         }
         Insert: {
@@ -334,6 +339,8 @@ export type Database = {
           user_id: string
           title: string
           youtube_url?: string | null
+          youtube_item_count?: number | null
+          synced_at?: string | null
           created_at?: string
         }
         Update: {
@@ -341,6 +348,8 @@ export type Database = {
           user_id?: string
           title?: string
           youtube_url?: string | null
+          youtube_item_count?: number | null
+          synced_at?: string | null
           created_at?: string
         }
         Relationships: []
