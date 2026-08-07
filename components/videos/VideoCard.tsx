@@ -69,12 +69,13 @@ export default function VideoCard({ video, isAdmin }: { video: VideoCardData; is
         )}
       </div>
 
-      {/* Meta */}
+      {/* Meta — fixed height (2-line title + 1 author line) so every card is the
+          same size; long titles clamp with an ellipsis. */}
       <div className="px-4 py-3">
-        <p className="text-sm font-semibold text-fg-base line-clamp-2">{video.title}</p>
-        {video.author_name && (
-          <p className="text-xs text-fg-muted mt-0.5 truncate">by {video.author_name}</p>
-        )}
+        <p className="text-sm font-semibold text-fg-base truncate">{video.title}</p>
+        <p className="text-xs text-fg-muted mt-0.5 truncate min-h-[1rem]">
+          {video.author_name && `by ${video.author_name}`}
+        </p>
       </div>
 
       {/* Lightbox player */}
