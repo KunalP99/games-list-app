@@ -203,13 +203,19 @@ export default async function DashboardPage() {
               const counts = friendCountsByUser[profile.id] ?? { completed: 0, playing: 0 }
               const initials = (profile.display_name ?? profile.username)
                 .split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
+              // Each friend's own chosen accent colour drives their card's icon,
+              // "playing" label, and ticket pill.
+              const accent = profile.accent_colour ?? '#7c3aed'
               return (
                 <Link
                   key={profile.id}
                   href={`/users/${encodeURIComponent(profile.username)}`}
                   className="flex items-center gap-3 bg-surface-base border border-edge-base rounded-xl p-3 hover:border-brand-300 hover:shadow-sm transition-all dark:hover:border-brand-700"
                 >
-                  <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm flex-shrink-0 dark:bg-brand-900/40 dark:text-brand-300">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    style={{ backgroundColor: accent }}
+                  >
                     {initials}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -218,11 +224,14 @@ export default async function DashboardPage() {
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-fg-muted">
                       <span>{counts.completed} completed</span>
                       {counts.playing > 0 && (
-                        <span className="text-brand-600 dark:text-brand-400">{counts.playing} playing</span>
+                        <span className="font-medium" style={{ color: accent }}>{counts.playing} playing</span>
                       )}
                     </div>
                   </div>
-                  <span className="flex-shrink-0 text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2 py-0.5 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300">
+                  <span
+                    className="friend-ticket flex-shrink-0 text-xs font-bold border rounded-full px-2 py-0.5"
+                    style={{ ['--fc-accent']: accent } as React.CSSProperties}
+                  >
                     🎟️ {profile.ticket_balance}
                   </span>
                 </Link>

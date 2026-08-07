@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **"Also played by" card** on the game detail page — a small card under the About section listing other users who have the same game (currently playing it or completed it), with their avatar, name, and status, linking to their profile. Sits in the right sidebar on wide screens (under Dates on mobile). Currently-playing users are shown first.
 - **Playlists auto-sync from YouTube** — a daily Vercel Cron job (`/api/cron/sync-playlists`) mirrors every playlist that was imported from a YouTube playlist against its source: new videos are pulled in, videos removed upstream are dropped, and order is kept. Works for both the Videos-page playlists (those whose "Watch on YouTube" link is a playlist) and game-page playlist media. Quota-friendly — one batched `playlists.list` reads up to 50 playlists' video counts per call, and only playlists whose count changed are re-fetched. Needs `YOUTUBE_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and (recommended) `CRON_SECRET` on Vercel. SQL: `ALTER TABLE public.playlists ADD COLUMN IF NOT EXISTS youtube_item_count INTEGER, ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ; ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_item_count INTEGER;`
 - **Infinite scroll on game search** — every game search bar (the add/edit form, and both wheel search boxes) now loads more results as you scroll to the bottom of the dropdown, instead of stopping at the first handful. Backed by a paginated `/api/rawg/search` (`page` param + `hasMore`) shared via `fetchGameSearchPage`.
 - **Pick a game's image** in the add/edit form — after choosing a game from search, a gallery of its IGDB artworks and screenshots appears; click one to set the game's banner (used on the list card and the detail-page hero). Defaults to the auto-selected key art, so leaving it alone keeps the previous behaviour. Backed by a new `/api/rawg/images/[id]` route and `getGameImages`.
@@ -40,6 +41,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- Dashboard **friend cards now use each friend's own accent colour** — their avatar, "playing" label, and ticket pill are tinted with the colour that friend picked, instead of your brand colour.
 - Video cards (game-page playlists and the Videos page) are now a **uniform size** — the title is kept to a single line and long titles truncate with an ellipsis, so cards no longer vary in height by title length.
 - Game search bars now show **portrait box-art covers** instead of the wide screenshot — in the add/edit game form's search, and across the wheel (the builder search, the entries list, and the Choose-a-game search) — so picking a game looks like a shelf of covers. Falls back to the wide image when a game has no cover.
 - The **Now Playing** strip on the games list now always uses the capsule card, even in Box Art view — only the main list below it switches to portrait covers.

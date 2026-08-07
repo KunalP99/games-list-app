@@ -139,7 +139,7 @@ export default async function UserProfilePage({
           <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
             Now Playing · {playingGames.length}
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {playingGames.map(game => (
               <GameCard key={game.id} game={game} isOwner={isOwner} />
             ))}

@@ -160,3 +160,15 @@ body {
 .animate-achievement-dismiss {
   animation: achievement-dismiss 0.35s cubic-bezier(0.4, 0, 1, 1) forwards;
 }
+
+/* Friend-card ticket pill — tinted with the friend's accent (--fc-accent).
+   The translucent fill adapts to the card surface; in dark mode the text is
+   lightened so it stands out against the darker fill. */
+.friend-ticket {
+  color: var(--fc-accent);
+  background-color: color-mix(in srgb, var(--fc-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--fc-accent) 34%, transparent);
+}
+.dark .friend-ticket {
+  color: color-mix(in srgb, var(--fc-accent) 40%, white);
+}

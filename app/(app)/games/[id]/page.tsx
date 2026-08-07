@@ -11,6 +11,7 @@ import MarkCompletedButton from '@/components/games/MarkCompletedButton'
 import AchievementGrid from '@/components/games/AchievementGrid'
 import AddToBacklogButton from '@/components/users/AddToBacklogButton'
 import GameVideos from '@/components/games/GameVideos'
+import PlayedByCard from '@/components/games/PlayedByCard'
 import { mapGameVideos } from '@/lib/youtube'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
@@ -38,7 +39,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
   const dlcEntries = (((game as any).dlc ?? []) as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[])
     .filter(d => !d.removed)
 
-  const [{ data: sameGames }, screenshots, achievements] = await Promise.all([
+  const [{ data: sameGames }, screenshots, achievements, { data: otherPlayers }] = await Promise.all([
     supabase
       .from('games')
       .select('id, created_at')
@@ -47,6 +48,13 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       .order('created_at', { ascending: true }) as unknown as Promise<{ data: { id: string; created_at: string }[] | null }>,
     providerIdOf(game) ? getRawgScreenshots(providerIdOf(game)!) : Promise.resolve([] as RawgScreenshot[]),
     providerIdOf(game) ? getRawgAchievements(providerIdOf(game)!) : Promise.resolve([] as RawgAchievement[]),
+    // Other people who have this same game completed or in progress.
+    supabase
+      .from('games')
+      .select('user_id, status')
+      .neq('user_id', game.user_id)
+      .in('status', ['completed', 'playing'])
+      .ilike('title', game.title) as unknown as Promise<{ data: { user_id: string; status: 'completed' | 'playing' }[] | null }>,
   ])
 
   const totalPlaythroughs = sameGames?.length ?? 1
@@ -62,6 +70,38 @@ export default async function GameDetailPage({ params }: { params: { id: string 
     game.status === 'completed' && startDate && completionDate && game.completion_date_precision === 'full'
       ? daysBetween(startDate, completionDate)
       : null
+
+  // "Also played by" — dedupe to one entry per user (currently playing wins over
+  // completed), then attach each user's profile for the display.
+  const playerInfo = new Map<string, { completed: boolean; playing: boolean }>()
+  for (const r of otherPlayers ?? []) {
+    const cur = playerInfo.get(r.user_id) ?? { completed: false, playing: false }
+    if (r.status === 'completed') cur.completed = true
+    if (r.status === 'playing') cur.playing = true
+    playerInfo.set(r.user_id, cur)
+  }
+  const playerIds = Array.from(playerInfo.keys())
+  const { data: playerProfiles } = playerIds.length
+    ? await supabase
+        .from('profiles')
+        .select('id, display_name, username, accent_colour')
+        .in('id', playerIds) as { data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null }
+    : { data: [] }
+  const playedBy = (playerProfiles ?? [])
+    .map(pr => ({
+      id: pr.id,
+      username: pr.username,
+      displayName: pr.display_name,
+      accentColour: pr.accent_colour,
+      status: (playerInfo.get(pr.id)?.playing ? 'playing' : 'completed') as 'playing' | 'completed',
+    }))
+    // Currently-playing users first, then alphabetical by display name.
+    .sort((a, b) =>
+      a.status === b.status
+        ? (a.displayName ?? a.username).localeCompare(b.displayName ?? b.username)
+        : a.status === 'playing' ? -1 : 1,
+    )
+  const hasSidebar = Boolean(game.description) || playedBy.length > 0
 
   return (
     <div className="w-[min(70rem,calc(100vw-2rem))] space-y-6">
@@ -236,9 +276,9 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         )
       })()}
 
-      {/* Body — main content on the left, About in a right sidebar */}
-      <div className={game.description ? 'grid grid-cols-1 lg:grid-cols-3 gap-6 items-start' : ''}>
-      <div className={game.description ? 'lg:col-span-2 space-y-6' : 'max-w-2xl space-y-6'}>
+      {/* Body — main content on the left, About + "also played by" in a right sidebar */}
+      <div className={hasSidebar ? 'grid grid-cols-1 lg:grid-cols-3 gap-6 items-start' : ''}>
+      <div className={hasSidebar ? 'lg:col-span-2 space-y-6' : 'max-w-2xl space-y-6'}>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -280,11 +320,17 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
-      {/* About (small screens) — shown right under Dates; the sidebar copy takes over at lg+ */}
+      {/* About + "also played by" (small screens) — shown right under Dates; the
+          sidebar copies take over at lg+ */}
       {game.description && (
         <div className="lg:hidden bg-surface-base border border-edge-base rounded-xl p-4">
           <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
           <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
+        </div>
+      )}
+      {playedBy.length > 0 && (
+        <div className="lg:hidden">
+          <PlayedByCard players={playedBy} />
         </div>
       )}
 
@@ -375,13 +421,16 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
       </div>{/* /main column */}
 
-      {/* About — from RAWG description stored at save time (sidebar, lg+ only) */}
-      {game.description && (
+      {/* Sidebar (lg+ only) — About, then "also played by" beneath it */}
+      {hasSidebar && (
         <aside className="hidden lg:block space-y-6 lg:sticky lg:top-24">
-          <div className="bg-surface-base border border-edge-base rounded-xl p-4">
-            <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
-            <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
-          </div>
+          {game.description && (
+            <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+              <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
+              <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
+            </div>
+          )}
+          {playedBy.length > 0 && <PlayedByCard players={playedBy} />}
         </aside>
       )}
       </div>{/* /body grid */}
