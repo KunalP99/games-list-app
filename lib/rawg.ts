@@ -18,6 +18,7 @@ export type RawgSearchResult = {
   name: string
   released: string | null
   background_image: string | null
+  cover_image?: string | null // portrait box art (IGDB); may be absent for RAWG
   developers?: Array<{ name: string }>
 }
 

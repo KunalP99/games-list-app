@@ -328,14 +328,14 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
                   onMouseDown={() => handleRawgSelect(result)}
                   className="w-full flex items-center gap-3 px-3 py-2 hover:bg-surface-hover text-left border-b border-edge-subtle last:border-0"
                 >
-                  {result.background_image ? (
+                  {(result.cover_image ?? result.background_image) ? (
                     <img
-                      src={result.background_image}
+                      src={result.cover_image ?? result.background_image ?? undefined}
                       alt=""
-                      className="w-12 h-8 object-cover rounded shrink-0 bg-surface-active"
+                      className="w-9 h-12 object-cover rounded shrink-0 bg-surface-active"
                     />
                   ) : (
-                    <div className="w-12 h-8 rounded bg-surface-active shrink-0" />
+                    <div className="w-9 h-12 rounded bg-surface-active shrink-0" />
                   )}
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>

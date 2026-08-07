@@ -128,6 +128,7 @@ export async function searchGames(query: string, page = 1): Promise<RawgSearchRe
     name: g.name,
     released: releasedFrom(g.first_release_date),
     background_image: heroImage(g),
+    cover_image: coverUrl(g.cover?.image_id),
     developers: developersFrom(g.involved_companies),
   }))
 }

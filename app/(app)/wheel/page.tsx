@@ -16,7 +16,7 @@ export default async function WheelPage() {
       .single(),
     supabase
       .from('games')
-      .select('id, title, rawg_id, image_url, release_date')
+      .select('id, title, rawg_id, image_url, cover_image_url, release_date')
       .eq('user_id', user.id)
       .eq('status', 'backlog')
       .order('title', { ascending: true }),
@@ -28,6 +28,7 @@ export default async function WheelPage() {
     title: string
     rawg_id: number | null
     image_url: string | null
+    cover_image_url: string | null
     release_date: string | null
   }[] | null
 
@@ -46,7 +47,7 @@ export default async function WheelPage() {
         backlogGames={(backlogGames ?? []).map(g => ({
           name: g.title,
           rawg: g.rawg_id
-            ? { id: g.rawg_id, name: g.title, released: g.release_date, background_image: g.image_url }
+            ? { id: g.rawg_id, name: g.title, released: g.release_date, background_image: g.image_url, cover_image: g.cover_image_url }
             : null,
         }))}
       />

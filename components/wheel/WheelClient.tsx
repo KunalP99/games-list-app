@@ -852,14 +852,14 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors border-b border-edge-subtle last:border-b-0"
                   >
-                    {result.background_image ? (
+                    {(result.cover_image ?? result.background_image) ? (
                       <img
-                        src={result.background_image}
+                        src={result.cover_image ?? result.background_image ?? undefined}
                         alt=""
-                        className="w-10 h-10 rounded object-cover flex-shrink-0"
+                        className="w-9 h-12 rounded object-cover flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded bg-surface-sunken flex-shrink-0" />
+                      <div className="w-9 h-12 rounded bg-surface-sunken flex-shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
@@ -1110,14 +1110,14 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                     }}
                     className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors border-b border-edge-subtle last:border-b-0"
                   >
-                    {result.background_image ? (
+                    {(result.cover_image ?? result.background_image) ? (
                       <img
-                        src={result.background_image}
+                        src={result.cover_image ?? result.background_image ?? undefined}
                         alt=""
-                        className="w-10 h-10 rounded object-cover flex-shrink-0"
+                        className="w-9 h-12 rounded object-cover flex-shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded bg-surface-sunken flex-shrink-0" />
+                      <div className="w-9 h-12 rounded bg-surface-sunken flex-shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
@@ -1257,10 +1257,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                         }}
                         className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-surface-hover transition-colors border-b border-edge-subtle last:border-b-0 disabled:opacity-50 disabled:cursor-default"
                       >
-                        {result.background_image ? (
-                          <img src={result.background_image} alt="" className="w-10 h-10 rounded object-cover flex-shrink-0" />
+                        {(result.cover_image ?? result.background_image) ? (
+                          <img src={result.cover_image ?? result.background_image ?? undefined} alt="" className="w-9 h-12 rounded object-cover flex-shrink-0" />
                         ) : (
-                          <div className="w-10 h-10 rounded bg-surface-sunken flex-shrink-0" />
+                          <div className="w-9 h-12 rounded bg-surface-sunken flex-shrink-0" />
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-fg-base truncate">{result.name}</p>
@@ -1298,10 +1298,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
               <ul className="flex flex-col divide-y divide-edge-subtle max-h-52 overflow-y-auto pr-1">
                 {entries.map(entry => (
                   <li key={entry.name} className="flex items-center gap-3 py-2">
-                    {entry.rawg?.background_image ? (
-                      <img src={entry.rawg.background_image} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                    {(entry.rawg?.cover_image ?? entry.rawg?.background_image) ? (
+                      <img src={entry.rawg?.cover_image ?? entry.rawg?.background_image ?? undefined} alt="" className="w-8 h-11 rounded object-cover shrink-0" />
                     ) : (
-                      <div className="w-8 h-8 rounded bg-surface-sunken shrink-0 flex items-center justify-center text-xs text-fg-subtle">✎</div>
+                      <div className="w-8 h-11 rounded bg-surface-sunken shrink-0 flex items-center justify-center text-xs text-fg-subtle">✎</div>
                     )}
                     <span className="text-sm text-fg-base truncate flex-1">{entry.name}</span>
                     <button
