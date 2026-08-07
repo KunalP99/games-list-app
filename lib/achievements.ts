@@ -396,10 +396,15 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
   const dnfTitles = new Set(list.filter(g => g.status === 'dnf').map(g => g.title.toLowerCase()))
   const hasDnfRedemption = completed.some(g => dnfTitles.has(g.title.toLowerCase()))
 
-  const { data: profile } = await (supabase.from('profiles') as any)
-    .select('tickets_earned_total')
-    .eq('id', userId)
-    .single() as { data: { tickets_earned_total: number } | null }
+  // Lifetime tickets earned = sum of the positive rows in the ledger. Computed
+  // from the ledger rather than the cached profiles.tickets_earned_total column,
+  // which isn't kept in sync (award_tickets only updates ticket_balance), so the
+  // ticket achievements track true earnings and can't drift.
+  const { data: earnedRows } = await (supabase.from('ticket_transactions') as any)
+    .select('amount')
+    .eq('user_id', userId)
+    .gt('amount', 0) as { data: { amount: number }[] | null }
+  const ticketsEarnedTotal = (earnedRows ?? []).reduce((sum, r) => sum + r.amount, 0)
 
   const { data: spinRows } = await (supabase.from('wheel_spins') as any)
     .select('spin_type')
@@ -410,7 +415,7 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
   return {
     completedCount: completed.length,
     totalHours,
-    ticketsEarnedTotal: profile?.tickets_earned_total ?? 0,
+    ticketsEarnedTotal,
     perfectGameCount: perfect,
     hasFiveRating: fiveRating,
     fiveStarCount,
