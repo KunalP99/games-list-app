@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import WheelClient from '@/components/wheel/WheelClient'
+import { providerIdOf } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
 
 export default async function WheelPage() {
@@ -16,7 +17,7 @@ export default async function WheelPage() {
       .single(),
     supabase
       .from('games')
-      .select('id, title, rawg_id, image_url, cover_image_url, release_date')
+      .select('id, title, rawg_id, igdb_id, image_url, cover_image_url, release_date')
       .eq('user_id', user.id)
       .eq('status', 'backlog')
       .order('title', { ascending: true }),
@@ -27,6 +28,7 @@ export default async function WheelPage() {
     id: string
     title: string
     rawg_id: number | null
+    igdb_id: number | null
     image_url: string | null
     cover_image_url: string | null
     release_date: string | null
@@ -44,12 +46,15 @@ export default async function WheelPage() {
         turn={profile.wheel_turn}
         balance={profile.ticket_balance}
         accentColour={profile.accent_colour ?? '#7c3aed'}
-        backlogGames={(backlogGames ?? []).map(g => ({
-          name: g.title,
-          rawg: g.rawg_id
-            ? { id: g.rawg_id, name: g.title, released: g.release_date, background_image: g.image_url, cover_image: g.cover_image_url }
-            : null,
-        }))}
+        backlogGames={(backlogGames ?? []).map(g => {
+          const pid = providerIdOf(g) // igdb_id in IGDB mode, else rawg_id
+          return {
+            name: g.title,
+            rawg: pid
+              ? { id: pid, name: g.title, released: g.release_date, background_image: g.image_url, cover_image: g.cover_image_url }
+              : null,
+          }
+        })}
       />
     </div>
   )

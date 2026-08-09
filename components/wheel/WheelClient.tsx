@@ -566,6 +566,15 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     })
   }
 
+  // CHOOSE turn: picking a backlog game selects it (same path as picking a
+  // search result), then the user confirms — flipping it to Playing.
+  function selectBacklogChoice(entry: WheelEntry) {
+    setError('')
+    setChooseInput(entry.name)
+    setChooseSelectedRawg(entry.rawg)
+    setChooseSearchResults([])
+  }
+
   function handleSkip() {
     setError('')
     startTransition(async () => {
@@ -1149,6 +1158,44 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
           >
             {isPending ? 'Confirming…' : 'Confirm'}
           </button>
+
+          {/* Or pick straight from the backlog */}
+          {backlogGames.length > 0 && (
+            <>
+              <div className="relative flex items-center gap-3">
+                <div className="flex-1 border-t border-edge-subtle" />
+                <span className="text-xs text-fg-subtle">or pick from your backlog</span>
+                <div className="flex-1 border-t border-edge-subtle" />
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-1">
+                {backlogGames.map(entry => {
+                  const cover = entry.rawg?.cover_image ?? entry.rawg?.background_image
+                  const selected = entry.rawg ? chooseSelectedRawg?.id === entry.rawg.id : chooseInput === entry.name
+                  return (
+                    <button
+                      key={entry.name}
+                      type="button"
+                      onClick={() => selectBacklogChoice(entry)}
+                      className="text-left"
+                    >
+                      <div className={`relative aspect-[3/4] rounded-lg overflow-hidden bg-surface-sunken border transition-all ${selected ? 'ring-2 ring-brand-500 border-brand-500' : 'border-edge-base hover:border-brand-300'}`}>
+                        {cover ? (
+                          <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-2xl">🎮</div>
+                        )}
+                        {selected && (
+                          <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center shadow">✓</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-fg-secondary truncate mt-1">{entry.name}</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
           <div className="relative flex items-center gap-3">
             <div className="flex-1 border-t border-edge-subtle" />
             <span className="text-xs text-fg-subtle">or</span>
