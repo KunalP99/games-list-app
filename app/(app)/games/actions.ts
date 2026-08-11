@@ -10,6 +10,32 @@ import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 
 type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
 
+// If `gameId` is the profile's most recent wheel outcome, consume that pointer.
+// When `revert` is true (the game is being DNF'd) also hand the wheel turn back
+// to the turn that produced it. Returns whether a turn revert actually happened.
+async function consumeWheelPending(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  gameId: string,
+  revert: boolean,
+): Promise<boolean> {
+  const { data: prof } = await supabase
+    .from('profiles')
+    .select('pending_wheel_game_id, pending_wheel_turn')
+    .eq('id', userId)
+    .single() as { data: { pending_wheel_game_id: string | null; pending_wheel_turn: 'spin' | 'spin_reroll' | 'choose' | null } | null }
+  if (prof?.pending_wheel_game_id !== gameId) return false
+  const doRevert = revert && !!prof.pending_wheel_turn
+  await (supabase.from('profiles') as any)
+    .update({
+      ...(doRevert ? { wheel_turn: prof.pending_wheel_turn } : {}),
+      pending_wheel_game_id: null,
+      pending_wheel_turn: null,
+    })
+    .eq('id', userId)
+  return doRevert
+}
+
 // Fetch media for a game from a YouTube URL — a whole playlist (all its videos,
 // via the Data API) or a single video (via keyless oEmbed). Auth-gated only;
 // any user manages their own game's media. Playlists need YOUTUBE_API_KEY.
@@ -306,22 +332,8 @@ export async function updateGame(id: string, formData: FormData) {
   const becameDnf = !wasDnf && isDnf
   const becameCompleted = !wasCompleted && isCompleted
   if (becameDnf || becameCompleted) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('pending_wheel_game_id, pending_wheel_turn')
-      .eq('id', user.id)
-      .single() as { data: { pending_wheel_game_id: string | null; pending_wheel_turn: string | null } | null }
-    if (prof?.pending_wheel_game_id === id) {
-      const revert = becameDnf && !!prof.pending_wheel_turn
-      await (supabase.from('profiles') as any)
-        .update({
-          ...(revert ? { wheel_turn: prof.pending_wheel_turn } : {}),
-          pending_wheel_game_id: null,
-          pending_wheel_turn: null,
-        })
-        .eq('id', user.id)
-      if (revert) revalidatePath('/wheel')
-    }
+    const reverted = await consumeWheelPending(supabase, user.id, id, becameDnf)
+    if (reverted) revalidatePath('/wheel')
   }
 
   revalidatePath('/games')
@@ -386,16 +398,52 @@ export async function markAsCompleted(
 
   // Completing the game the wheel gave you consumes its pending pointer, so a
   // later completed→DNF edit can't hand the turn back.
-  await (supabase.from('profiles') as any)
-    .update({ pending_wheel_game_id: null, pending_wheel_turn: null })
-    .eq('id', user.id)
-    .eq('pending_wheel_game_id', id)
+  await consumeWheelPending(supabase, user.id, id, false)
 
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
   revalidatePath('/dashboard')
   revalidatePath('/tickets')
   revalidatePath('/achievements')
+}
+
+// Quick-DNF a game from the detail page. Applies the DNF ticket penalty and, if
+// this was the most recent wheel outcome, hands the wheel turn back.
+export async function markAsDnf(id: string) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: existing } = await (supabase.from('games') as any)
+    .select('status')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single() as { data: { status: string } | null }
+  if (!existing) return { error: 'Game not found' }
+
+  const { error } = await (supabase.from('games') as any)
+    .update({
+      status: 'dnf',
+      completion_date: new Date().toISOString().split('T')[0],
+      completion_date_precision: 'full',
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+  if (error) return { error: error.message }
+
+  if (existing.status !== 'dnf') {
+    await applyDnfPenalty(supabase, user.id, id)
+    const reverted = await consumeWheelPending(supabase, user.id, id, true)
+    if (reverted) revalidatePath('/wheel')
+  }
+  await checkAndAwardAchievements(supabase, user.id)
+
+  revalidatePath('/games')
+  revalidatePath(`/games/${id}`)
+  revalidatePath('/dashboard')
+  revalidatePath('/tickets')
+  revalidatePath('/achievements')
+  return { success: true }
 }
 
 export async function deleteGame(id: string) {

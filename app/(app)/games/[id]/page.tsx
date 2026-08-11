@@ -8,6 +8,7 @@ import type { RawgScreenshot, RawgAchievement } from '@/lib/rawg'
 import StatusBadge from '@/components/games/StatusBadge'
 import DeleteGameButton from '@/components/games/DeleteGameButton'
 import MarkCompletedButton from '@/components/games/MarkCompletedButton'
+import MarkDnfButton from '@/components/games/MarkDnfButton'
 import AchievementGrid from '@/components/games/AchievementGrid'
 import AddToBacklogButton from '@/components/users/AddToBacklogButton'
 import GameVideos from '@/components/games/GameVideos'
@@ -220,6 +221,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         const overlayActions = isOwner ? (
           <>
             {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" />}
+            {game.status === 'playing' && <MarkDnfButton gameId={game.id} />}
             <Link
               href={`/games/${game.id}/edit`}
               className="px-2.5 py-1 bg-black/40 backdrop-blur-sm border border-white/20 text-white text-xs font-medium rounded-lg hover:bg-black/60 transition-colors"
@@ -239,6 +241,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         const inlineActions = isOwner ? (
           <>
             {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" />}
+            {game.status === 'playing' && <MarkDnfButton gameId={game.id} />}
             <Link
               href={`/games/${game.id}/edit`}
               className="px-3 py-1.5 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
