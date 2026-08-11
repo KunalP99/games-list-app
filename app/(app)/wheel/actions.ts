@@ -13,9 +13,18 @@ async function advanceTurn(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   current: WheelTurn,
+  wonGameId?: string | null,
 ) {
+  // Also record the "pending" wheel outcome: the game this action produced and
+  // the turn that produced it. DNF-ing that game reverts the turn (games/actions).
+  // Any action that added no game clears the pointer, so only the MOST RECENT
+  // wheel outcome is ever revertable.
   await (supabase.from('profiles') as any)
-    .update({ wheel_turn: nextWheelTurn(current) })
+    .update({
+      wheel_turn: nextWheelTurn(current),
+      pending_wheel_game_id: wonGameId ?? null,
+      pending_wheel_turn: wonGameId ? current : null,
+    })
     .eq('id', userId)
 }
 
@@ -49,12 +58,14 @@ type WonGame = { id: number; name: string; released: string | null; background_i
 type TicketSpend = { action: string; amount: number }
 const spendsOrNull = (spends?: TicketSpend[] | null) => (spends && spends.length > 0 ? spends : null)
 
+// Returns the id of the game row that ended up as Playing (a flipped backlog
+// copy or a fresh entry), or null when nothing was added (no-op / free-text).
 async function addWonGameToLibrary(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   rawgGame: WonGame | null | undefined,
-) {
-  if (!rawgGame) return
+): Promise<string | null> {
+  if (!rawgGame) return null
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -76,7 +87,7 @@ async function addWonGameToLibrary(
   }
 
   const decision = decideWonGameAction(rows)
-  if (decision.action === 'noop') return
+  if (decision.action === 'noop') return null
 
   // A backlog copy is pulled straight into playing.
   if (decision.action === 'flip') {
@@ -84,14 +95,14 @@ async function addWonGameToLibrary(
       .update({ status: 'playing', start_date: today })
       .eq('id', decision.gameId)
       .eq('user_id', userId)
-    return
+    return decision.gameId
   }
 
   // Fresh entry — a replay if a completed copy already exists.
   const { getRawgGameDetail } = await import('@/lib/rawg')
   const detail = await getRawgGameDetail(rawgGame.id)
 
-  await (supabase.from('games') as any).insert({
+  const { data: inserted } = await (supabase.from('games') as any).insert({
     user_id: userId,
     title: rawgGame.name,
     developer: detail?.developers?.[0]?.name ?? null,
@@ -107,7 +118,9 @@ async function addWonGameToLibrary(
     genres: detail?.genres?.map(g => g.name) ?? null,
     dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
     is_replay: decision.isReplay,
-  })
+  }).select('id').single() as { data: { id: string } | null }
+
+  return inserted?.id ?? null
 }
 
 // ─── Initial spin (both SPIN and SPIN+REROLL turns) ─────────────────────────
@@ -140,7 +153,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
 
-  await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -152,7 +165,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
     finalized_via: finalizedVia,
     ticket_spends: spendsOrNull(spends),
   })
-  await advanceTurn(supabase, user.id, turn)
+  await advanceTurn(supabase, user.id, turn, wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -242,7 +255,7 @@ export async function finalizeUpgradeChoice(
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
 
-  await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -256,7 +269,7 @@ export async function finalizeUpgradeChoice(
     finalized_via: 'upgrade_choice',
     ticket_spends: spendsOrNull(spends),
   })
-  await advanceTurn(supabase, user.id, turn)
+  await advanceTurn(supabase, user.id, turn, wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -287,7 +300,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
     p_reason: 'choose_game',
   })
 
-  await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -302,7 +315,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
     ticket_spends: spendsOrNull(spends),
   })
 
-  await advanceTurn(supabase, user.id, turn)
+  await advanceTurn(supabase, user.id, turn, wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -342,7 +355,7 @@ export async function finalizeSpinReroll(
   const profile = await getProfile(supabase, user.id)
   if (profile?.wheel_turn !== 'spin_reroll') return { error: 'Not a spin_reroll turn' }
 
-  await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -357,7 +370,7 @@ export async function finalizeSpinReroll(
     ticket_spends: spendsOrNull(spends),
   })
 
-  await advanceTurn(supabase, user.id, 'spin_reroll')
+  await advanceTurn(supabase, user.id, 'spin_reroll', wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -382,7 +395,7 @@ export async function chooseGameWithRawg(rawgGame: {
   if (!profile) return { error: 'Profile not found' }
   if (profile.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
 
-  await addWonGameToLibrary(supabase, user.id, rawgGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, rawgGame)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -391,7 +404,7 @@ export async function chooseGameWithRawg(rawgGame: {
     finalized_via: 'choose',
   })
 
-  await advanceTurn(supabase, user.id, 'choose')
+  await advanceTurn(supabase, user.id, 'choose', wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')

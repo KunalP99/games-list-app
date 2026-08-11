@@ -209,6 +209,15 @@ ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS finalized_via TEXT
 -- this is what lets history show the full breakdown. Nullable — old rows fall
 -- back to a single aggregate row.
 ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS ticket_spends JSONB;
+
+-- "DNF a wheel-won game to get your turn back": profiles remember the single most
+-- recent wheel outcome (game + the turn that produced it). advanceTurn writes both
+-- on every finalize (cleared when the action added no game). updateGame reverts
+-- wheel_turn to pending_wheel_turn when that game is DNF'd (most-recent only; no
+-- ticket refund), and consumes the pointer on DNF/completion.
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pending_wheel_game_id UUID;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pending_wheel_turn TEXT
+  CHECK (pending_wheel_turn IN ('spin','spin_reroll','choose'));
 ```
 
 ---

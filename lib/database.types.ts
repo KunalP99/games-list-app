@@ -22,6 +22,8 @@ export type Database = {
           tickets_earned_total: number
           xp: number
           wheel_turn: 'spin' | 'spin_reroll' | 'choose'
+          pending_wheel_game_id: string | null
+          pending_wheel_turn: 'spin' | 'spin_reroll' | 'choose' | null
           theme_preference: 'light' | 'dark' | 'system'
           accent_colour: string | null
           is_admin: boolean
@@ -37,6 +39,8 @@ export type Database = {
           tickets_earned_total?: number
           xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
+          pending_wheel_game_id?: string | null
+          pending_wheel_turn?: 'spin' | 'spin_reroll' | 'choose' | null
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
           is_admin?: boolean
@@ -52,6 +56,8 @@ export type Database = {
           tickets_earned_total?: number
           xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
+          pending_wheel_game_id?: string | null
+          pending_wheel_turn?: 'spin' | 'spin_reroll' | 'choose' | null
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
           is_admin?: boolean

@@ -300,6 +300,30 @@ export async function updateGame(id: string, formData: FormData) {
     await checkAndAwardAchievements(supabase, user.id)
   }
 
+  // Wheel turn refund: if this game was the most recent wheel outcome, DNF-ing it
+  // hands the wheel turn back to the turn that produced it. Completing it just
+  // consumes the pending pointer (you used the pick, so no refund).
+  const becameDnf = !wasDnf && isDnf
+  const becameCompleted = !wasCompleted && isCompleted
+  if (becameDnf || becameCompleted) {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('pending_wheel_game_id, pending_wheel_turn')
+      .eq('id', user.id)
+      .single() as { data: { pending_wheel_game_id: string | null; pending_wheel_turn: string | null } | null }
+    if (prof?.pending_wheel_game_id === id) {
+      const revert = becameDnf && !!prof.pending_wheel_turn
+      await (supabase.from('profiles') as any)
+        .update({
+          ...(revert ? { wheel_turn: prof.pending_wheel_turn } : {}),
+          pending_wheel_game_id: null,
+          pending_wheel_turn: null,
+        })
+        .eq('id', user.id)
+      if (revert) revalidatePath('/wheel')
+    }
+  }
+
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
   revalidatePath('/dashboard')
@@ -359,6 +383,13 @@ export async function markAsCompleted(
     awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
     checkAndAwardAchievements(supabase, user.id),
   ])
+
+  // Completing the game the wheel gave you consumes its pending pointer, so a
+  // later completed→DNF edit can't hand the turn back.
+  await (supabase.from('profiles') as any)
+    .update({ pending_wheel_game_id: null, pending_wheel_turn: null })
+    .eq('id', user.id)
+    .eq('pending_wheel_game_id', id)
 
   revalidatePath('/games')
   revalidatePath(`/games/${id}`)
