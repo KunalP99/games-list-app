@@ -31,7 +31,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
       .eq('status', 'completed'),
     supabase
       .from('games')
-      .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
+      .select('id, user_id, title, status, image_url, cover_image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
       .in('user_id', friendIds)
       .order('updated_at', { ascending: false })
       .limit(40),
@@ -49,7 +49,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
   ])
 
   const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string; rawg_id: number | null; release_date: string | null }[] | null
-  const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
+  const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; cover_image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
   const friendSpins = friendSpinsRes.data as { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null
   const rawFriendUnlocks = rawFriendUnlocksRes.data as { user_id: string; achievement_id: string; unlocked_at: string }[] | null
 

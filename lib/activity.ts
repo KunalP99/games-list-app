@@ -6,6 +6,7 @@ export type ActivityItem = {
   accentColour: string | null
   gameTitle?: string
   gameImageUrl?: string
+  gameCoverUrl?: string
   gameId?: string
   wheelResult?: string
   ticketsEarned?: number
@@ -23,6 +24,7 @@ type RawGame = {
   title: string
   status: string
   image_url: string | null
+  cover_image_url?: string | null
   completion_date: string | null
   created_at: string
   updated_at: string
@@ -85,6 +87,7 @@ export function buildActivityItems(
       accentColour: profile.accentColour,
       gameTitle: g.title,
       gameImageUrl: g.image_url ?? undefined,
+      gameCoverUrl: g.cover_image_url ?? undefined,
       gameId: g.id,
       isSelf: g.user_id === currentUserId,
     }

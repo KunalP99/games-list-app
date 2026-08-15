@@ -46,6 +46,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- Activity feeds (the dashboard's **Friends Activity** card and the **/activity** page) now show each game's **portrait box-art cover** instead of a cropped square of the banner.
 - Dashboard **friend cards now use each friend's own accent colour** — their avatar, "playing" label, and ticket pill are tinted with the colour that friend picked, instead of your brand colour.
 - Video cards (game-page playlists and the Videos page) are now a **uniform size** — the title is kept to a single line and long titles truncate with an ellipsis, so cards no longer vary in height by title length.
 - Game search bars now show **portrait box-art covers** instead of the wide screenshot — in the add/edit game form's search, and across the wheel (the builder search, the entries list, and the Choose-a-game search) — so picking a game looks like a shelf of covers. Falls back to the wide image when a game has no cover.

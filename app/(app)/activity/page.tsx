@@ -27,10 +27,10 @@ export default async function ActivityPage() {
 
   const { data: allGames } = await supabase
     .from('games')
-    .select('id, user_id, title, status, image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
+    .select('id, user_id, title, status, image_url, cover_image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
     .in('user_id', allUserIds)
     .order('updated_at', { ascending: false })
-    .limit(60) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null }
+    .limit(60) as { data: { id: string; user_id: string; title: string; status: string; image_url: string | null; cover_image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null }
 
   const { data: allSpins } = await supabase
     .from('wheel_spins')
@@ -96,12 +96,12 @@ export default async function ActivityPage() {
                   {getInitials(item.displayName)}
                 </div>
 
-                {/* Game thumbnail (not for wheel spins, choose skips, or achievement unlocks) */}
-                {item.gameImageUrl && item.type !== 'wheel_spin' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
+                {/* Game thumbnail — portrait box art (falls back to the banner) */}
+                {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
                   <img
-                    src={item.gameImageUrl}
+                    src={item.gameCoverUrl ?? item.gameImageUrl}
                     alt={item.gameTitle}
-                    className="w-9 h-9 rounded object-cover shrink-0"
+                    className="w-9 h-12 rounded object-cover shrink-0"
                   />
                 )}
 

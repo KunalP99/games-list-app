@@ -24,12 +24,12 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
               {getInitials(item.displayName)}
             </div>
 
-            {/* Game thumbnail */}
-            {item.gameImageUrl && item.type !== 'wheel_spin' && item.type !== 'achievement_unlock' && (
+            {/* Game thumbnail — portrait box art (falls back to the banner) */}
+            {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'achievement_unlock' && (
               <img
-                src={item.gameImageUrl}
+                src={item.gameCoverUrl ?? item.gameImageUrl}
                 alt={item.gameTitle}
-                className="w-8 h-8 rounded object-cover shrink-0"
+                className="w-8 h-11 rounded object-cover shrink-0"
               />
             )}
 
