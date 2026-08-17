@@ -64,10 +64,14 @@ async function addWonGameToLibrary(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   rawgGame: WonGame | null | undefined,
+  platform?: string | null,
+  artworkUrl?: string | null,
 ): Promise<string | null> {
   if (!rawgGame) return null
 
   const today = new Date().toISOString().split('T')[0]
+  const plat = platform?.trim() || null
+  const art = artworkUrl?.trim() || null // user-picked / custom image for the card + hero
 
   const byId = await (supabase.from('games') as any)
     .select('id, status')
@@ -89,10 +93,15 @@ async function addWonGameToLibrary(
   const decision = decideWonGameAction(rows)
   if (decision.action === 'noop') return null
 
-  // A backlog copy is pulled straight into playing.
+  // A backlog copy is pulled straight into playing (with the chosen platform + image).
   if (decision.action === 'flip') {
     await (supabase.from('games') as any)
-      .update({ status: 'playing', start_date: today })
+      .update({
+        status: 'playing',
+        start_date: today,
+        ...(plat ? { platform: plat } : {}),
+        ...(art ? { image_url: art, artwork_url: art } : {}),
+      })
       .eq('id', decision.gameId)
       .eq('user_id', userId)
     return decision.gameId
@@ -110,9 +119,10 @@ async function addWonGameToLibrary(
     release_date_precision: 'full',
     status: 'playing',
     start_date: today,
-    image_url: rawgGame.background_image,
+    platform: plat,
+    image_url: art ?? rawgGame.background_image,
     cover_image_url: detail?.cover_image ?? null,
-    artwork_url: detail?.artwork_image ?? null,
+    artwork_url: art ?? detail?.artwork_image ?? null,
     [PROVIDER_ID_COLUMN]: rawgGame.id,
     description: detail?.description_raw ?? null,
     genres: detail?.genres?.map(g => g.name) ?? null,
@@ -144,7 +154,7 @@ export async function performSpin(games: string[], mode: 'elimination' | 'first_
 
 // ─── SPIN turn — free accept ─────────────────────────────────────────────────
 
-export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land', gamesList: string[], ticketsSpent: number, wonGame?: WonGame | null, finalizedVia: 'accept' | 'spin_again' = 'accept', spends?: TicketSpend[]) {
+export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land', gamesList: string[], ticketsSpent: number, wonGame?: WonGame | null, finalizedVia: 'accept' | 'spin_again' = 'accept', spends?: TicketSpend[], platform?: string | null, artworkUrl?: string | null) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -153,7 +163,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
 
-  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -246,6 +256,8 @@ export async function finalizeUpgradeChoice(
   ticketsSpent: number,
   wonGame?: WonGame | null,
   spends?: TicketSpend[],
+  platform?: string | null,
+  artworkUrl?: string | null,
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -255,7 +267,7 @@ export async function finalizeUpgradeChoice(
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
 
-  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -280,7 +292,7 @@ export async function finalizeUpgradeChoice(
 
 // ─── SPIN turn — paid: Choose Any Game (−9) ──────────────────────────────────
 
-export async function payChooseAnyGame(gameName: string, mode: 'elimination' | 'first_land', gamesList: string[], priorTicketsSpent: number, wonGame?: WonGame | null, spends?: TicketSpend[]) {
+export async function payChooseAnyGame(gameName: string, mode: 'elimination' | 'first_land', gamesList: string[], priorTicketsSpent: number, wonGame?: WonGame | null, spends?: TicketSpend[], platform?: string | null, artworkUrl?: string | null) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -300,7 +312,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
     p_reason: 'choose_game',
   })
 
-  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -347,6 +359,8 @@ export async function finalizeSpinReroll(
   ticketsSpent: number,
   wonGame?: WonGame | null,
   spends?: TicketSpend[],
+  platform?: string | null,
+  artworkUrl?: string | null,
 ) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -355,7 +369,7 @@ export async function finalizeSpinReroll(
   const profile = await getProfile(supabase, user.id)
   if (profile?.wheel_turn !== 'spin_reroll') return { error: 'Not a spin_reroll turn' }
 
-  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -386,7 +400,7 @@ export async function chooseGameWithRawg(rawgGame: {
   name: string
   released: string | null
   background_image: string | null
-}) {
+}, platform?: string | null, artworkUrl?: string | null) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -395,7 +409,7 @@ export async function chooseGameWithRawg(rawgGame: {
   if (!profile) return { error: 'Profile not found' }
   if (profile.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
 
-  const wonId = await addWonGameToLibrary(supabase, user.id, rawgGame)
+  const wonId = await addWonGameToLibrary(supabase, user.id, rawgGame, platform, artworkUrl)
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,

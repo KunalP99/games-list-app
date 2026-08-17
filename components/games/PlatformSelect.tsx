@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 
-const PLATFORM_GROUPS = [
+export const PLATFORM_GROUPS = [
   {
     label: 'PC & Digital',
     platforms: [
@@ -60,7 +60,7 @@ const ALL_PLATFORMS = PLATFORM_GROUPS.flatMap(g => g.platforms)
 
 const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
 
-export default function PlatformSelect({ defaultValue }: { defaultValue?: string | null }) {
+export default function PlatformSelect({ defaultValue, onChange }: { defaultValue?: string | null; onChange?: (value: string) => void }) {
   const [query, setQuery] = useState(defaultValue ?? '')
   const [selected, setSelected] = useState(defaultValue ?? '')
   const [open, setOpen] = useState(false)
@@ -86,11 +86,13 @@ export default function PlatformSelect({ defaultValue }: { defaultValue?: string
     setSelected(platform)
     setQuery(platform)
     setOpen(false)
+    onChange?.(platform)
   }
 
   function handleClear() {
     setSelected('')
     setQuery('')
+    onChange?.('')
   }
 
   return (

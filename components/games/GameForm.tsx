@@ -272,9 +272,17 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
-    setLoading(true)
 
     const formData = new FormData(e.currentTarget)
+
+    // Platform is required (the custom dropdown submits a hidden field, so this
+    // is enforced here rather than via a native `required` attribute).
+    if (!(formData.get('platform') as string)?.trim()) {
+      setError('Please select a platform.')
+      return
+    }
+
+    setLoading(true)
     const result = isEdit
       ? await updateGame(game.id, formData)
       : await createGame(formData)
@@ -408,7 +416,9 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
             <input type="hidden" name="release_date_precision" value={releaseDatePrecision} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-fg-secondary mb-1">Platform</label>
+            <label className="block text-sm font-medium text-fg-secondary mb-1">
+              Platform <span className="text-red-500">*</span>
+            </label>
             <PlatformSelect defaultValue={game?.platform} />
           </div>
         </div>

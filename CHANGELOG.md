@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Review a wheel game before it's added** — when the wheel gives you a game (accepting a spin, a spin+reroll choice, a paid Spin&Reroll upgrade, a paid Choose-a-Game, or the Choose turn), a modal now previews it (cover, developer, release date, genres — read-only), lets you **pick the card image** from the game's artwork/screenshots (or paste your own URL), and asks you to pick a **platform (required)** before it's added to your library as Playing. Cancelling changes nothing — and on the paid paths, no tickets are spent unless you confirm. Custom/free-text wins (which aren't added to your library) skip the modal and finalize as before.
 - **"Mark as DNF" button** on the game detail page — for a game you're Playing, a red DNF button sits next to Mark as Completed. It asks "Are you sure?" (Yes/No) before dropping the game; confirming applies the DNF penalty and (if it was your most recent wheel pick) hands your wheel turn back.
 - **DNF a wheel-won game to get your turn back** — if you DNF the game the wheel just gave you (on a spin, spin & reroll, or choose turn), your wheel turn reverts to the turn that produced it, so you can spin/choose again instead of losing the turn. Only the **most recent** wheel outcome counts — if you've spun or chosen again since, DNF-ing the older game does nothing. Tickets spent that turn are not refunded (and the usual DNF penalty still applies). Requires SQL: `ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pending_wheel_game_id UUID, ADD COLUMN IF NOT EXISTS pending_wheel_turn TEXT CHECK (pending_wheel_turn IN ('spin','spin_reroll','choose'));`
 - **Pick from your backlog on the wheel's Choose turn** — the Choose-your-next-game screen now shows your whole backlog as a grid of covers alongside the search box, so you can click a game to play instead of typing it. Choosing one flips that backlog game to Playing. (Also fixed backlog games' identity on the wheel so IGDB-linked ones correctly auto-add/flip when chosen or won.)
@@ -46,6 +47,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- **Platform is now required** when adding or editing a game — the field shows a required asterisk and the form won't submit without a platform selected.
 - Activity feeds (the dashboard's **Friends Activity** card and the **/activity** page) now show each game's **portrait box-art cover** instead of a cropped square of the banner.
 - Dashboard **friend cards now use each friend's own accent colour** — their avatar, "playing" label, and ticket pill are tinted with the colour that friend picked, instead of your brand colour.
 - Video cards (game-page playlists and the Videos page) are now a **uniform size** — the title is kept to a single line and long titles truncate with an ellipsis, so cards no longer vary in height by title length.

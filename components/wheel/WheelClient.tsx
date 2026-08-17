@@ -3,6 +3,7 @@
 import { useState, useTransition, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import WheelAnimation, { WheelStatic } from './WheelAnimation'
+import ReviewGameModal from './ReviewGameModal'
 import {
   performSpin,
   acceptSpinResult,
@@ -88,6 +89,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   const [builderHasMore, setBuilderHasMore] = useState(false)
   const [builderLoadingMore, setBuilderLoadingMore] = useState(false)
   const [error, setError] = useState('')
+  // Review-and-pick-platform modal shown before a real game is added to the library.
+  const [pendingAdd, setPendingAdd] = useState<{ game: { id: number; name: string }; confirm: (platform: string, image: string | null) => void } | null>(null)
+  const [reviewError, setReviewError] = useState('')
   const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
   // True once a paid Spin Again has happened this turn — the eventual Accept is
   // then recorded as 'spin_again' rather than a plain 'accept' in wheel history.
@@ -305,9 +309,16 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   // ─── SPIN turn: Accept (free) ──────────────────────────────────────────────
 
   function handleAccept() {
+    const game = wonGameFor(winner)
+    if (!game) { runAccept(null, null); return } // free-text winner — nothing to review/add
+    setReviewError('')
+    setPendingAdd({ game: { id: game.id, name: game.name }, confirm: runAccept })
+  }
+  function runAccept(platform: string | null, image: string | null) {
     startTransition(async () => {
-      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner), paidRespin ? 'spin_again' : 'accept', spends)
-      if (res && 'error' in res) { setError(res.error as string); return }
+      const res = await acceptSpinResult(winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner), paidRespin ? 'spin_again' : 'accept', spends, platform, image)
+      if (res && 'error' in res) { setReviewError(res.error as string); setError(res.error as string); return }
+      setPendingAdd(null)
       setFinalChosen(winner)
       setPhase('done')
     })
@@ -477,9 +488,16 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   }, [mode, elimQueue, elimIndex, eliminated, uniqueGames, upgradeGames, upgradeMaxGames])
 
   function handleFinalUpgradeChoice(chosen: string) {
+    const game = wonGameFor(chosen)
+    if (!game) { runFinalUpgradeChoice(chosen, null, null); return }
+    setReviewError('')
+    setPendingAdd({ game: { id: game.id, name: game.name }, confirm: (p, img) => runFinalUpgradeChoice(chosen, p, img) })
+  }
+  function runFinalUpgradeChoice(chosen: string, platform: string | null, image: string | null) {
     startTransition(async () => {
-      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn, wonGameFor(chosen), spends)
-      if (res && 'error' in res) { setError(res.error as string); return }
+      const res = await finalizeUpgradeChoice(chosen, upgradeGames, mode, uniqueGames, spentThisTurn, wonGameFor(chosen), spends, platform, image)
+      if (res && 'error' in res) { setReviewError(res.error as string); setError(res.error as string); return }
+      setPendingAdd(null)
       setFinalChosen(chosen)
       setPhase('done')
     })
@@ -489,6 +507,12 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handlePayChooseAny() {
     if (!chooseInput.trim()) return
+    if (!chooseSelectedRawg) { runPayChooseAny(null, null); return } // free-text — no review, no library add
+    setReviewError('')
+    setPendingAdd({ game: { id: chooseSelectedRawg.id, name: chooseSelectedRawg.name }, confirm: runPayChooseAny })
+  }
+  function runPayChooseAny(platform: string | null, image: string | null) {
+    // Only spend on confirm — cancelling the review modal must cost nothing.
     spendTickets(TICKET_COSTS.choose_game, 'choose_any')
     const wonGame = chooseSelectedRawg
       ? {
@@ -502,8 +526,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     // choose spend explicitly — earlier spends (e.g. Spin Again) are already in.
     const allSpends: TicketSpend[] = [...spends, { action: 'choose_any', amount: TICKET_COSTS.choose_game }]
     startTransition(async () => {
-      const res = await payChooseAnyGame(chooseInput.trim(), mode, uniqueGames, spentThisTurn, wonGame, allSpends)
-      if (res && 'error' in res) { setError(res.error as string); return }
+      const res = await payChooseAnyGame(chooseInput.trim(), mode, uniqueGames, spentThisTurn, wonGame, allSpends, platform, image)
+      if (res && 'error' in res) { setReviewError(res.error as string); setError(res.error as string); return }
+      setPendingAdd(null)
       setFinalChosen(chooseSelectedRawg?.name ?? chooseInput.trim())
       setPhase('done')
     })
@@ -516,9 +541,16 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   }, [])
 
   function handleKeep() {
+    const game = wonGameFor(winner)
+    if (!game) { runKeep(null, null); return }
+    setReviewError('')
+    setPendingAdd({ game: { id: game.id, name: game.name }, confirm: runKeep })
+  }
+  function runKeep(platform: string | null, image: string | null) {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner), spends)
-      if (res && 'error' in res) { setError(res.error as string); return }
+      const res = await finalizeSpinReroll(winner, '', winner, mode, uniqueGames, spentThisTurn, wonGameFor(winner), spends, platform, image)
+      if (res && 'error' in res) { setReviewError(res.error as string); setError(res.error as string); return }
+      setPendingAdd(null)
       setFinalChosen(winner)
       setPhase('done')
     })
@@ -538,9 +570,16 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   }
 
   function handleFinalChoice(chosen: string) {
+    const game = wonGameFor(chosen)
+    if (!game) { runFinalChoice(chosen, null, null); return }
+    setReviewError('')
+    setPendingAdd({ game: { id: game.id, name: game.name }, confirm: (p, img) => runFinalChoice(chosen, p, img) })
+  }
+  function runFinalChoice(chosen: string, platform: string | null, image: string | null) {
     startTransition(async () => {
-      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn, wonGameFor(chosen), spends)
-      if (res && 'error' in res) { setError(res.error as string); return }
+      const res = await finalizeSpinReroll(winner, rerollWinner, chosen, mode, uniqueGames, spentThisTurn, wonGameFor(chosen), spends, platform, image)
+      if (res && 'error' in res) { setReviewError(res.error as string); setError(res.error as string); return }
+      setPendingAdd(null)
       setFinalChosen(chosen)
       setPhase('done')
     })
@@ -551,6 +590,11 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   function handleChooseGame() {
     if (!chooseInput.trim()) return
     setError('')
+    if (!chooseSelectedRawg) { runChooseGame(null, null); return } // free-text pick — no review, no library add
+    setReviewError('')
+    setPendingAdd({ game: { id: chooseSelectedRawg.id, name: chooseSelectedRawg.name }, confirm: runChooseGame })
+  }
+  function runChooseGame(platform: string | null, image: string | null) {
     startTransition(async () => {
       const res = chooseSelectedRawg
         ? await chooseGameWithRawg({
@@ -558,9 +602,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             name: chooseSelectedRawg.name,
             released: chooseSelectedRawg.released,
             background_image: chooseSelectedRawg.background_image,
-          })
+          }, platform, image)
         : await chooseGame(chooseInput.trim())
-      if (res && 'error' in res) { setError(res.error as string); return }
+      if (res && 'error' in res) { setReviewError(res.error as string); setError(res.error as string); return }
+      setPendingAdd(null)
       setFinalChosen(chooseSelectedRawg?.name ?? chooseInput.trim())
       setPhase('done')
     })
@@ -697,6 +742,18 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     reroll_spinning: handleRerollAnimComplete,
   }
 
+  // Rendered (as a portal) inside every phase that can open it, so the review
+  // modal overlays the current step. Null unless a real game is pending add.
+  const reviewModal = pendingAdd ? (
+    <ReviewGameModal
+      game={pendingAdd.game}
+      isPending={isPending}
+      error={reviewError}
+      onConfirm={pendingAdd.confirm}
+      onCancel={() => { setPendingAdd(null); setReviewError(''); setError('') }}
+    />
+  ) : null
+
   if (
     phase === 'spinning' ||
     phase === 'spin_paid_spinning' ||
@@ -753,6 +810,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-4 max-w-2xl">
         {turnBadge}
+        {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
           <div>
             <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-1">You got</p>
@@ -831,6 +889,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-4 max-w-2xl">
         {turnBadge}
+        {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
           <div>
             <p className="text-base font-semibold text-fg-base">Choose your game</p>
@@ -959,6 +1018,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     const options = upgradeGames
     return (
       <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4 max-w-2xl">
+        {reviewModal}
         <div>
           <p className="text-base font-semibold text-fg-base">Choose your game</p>
           <p className="text-xs text-fg-muted mt-0.5">Pick one from your options</p>
@@ -1015,6 +1075,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-4 max-w-2xl">
         {turnBadge}
+        {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
           <p className="text-base font-semibold text-fg-base">Choose your game</p>
           {error && <p className="text-xs text-red-600">{error}</p>}
@@ -1089,6 +1150,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-5 max-w-2xl">
         {turnBadge}
+        {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
           <div>
             <p className="text-base font-semibold text-fg-base">Choose your next game</p>
