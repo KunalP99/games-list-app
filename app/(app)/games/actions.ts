@@ -493,6 +493,9 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   let description: string | null = null
   let dominantColor: string | null = null
   let finalGenres: string[] = genres || []
+  let imageUrl = image_url || null
+  let coverImageUrl: string | null = null
+  let artworkUrl: string | null = null
   if (rawgId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
@@ -500,16 +503,22 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
     if (detail?.genres?.length) finalGenres = detail.genres.map(g => g.name)
     releaseDate = detail?.released ?? releaseDate
+    imageUrl = detail?.background_image ?? imageUrl
+    coverImageUrl = detail?.cover_image ?? null
+    artworkUrl = detail?.artwork_image ?? null
   }
 
-  const { error } = await supabase.from('games').insert({
+  const { error } = await (supabase.from('games') as any).insert({
     user_id: user.id,
     title,
     developer: developer || null,
-    image_url: image_url || null,
+    image_url: imageUrl,
+    cover_image_url: coverImageUrl,
+    artwork_url: artworkUrl,
     genres: finalGenres,
     status: 'backlog',
-    rawg_id: rawgId,
+    // Store under the active provider's id column (rawg_id or igdb_id).
+    [PROVIDER_ID_COLUMN]: rawgId,
     release_date: releaseDate,
     release_date_precision: releaseDate ? 'full' : 'year',
     completion_date_precision: 'year',

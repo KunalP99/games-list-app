@@ -12,7 +12,7 @@ type Game = {
   release_date: string | null
 }
 
-export default function AddToBacklogButton({ game, variant = 'overlay' }: { game: Game; variant?: 'overlay' | 'outline' | 'glass' }) {
+export default function AddToBacklogButton({ game, variant = 'overlay' }: { game: Game; variant?: 'overlay' | 'outline' | 'glass' | 'expand' }) {
   const [added, setAdded] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -30,6 +30,29 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
       const result = await addRecommendationToBacklog(formData)
       if (result.success) setAdded(true)
     })
+  }
+
+  // Pill that shows just an icon and expands on hover to reveal the label.
+  // On mobile (no hover) the label is always shown; from `sm` up it collapses
+  // to the icon and expands on hover.
+  if (variant === 'expand') {
+    const icon = added ? '✓' : isPending ? '…' : '+'
+    const label = added ? 'Added' : 'Backlog'
+    return (
+      <button
+        onClick={handleClick}
+        disabled={isPending || added}
+        aria-label="Add to backlog"
+        className={`group flex items-center rounded-full backdrop-blur-sm text-white text-xs font-semibold px-2 py-1 shadow transition-colors disabled:opacity-100 ${
+          added ? 'bg-emerald-600/85' : 'bg-black/50 hover:bg-black/70'
+        }`}
+      >
+        <span className="leading-none">{icon}</span>
+        <span className="overflow-hidden whitespace-nowrap transition-all duration-300 ml-1 max-w-[68px] opacity-100 sm:ml-0 sm:max-w-0 sm:opacity-0 sm:group-hover:ml-1 sm:group-hover:max-w-[68px] sm:group-hover:opacity-100">
+          {label}
+        </span>
+      </button>
+    )
   }
 
   if (added) {

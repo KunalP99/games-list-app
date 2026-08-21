@@ -126,8 +126,9 @@ export default function GenreAndPlatformCharts({
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {/* Radar — genres */}
       {hasGenres && (
-        <div className="bg-surface-base border border-edge-base rounded-xl p-5">
-          <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Genres Played</p>
+        <div>
+          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Genres Played</h2>
+          <div className="bg-surface-base border border-edge-base rounded-xl p-5">
           <ResponsiveContainer width="100%" height={200}>
             <RadarChart data={genreData} margin={{ top: 8, right: 24, bottom: 8, left: 24 }}>
               <PolarGrid stroke="var(--color-edge-base)" />
@@ -144,14 +145,16 @@ export default function GenreAndPlatformCharts({
               />
             </RadarChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
 
       {/* Pie — platforms */}
       {hasPlatforms && (
-        <div className="bg-surface-base border border-edge-base rounded-xl p-5">
-          <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Platforms</p>
-          <ResponsiveContainer width="100%" height={180}>
+        <div>
+          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Platforms</h2>
+          <div className="bg-surface-base border border-edge-base rounded-xl p-5">
+          <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
                 data={platformData}
@@ -169,6 +172,7 @@ export default function GenreAndPlatformCharts({
               <Tooltip content={<PlatformTooltip />} />
             </PieChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>

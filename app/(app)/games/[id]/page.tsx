@@ -3,8 +3,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import type { Game } from '@/lib/types'
-import { getRawgScreenshots, getRawgAchievements, providerIdOf } from '@/lib/rawg'
-import type { RawgScreenshot, RawgAchievement } from '@/lib/rawg'
+import { getRawgScreenshots, getRawgAchievements, getGameExtras, getDeveloperGames, providerIdOf, EMPTY_GAME_EXTRAS } from '@/lib/rawg'
+import type { RawgScreenshot, RawgAchievement, DeveloperGamesInfo } from '@/lib/rawg'
+import GameAbout from '@/components/games/GameAbout'
+import DeveloperGames from '@/components/games/DeveloperGames'
 import StatusBadge from '@/components/games/StatusBadge'
 import DeleteGameButton from '@/components/games/DeleteGameButton'
 import MarkCompletedButton from '@/components/games/MarkCompletedButton'
@@ -40,7 +42,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
   const dlcEntries = (((game as any).dlc ?? []) as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[])
     .filter(d => !d.removed)
 
-  const [{ data: sameGames }, screenshots, achievements, { data: otherPlayers }] = await Promise.all([
+  const [{ data: sameGames }, screenshots, achievements, extras, developerGames, { data: otherPlayers }] = await Promise.all([
     supabase
       .from('games')
       .select('id, created_at')
@@ -49,6 +51,8 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       .order('created_at', { ascending: true }) as unknown as Promise<{ data: { id: string; created_at: string }[] | null }>,
     providerIdOf(game) ? getRawgScreenshots(providerIdOf(game)!) : Promise.resolve([] as RawgScreenshot[]),
     providerIdOf(game) ? getRawgAchievements(providerIdOf(game)!) : Promise.resolve([] as RawgAchievement[]),
+    providerIdOf(game) ? getGameExtras(providerIdOf(game)!) : Promise.resolve(EMPTY_GAME_EXTRAS),
+    providerIdOf(game) ? getDeveloperGames(providerIdOf(game)!) : Promise.resolve(null as DeveloperGamesInfo),
     // Other people who have this same game completed or in progress.
     supabase
       .from('games')
@@ -102,7 +106,12 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         ? (a.displayName ?? a.username).localeCompare(b.displayName ?? b.username)
         : a.status === 'playing' ? -1 : 1,
     )
-  const hasSidebar = Boolean(game.description) || playedBy.length > 0
+  const hasAboutExtras =
+    extras.companies.length > 0 || extras.gameModes.length > 0 || extras.playerPerspectives.length > 0 ||
+    extras.themes.length > 0 || Boolean(extras.franchise) || extras.engines.length > 0 ||
+    extras.criticRating != null || extras.userRating != null
+  const hasAbout = Boolean(game.description) || hasAboutExtras
+  const hasSidebar = hasAbout || playedBy.length > 0
 
   return (
     <div className="w-[min(70rem,calc(100vw-2rem))] space-y-6">
@@ -325,10 +334,9 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
       {/* About + "also played by" (small screens) — shown right under Dates; the
           sidebar copies take over at lg+ */}
-      {game.description && (
-        <div className="lg:hidden bg-surface-base border border-edge-base rounded-xl p-4">
-          <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
-          <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
+      {hasAbout && (
+        <div className="lg:hidden">
+          <GameAbout description={game.description} extras={extras} />
         </div>
       )}
       {playedBy.length > 0 && (
@@ -402,6 +410,9 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
+      {/* More mainline games by the same developer (IGDB) */}
+      {developerGames && <DeveloperGames data={developerGames} />}
+
       {/* Screenshots — fetched live from RAWG */}
       {screenshots.length > 0 && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-4">
@@ -427,12 +438,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       {/* Sidebar (lg+ only) — About, then "also played by" beneath it */}
       {hasSidebar && (
         <aside className="hidden lg:block space-y-6 lg:sticky lg:top-24">
-          {game.description && (
-            <div className="bg-surface-base border border-edge-base rounded-xl p-4">
-              <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
-              <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.description}</p>
-            </div>
-          )}
+          {hasAbout && <GameAbout description={game.description} extras={extras} />}
           {playedBy.length > 0 && <PlayedByCard players={playedBy} />}
         </aside>
       )}

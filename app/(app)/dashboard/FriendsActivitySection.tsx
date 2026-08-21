@@ -10,10 +10,20 @@ type Props = {
   myTitles: Set<string>
   genreCounts: Record<string, number>
   friendProfileMap: Map<string, { displayName: string; username: string; accentColour: string | null }>
+  // Rendered beside the recommendations carousel (the dashboard's Upcoming Events card).
+  eventsSlot?: React.ReactNode
 }
 
-export default async function FriendsActivitySection({ userId, friendIds, myTitles, genreCounts, friendProfileMap }: Props) {
-  if (friendIds.length === 0) return null
+export default async function FriendsActivitySection({ userId, friendIds, myTitles, genreCounts, friendProfileMap, eventsSlot }: Props) {
+  // Recommendations + activity need friends; the events card does not, so still
+  // render the top row (with the events slot) even when the user has no friends.
+  if (friendIds.length === 0) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+        {eventsSlot}
+      </div>
+    )
+  }
 
   const supabase = createClient()
 
@@ -101,18 +111,26 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
     friendAchievementUnlocks,
   )
 
-  if (recommendations.length === 0 && friendActivityItems.length === 0) return null
+  if (recommendations.length === 0 && friendActivityItems.length === 0 && !eventsSlot) return null
+
+  // Recommendations are temporarily hidden — flip to true to bring the carousel back.
+  const SHOW_RECOMMENDATIONS = false
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-      {recommendations.length > 0 && (
+      {SHOW_RECOMMENDATIONS && recommendations.length > 0 && (
         <div className="flex flex-col min-h-0">
+          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Recommended by your friends</h2>
           <RecommendationsCarousel games={recommendations} />
         </div>
       )}
+
+      {/* Friends activity — beside the Upcoming Events card */}
       {friendActivityItems.length > 0 && (
         <FriendActivityFeed items={friendActivityItems.slice(0, 6)} />
       )}
+
+      {eventsSlot}
     </div>
   )
 }

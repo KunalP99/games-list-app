@@ -2,7 +2,8 @@
 // lib/rawg.ts so it can stand in for RAWG behind the METADATA_PROVIDER flag.
 // Auth: client-credentials app token (cached). Requests: POST apicalypse bodies.
 
-import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition } from './rawg'
+import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, GameCompany, GameExtras, DeveloperGamesInfo } from './rawg'
+import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
 
 const TIMEOUT_MS = 8000
@@ -170,6 +171,140 @@ export async function getGameImages(id: number): Promise<string[]> {
     .filter(s => s.image_id)
     .map(s => screenshotUrl(s.image_id!))
   return Array.from(new Set([...artworks, ...shots]))
+}
+
+// ── Gaming-industry events (dashboard "Upcoming Events" card) ────────────────
+export type IgdbEventNetwork = { type: string; url: string }
+export type IgdbEvent = {
+  id: number; name: string; startTime: number; endTime: number | null
+  liveStreamUrl: string | null; logoUrl: string | null; networks: IgdbEventNetwork[]
+}
+
+type IgdbEventRow = {
+  id: number; name: string; start_time?: number; end_time?: number; live_stream_url?: string
+  event_logo?: { image_id?: string }
+  event_networks?: Array<{ url?: string; network_type?: { name?: string } }>
+}
+
+// Map event_networks → {type, url}, keeping only valid entries and one per type.
+// "Official website" is dropped — the card shows streaming/social links only.
+function eventNetworks(raw: IgdbEventRow['event_networks']): IgdbEventNetwork[] {
+  const seen = new Set<string>()
+  const out: IgdbEventNetwork[] = []
+  for (const n of raw ?? []) {
+    const type = n.network_type?.name
+    if (!type || !n.url || seen.has(type) || type === 'Official website') continue
+    seen.add(type)
+    out.push({ type, url: n.url })
+  }
+  return out
+}
+
+// The next `limit` upcoming events (Gamescom ONL, Future Games Show, etc.),
+// soonest first. start_time/end_time are Unix seconds. [] on failure.
+export async function getUpcomingEvents(limit = 3): Promise<IgdbEvent[]> {
+  const now = Math.floor(Date.now() / 1000)
+  const rows = await igdbQuery<IgdbEventRow>(
+    'events',
+    `fields name, start_time, end_time, live_stream_url, event_logo.image_id, event_networks.url, event_networks.network_type.name; where start_time > ${now}; sort start_time asc; limit ${limit};`,
+  )
+  return rows
+    .filter(r => r.start_time)
+    .map(r => ({
+      id: r.id,
+      name: r.name,
+      startTime: r.start_time!,
+      endTime: r.end_time ?? null,
+      liveStreamUrl: r.live_stream_url ?? null,
+      logoUrl: r.event_logo?.image_id ? bannerUrl(r.event_logo.image_id) : null,
+      networks: eventNetworks(r.event_networks),
+    }))
+}
+
+// Company logo — logos are transparent PNGs, so use .png (not .jpg).
+function companyLogoUrl(imageId: string | undefined | null): string | null {
+  return imageId ? `https://images.igdb.com/igdb/image/upload/t_logo_med/${imageId}.png` : null
+}
+
+// Rich "About" metadata: involved companies (with roles + logos) plus a facts
+// block (modes, perspectives, themes, franchise, engine, critic score).
+export async function getGameExtras(id: number): Promise<GameExtras> {
+  type Row = {
+    involved_companies?: Array<{
+      developer?: boolean; publisher?: boolean; porting?: boolean; supporting?: boolean
+      company?: { name?: string; logo?: { image_id?: string } }
+    }>
+    game_modes?: Array<{ name: string }>
+    player_perspectives?: Array<{ name: string }>
+    themes?: Array<{ name: string }>
+    franchises?: Array<{ name: string }>
+    game_engines?: Array<{ name: string }>
+    aggregated_rating?: number
+    aggregated_rating_count?: number
+    rating?: number
+    rating_count?: number
+  }
+  const rows = await igdbQuery<Row>('games',
+    `fields involved_companies.developer, involved_companies.publisher, involved_companies.porting, involved_companies.supporting, involved_companies.company.name, involved_companies.company.logo.image_id, game_modes.name, player_perspectives.name, themes.name, franchises.name, game_engines.name, aggregated_rating, aggregated_rating_count, rating, rating_count; where id = ${id}; limit 1;`)
+  const g = rows[0]
+  if (!g) return EMPTY_GAME_EXTRAS
+
+  // Collapse involved_companies → one entry per company, merging its role(s).
+  const byName = new Map<string, GameCompany>()
+  for (const ic of g.involved_companies ?? []) {
+    const name = ic.company?.name
+    if (!name) continue
+    const roles: string[] = []
+    if (ic.developer) roles.push('Developer')
+    if (ic.publisher) roles.push('Publisher')
+    if (ic.porting) roles.push('Porting')
+    if (ic.supporting) roles.push('Support')
+    const existing = byName.get(name)
+    if (existing) { for (const r of roles) if (!existing.roles.includes(r)) existing.roles.push(r) }
+    else byName.set(name, { name, logoUrl: companyLogoUrl(ic.company?.logo?.image_id), roles })
+  }
+  const rank = (c: GameCompany) =>
+    c.roles.includes('Developer') ? 0 : c.roles.includes('Publisher') ? 1 : c.roles.includes('Porting') ? 2 : 3
+  const companies = Array.from(byName.values()).sort((a, b) => rank(a) - rank(b))
+
+  return {
+    companies,
+    gameModes: (g.game_modes ?? []).map(x => x.name),
+    playerPerspectives: (g.player_perspectives ?? []).map(x => x.name),
+    themes: (g.themes ?? []).map(x => x.name),
+    franchise: g.franchises?.[0]?.name ?? null,
+    engines: (g.game_engines ?? []).map(x => x.name),
+    criticRating: g.aggregated_rating != null ? Math.round(g.aggregated_rating) : null,
+    criticRatingCount: g.aggregated_rating_count ?? null,
+    userRating: g.rating != null ? Math.round(g.rating) : null,
+    userRatingCount: g.rating_count ?? null,
+  }
+}
+
+// Mainline games by the game's developer. Excludes the game itself, plus DLC,
+// expansions, bundles, and alternate editions (game_type = 0 "Main Game" and no
+// version_parent). Ordered oldest → newest.
+export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo> {
+  const grows = await igdbQuery<{ involved_companies?: Array<{ developer?: boolean; company?: { id: number; name: string } }> }>(
+    'games', `fields involved_companies.developer, involved_companies.company.id, involved_companies.company.name; where id = ${id}; limit 1;`)
+  const dev = (grows[0]?.involved_companies ?? []).find(ic => ic.developer && ic.company?.id)?.company
+  if (!dev) return null
+
+  const games = await igdbQuery<{ id: number; name: string; first_release_date?: number; cover?: { image_id?: string }; game_status?: number }>(
+    'games',
+    `fields name, first_release_date, cover.image_id, game_status; where involved_companies.company = ${dev.id} & involved_companies.developer = true & game_type = 0 & version_parent = null; sort first_release_date asc; limit 50;`)
+  const list = games
+    // Drop the current game and any cancelled titles (game_status 6 = Cancelled).
+    .filter(g => g.id !== id && g.game_status !== 6)
+    .map(g => ({ id: g.id, name: g.name, coverUrl: coverUrl(g.cover?.image_id), released: releasedFrom(g.first_release_date) }))
+    // Newest → oldest by release date; undated (unannounced/upcoming) titles go first.
+    .sort((a, b) => {
+      if (!a.released) return b.released ? -1 : 0
+      if (!b.released) return 1
+      return b.released.localeCompare(a.released)
+    })
+  if (list.length === 0) return null
+  return { developer: dev.name, games: list }
 }
 
 export async function getGameScreenshots(id: number): Promise<RawgScreenshot[]> {

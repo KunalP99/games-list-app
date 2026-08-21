@@ -79,11 +79,6 @@ export default function RecommendationsCarousel({ games }: { games: Recommendati
         </div>
       </div>
 
-      {/* Title — rendered once, outside the slides */}
-      <p className="absolute top-0 left-0 right-0 px-3 pt-2.5 text-xs font-semibold text-white uppercase tracking-wider pointer-events-none">
-        Recommended by your friends
-      </p>
-
       {/* Dot indicators — rendered once, outside the slides */}
       <div className="absolute top-2.5 right-3 flex gap-1.5">
         {games.map((_, j) => (

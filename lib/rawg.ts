@@ -119,6 +119,45 @@ export async function getRawgAchievements(rawgId: number): Promise<RawgAchieveme
   }
 }
 
+// Rich "About" metadata for the game detail page (companies + a facts block).
+export type GameCompany = { name: string; logoUrl: string | null; roles: string[] }
+export type GameExtras = {
+  companies: GameCompany[]
+  gameModes: string[]
+  playerPerspectives: string[]
+  themes: string[]
+  franchise: string | null
+  engines: string[]
+  criticRating: number | null
+  criticRatingCount: number | null
+  userRating: number | null       // IGDB community score (%)
+  userRatingCount: number | null  // number of users who rated
+}
+
+export const EMPTY_GAME_EXTRAS: GameExtras = {
+  companies: [], gameModes: [], playerPerspectives: [], themes: [],
+  franchise: null, engines: [], criticRating: null, criticRatingCount: null,
+  userRating: null, userRatingCount: null,
+}
+
+// IGDB has involved-company roles + logos and the facts block; RAWG does not,
+// so it returns the empty shape (matches the getRawgAchievements pattern).
+export async function getGameExtras(id: number): Promise<GameExtras> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getGameExtras(id)
+  return EMPTY_GAME_EXTRAS
+}
+
+// Mainline games by a game's developer (for the detail page's "More from …" section).
+export type RelatedGame = { id: number; name: string; coverUrl: string | null; released: string | null }
+export type DeveloperGamesInfo = { developer: string; games: RelatedGame[] } | null
+
+// IGDB-only (RAWG lacks the involved-company graph). Returns null when there's
+// no developer or no other mainline games by them.
+export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getDeveloperGames(id)
+  return null
+}
+
 export type RawgAddition = {
   id: number
   name: string

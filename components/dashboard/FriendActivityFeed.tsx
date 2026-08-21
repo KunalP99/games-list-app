@@ -3,17 +3,17 @@ import { type ActivityItem, activityVerb, formatActivityDate, getInitials } from
 
 export default function FriendActivityFeed({ items }: { items: ActivityItem[] }) {
   return (
-    <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle">
-        <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Friends Activity</p>
+    <div>
+      {/* Header — title outside the card */}
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Friends Activity</h2>
         <Link href="/activity" className="text-xs text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 transition-colors">
           View more →
         </Link>
       </div>
 
       {/* Activity list */}
-      <div className="divide-y divide-edge-subtle">
+      <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden divide-y divide-edge-subtle">
         {items.map((item, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-3">
             {/* Avatar */}

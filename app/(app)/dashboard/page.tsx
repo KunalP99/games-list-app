@@ -6,6 +6,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import StatusBadge from '@/components/games/StatusBadge'
 import FriendsActivitySection, { FriendsActivitySkeleton } from './FriendsActivitySection'
+import { UpcomingEventsSection, UpcomingEventsSkeleton } from '@/components/dashboard/UpcomingEventsSection'
 import { GREETINGS } from '@/lib/greetings'
 
 const GamesPerYearChart = dynamic(() => import('@/components/dashboard/GamesPerYearChart'), { ssr: false })
@@ -324,7 +325,9 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Recommendations + Friends Activity — streamed */}
+      {/* Recommendations + Upcoming Events, then Friends Activity — streamed.
+          The Upcoming Events card (IGDB) is passed in so it sits beside the
+          recommendations carousel; it streams via its own Suspense boundary. */}
       <Suspense fallback={<FriendsActivitySkeleton />}>
         <FriendsActivitySection
           userId={user!.id}
@@ -332,6 +335,11 @@ export default async function DashboardPage() {
           myTitles={myTitles}
           genreCounts={genreCounts}
           friendProfileMap={friendProfileMap}
+          eventsSlot={
+            <Suspense fallback={<UpcomingEventsSkeleton />}>
+              <UpcomingEventsSection />
+            </Suspense>
+          }
         />
       </Suspense>
 

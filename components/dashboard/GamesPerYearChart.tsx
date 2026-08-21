@@ -42,8 +42,9 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
   const barColor = accentColor ?? 'rgb(var(--brand-600))'
 
   return (
-    <div className="bg-surface-base border border-edge-base rounded-xl p-5">
-      <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-4">Games Completed Per Year</p>
+    <div>
+      <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Games Completed Per Year</h2>
+      <div className="bg-surface-base border border-edge-base rounded-xl p-5">
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
@@ -72,6 +73,7 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
           <Bar dataKey="count" fill="url(#barGradient)" radius={[4, 4, 0, 0]} maxBarSize={48} />
         </BarChart>
       </ResponsiveContainer>
+      </div>
     </div>
   )
 }
