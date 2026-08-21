@@ -19,6 +19,19 @@ function CardGrid({ games, isOwner, cover }: { games: Game[]; isOwner: boolean; 
   )
 }
 
+// Total hours played across a year's games, rounded and formatted (null hours ignored).
+function totalHours(games: Game[]) {
+  return games.reduce((sum, g) => sum + (g.hours_played ?? 0), 0)
+}
+
+function hoursLabel(games: Game[]) {
+  // Sum the games' hours, then round to 1 decimal so the total matches adding up
+  // the per-game hours shown on the cards (and to shed the floating-point tail).
+  const hours = Math.round(totalHours(games) * 10) / 10
+  if (hours <= 0) return null
+  return `${hours.toLocaleString()} hour${hours !== 1 ? 's' : ''} played`
+}
+
 function groupByYear(games: Game[]) {
   const byYear = games.reduce<Record<string, Game[]>>((acc, game) => {
     const year = game.completion_date
@@ -46,6 +59,9 @@ function CompletedByYear({ games, isOwner, cover }: { games: Game[]; isOwner: bo
             <span className="text-xs text-fg-subtle font-medium">
               {byYear[year].length} game{byYear[year].length !== 1 ? 's' : ''}
             </span>
+            {hoursLabel(byYear[year]) && (
+              <span className="ml-auto text-xs text-fg-subtle font-medium">{hoursLabel(byYear[year])}</span>
+            )}
           </div>
           <CardGrid games={byYear[year]} isOwner={isOwner} cover={cover} />
         </div>
@@ -93,6 +109,9 @@ export default function GameListView({
                 <span className="text-xs text-fg-subtle font-medium">
                   {byYear[year].length} game{byYear[year].length !== 1 ? 's' : ''}
                 </span>
+                {hoursLabel(byYear[year]) && (
+                  <span className="ml-auto text-xs text-fg-subtle font-medium">{hoursLabel(byYear[year])}</span>
+                )}
               </div>
               <GameTableView games={byYear[year]} isOwner={isOwner} />
             </div>
