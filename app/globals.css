@@ -80,6 +80,10 @@ html.dark {
 
   /* Scrollbar — Firefox */
   * { scrollbar-width: thin; scrollbar-color: var(--color-edge-base) var(--color-surface-active); }
+
+  /* Hidden scrollbar (used by drag-to-scroll carousels) */
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
 }
 
 body {
