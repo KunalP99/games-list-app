@@ -231,7 +231,7 @@ function companyLogoUrl(imageId: string | undefined | null): string | null {
 export async function getGameExtras(id: number): Promise<GameExtras> {
   type Row = {
     involved_companies?: Array<{
-      developer?: boolean; publisher?: boolean; porting?: boolean; supporting?: boolean
+      developer?: boolean; publisher?: boolean; porting?: boolean
       company?: { name?: string; logo?: { image_id?: string } }
     }>
     game_modes?: Array<{ name: string }>
@@ -245,7 +245,7 @@ export async function getGameExtras(id: number): Promise<GameExtras> {
     rating_count?: number
   }
   const rows = await igdbQuery<Row>('games',
-    `fields involved_companies.developer, involved_companies.publisher, involved_companies.porting, involved_companies.supporting, involved_companies.company.name, involved_companies.company.logo.image_id, game_modes.name, player_perspectives.name, themes.name, franchises.name, game_engines.name, aggregated_rating, aggregated_rating_count, rating, rating_count; where id = ${id}; limit 1;`)
+    `fields involved_companies.developer, involved_companies.publisher, involved_companies.porting, involved_companies.company.name, involved_companies.company.logo.image_id, game_modes.name, player_perspectives.name, themes.name, franchises.name, game_engines.name, aggregated_rating, aggregated_rating_count, rating, rating_count; where id = ${id}; limit 1;`)
   const g = rows[0]
   if (!g) return EMPTY_GAME_EXTRAS
 
@@ -258,14 +258,20 @@ export async function getGameExtras(id: number): Promise<GameExtras> {
     if (ic.developer) roles.push('Developer')
     if (ic.publisher) roles.push('Publisher')
     if (ic.porting) roles.push('Porting')
-    if (ic.supporting) roles.push('Support')
+    // Support (supporting) companies are intentionally not listed.
+    if (roles.length === 0) continue
     const existing = byName.get(name)
     if (existing) { for (const r of roles) if (!existing.roles.includes(r)) existing.roles.push(r) }
     else byName.set(name, { name, logoUrl: companyLogoUrl(ic.company?.logo?.image_id), roles })
   }
-  const rank = (c: GameCompany) =>
-    c.roles.includes('Developer') ? 0 : c.roles.includes('Publisher') ? 1 : c.roles.includes('Porting') ? 2 : 3
-  const companies = Array.from(byName.values()).sort((a, b) => rank(a) - rank(b))
+  // Show a single, most-specific role per company: a company that both
+  // publishes and does something more specific (developing/porting) shows the
+  // specific role, not "Publisher · Porting".
+  const rolePick = ['Developer', 'Porting', 'Publisher']
+  const roleSort: Record<string, number> = { Developer: 0, Publisher: 1, Porting: 2 }
+  const companies = Array.from(byName.values())
+    .map(c => ({ ...c, roles: [rolePick.find(r => c.roles.includes(r)) ?? c.roles[0] ?? 'Involved'] }))
+    .sort((a, b) => (roleSort[a.roles[0]] ?? 3) - (roleSort[b.roles[0]] ?? 3))
 
   return {
     companies,

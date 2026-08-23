@@ -18,31 +18,42 @@ export default function GameAbout({ description, extras }: { description: string
     details.push({ label: 'User score', value: `${userRating}%${userRatingCount ? ` · ${userRatingCount.toLocaleString()} users` : ''}` })
   }
 
+  // Group companies by role → one row per role, names comma-joined (so two
+  // publishers show as a single "Publisher: A, B" line).
+  const companyRows: Array<{ role: string; names: string }> = []
+  const roleIndex = new Map<string, number>()
+  for (const c of companies) {
+    const role = c.roles[0] ?? 'Involved'
+    const idx = roleIndex.get(role)
+    if (idx == null) {
+      roleIndex.set(role, companyRows.length)
+      companyRows.push({ role, names: c.name })
+    } else {
+      companyRows[idx].names += `, ${c.name}`
+    }
+  }
+
+  const hasCompanies = companyRows.length > 0
+  const hasDetails = details.length > 0
+
   return (
     <div className="bg-surface-base border border-edge-base rounded-xl p-4 space-y-4">
-      <div>
-        <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
-        {description
-          ? <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{description}</p>
-          : <p className="text-fg-subtle text-sm">No description available.</p>}
-      </div>
-
-      {companies.length > 0 && (
-        <div className="border-t border-edge-subtle pt-3">
+      {hasCompanies && (
+        <div>
           <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">Companies</p>
           <div className="space-y-1">
-            {companies.map(c => (
-              <div key={c.name} className="flex items-baseline gap-2 text-sm">
-                <span className="text-fg-muted text-xs flex-shrink-0 w-24">{c.roles.join(' · ') || 'Involved'}</span>
-                <span className="text-fg-secondary min-w-0">{c.name}</span>
+            {companyRows.map(r => (
+              <div key={r.role} className="flex items-baseline gap-2 text-sm">
+                <span className="text-fg-muted text-xs flex-shrink-0 w-24">{r.role}</span>
+                <span className="text-fg-secondary min-w-0">{r.names}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {details.length > 0 && (
-        <div className="border-t border-edge-subtle pt-3">
+      {hasDetails && (
+        <div className={hasCompanies ? 'border-t border-edge-subtle pt-3' : ''}>
           <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2.5">Details</p>
           <dl className="space-y-1">
             {details.map(d => (
@@ -54,6 +65,13 @@ export default function GameAbout({ description, extras }: { description: string
           </dl>
         </div>
       )}
+
+      <div className={hasCompanies || hasDetails ? 'border-t border-edge-subtle pt-3' : ''}>
+        <p className="text-xs text-fg-muted font-medium uppercase tracking-wider mb-2">About</p>
+        {description
+          ? <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{description}</p>
+          : <p className="text-fg-subtle text-sm">No description available.</p>}
+      </div>
     </div>
   )
 }
