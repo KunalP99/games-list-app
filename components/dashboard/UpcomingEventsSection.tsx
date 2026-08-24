@@ -7,13 +7,18 @@ import { getUpcomingEvents } from '@/lib/igdb'
 // cached payloads (missing new fields) are discarded rather than served.
 const getCachedEvents = unstable_cache(() => getUpcomingEvents(5), ['upcoming-events-v3'], { revalidate: 3600 })
 
-// Whole days from now until a Unix-seconds timestamp → "today" / "tomorrow" / "in N days".
-function countdown(startTime: number): string {
+// Whole calendar days from today until a Unix-seconds timestamp.
+function daysUntil(startTime: number): number {
   const start = new Date(startTime * 1000)
   const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate())
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const days = Math.round((startDay.getTime() - today.getTime()) / 86_400_000)
+  return Math.round((startDay.getTime() - today.getTime()) / 86_400_000)
+}
+
+// "today" / "tomorrow" / "in N days".
+function countdown(startTime: number): string {
+  const days = daysUntil(startTime)
   if (days <= 0) return 'today'
   if (days === 1) return 'tomorrow'
   return `in ${days} days`
@@ -39,8 +44,12 @@ export async function UpcomingEventsSection() {
           const time = event.startTime % 86400 !== 0
             ? date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
             : null
+          const isToday = daysUntil(event.startTime) <= 0
           return (
-            <div key={event.id} className="flex-1 flex items-center gap-3 px-4 py-3">
+            <div
+              key={event.id}
+              className={`flex-1 flex items-center gap-3 px-4 py-3 ${isToday ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+            >
               {/* Calendar-style date badge */}
               <div className="flex-shrink-0 w-12 flex flex-col items-center justify-center rounded-lg py-1.5 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300">
                 <span className="text-lg font-bold leading-none">{day}</span>
