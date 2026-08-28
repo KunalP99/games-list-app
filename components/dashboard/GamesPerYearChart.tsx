@@ -2,7 +2,7 @@
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-type GameEntry = { title: string; image_url: string | null }
+type GameEntry = { title: string; image_url: string | null; cover_image_url?: string | null }
 type YearData = { year: string; count: number; games: GameEntry[] }
 
 function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payload: YearData }[] }) {
@@ -15,22 +15,25 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payl
         {year} — {games.length} {games.length === 1 ? 'game' : 'games'}
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {games.map((g, i) => (
-          <div key={i} className="flex flex-col items-center gap-1 w-16">
-            {g.image_url ? (
-              <img
-                src={g.image_url}
-                alt={g.title}
-                className="w-16 h-16 rounded-lg object-cover bg-surface-active border border-edge-subtle"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-lg bg-surface-active border border-edge-subtle flex items-center justify-center text-xl">
-                🎮
-              </div>
-            )}
-            <p className="text-[10px] text-fg-muted text-center leading-tight w-full truncate">{g.title}</p>
-          </div>
-        ))}
+        {games.map((g, i) => {
+          const cover = g.cover_image_url ?? g.image_url
+          return (
+            <div key={i} className="flex flex-col items-center gap-1 w-16">
+              {cover ? (
+                <img
+                  src={cover}
+                  alt={g.title}
+                  className="w-16 aspect-[3/4] rounded-lg object-cover bg-surface-active border border-edge-subtle"
+                />
+              ) : (
+                <div className="w-16 aspect-[3/4] rounded-lg bg-surface-active border border-edge-subtle flex items-center justify-center text-xl">
+                  🎮
+                </div>
+              )}
+              <p className="text-[10px] text-fg-muted text-center leading-tight w-full truncate">{g.title}</p>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -42,7 +45,7 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
   const barColor = accentColor ?? 'rgb(var(--brand-600))'
 
   return (
-    <div>
+    <div className="relative z-10">
       <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Games Completed Per Year</h2>
       <div className="bg-surface-base border border-edge-base rounded-xl p-5">
       <ResponsiveContainer width="100%" height={220}>
@@ -69,6 +72,7 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
           <Tooltip
             content={<CustomTooltip />}
             cursor={{ fill: 'var(--color-surface-hover)' }}
+            wrapperStyle={{ zIndex: 50 }}
           />
           <Bar dataKey="count" fill="url(#barGradient)" radius={[4, 4, 0, 0]} maxBarSize={48} />
         </BarChart>

@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic'
 import StatusBadge from '@/components/games/StatusBadge'
 import FriendsActivitySection, { FriendsActivitySkeleton } from './FriendsActivitySection'
 import { UpcomingEventsSection, UpcomingEventsSkeleton } from '@/components/dashboard/UpcomingEventsSection'
+import { AnticipatedGamesSection, AnticipatedGamesSkeleton } from '@/components/dashboard/AnticipatedGamesSection'
 import { GREETINGS } from '@/lib/greetings'
 
 const GamesPerYearChart = dynamic(() => import('@/components/dashboard/GamesPerYearChart'), { ssr: false })
@@ -32,7 +33,7 @@ export default async function DashboardPage() {
     getProfile(user!.id),
     supabase
       .from('games')
-      .select('hours_played, status, completion_date, created_at, title, image_url, genres, platform')
+      .select('hours_played, status, completion_date, created_at, title, image_url, cover_image_url, genres, platform')
       .eq('user_id', user!.id),
     supabase
       .from('ticket_transactions')
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
       .order('display_name', { ascending: true, nullsFirst: false }),
   ])
 
-  const allGames = allGamesRes.data as { hours_played: number | null; status: string; completion_date: string | null; created_at: string; title: string; image_url: string | null; genres: string[] | null; platform: string | null }[] | null
+  const allGames = allGamesRes.data as { hours_played: number | null; status: string; completion_date: string | null; created_at: string; title: string; image_url: string | null; cover_image_url: string | null; genres: string[] | null; platform: string | null }[] | null
   const ticketEarnings = ticketEarningsRes.data as { amount: number }[] | null
   const recentGamesRaw = recentGamesRes.data as Game[] | null
   const friendProfiles = friendProfilesRes.data as Profile[] | null
@@ -72,7 +73,7 @@ export default async function DashboardPage() {
 
   const totalTicketsEarned = ticketEarnings?.reduce((sum, t) => sum + t.amount, 0) ?? 0
 
-  const gamesByYear: Record<string, { title: string; image_url: string | null }[]> = {}
+  const gamesByYear: Record<string, { title: string; image_url: string | null; cover_image_url: string | null }[]> = {}
   const genreCounts: Record<string, number> = {}
   const platformCounts: Record<string, number> = {}
   const platformDisplayNames: Record<string, string> = {}
@@ -83,7 +84,7 @@ export default async function DashboardPage() {
     if (g.status === 'completed' && g.completion_date) {
       const year = new Date(g.completion_date).getFullYear().toString()
       if (!gamesByYear[year]) gamesByYear[year] = []
-      gamesByYear[year].push({ title: g.title, image_url: g.image_url })
+      gamesByYear[year].push({ title: g.title, image_url: g.image_url, cover_image_url: g.cover_image_url })
     }
 
     for (const genre of g.genres ?? []) {
@@ -341,6 +342,11 @@ export default async function DashboardPage() {
             </Suspense>
           }
         />
+      </Suspense>
+
+      {/* Most anticipated upcoming games (IGDB hype) — streamed */}
+      <Suspense fallback={<AnticipatedGamesSkeleton />}>
+        <AnticipatedGamesSection />
       </Suspense>
 
       {/* Charts */}

@@ -14,12 +14,16 @@ export default function ReviewGameModal({
   error,
   onConfirm,
   onCancel,
+  heading = 'Add to your list',
+  confirmLabel = 'Add to my list',
 }: {
   game: { id: number; name: string }
   isPending: boolean
   error: string
   onConfirm: (platform: string, image: string | null) => void
   onCancel: () => void
+  heading?: string
+  confirmLabel?: string
 }) {
   const [mounted, setMounted] = useState(false)
   const [detail, setDetail] = useState<RawgGameDetail | null>(null)
@@ -80,7 +84,7 @@ export default function ReviewGameModal({
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !isPending && onCancel()} />
       <div className="relative w-full max-w-lg bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
         <div>
-          <p className="text-xs text-fg-muted uppercase tracking-wider font-semibold">Add to your list</p>
+          <p className="text-xs text-fg-muted uppercase tracking-wider font-semibold">{heading}</p>
           <h2 className="text-lg font-semibold text-fg-base mt-0.5 leading-tight">{game.name}</h2>
         </div>
 
@@ -179,7 +183,7 @@ export default function ReviewGameModal({
             disabled={isPending}
             className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors"
           >
-            {isPending ? 'Adding…' : 'Add to my list'}
+            {isPending ? 'Adding…' : confirmLabel}
           </button>
         </div>
       </div>

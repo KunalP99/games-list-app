@@ -2,7 +2,7 @@
 // lib/rawg.ts so it can stand in for RAWG behind the METADATA_PROVIDER flag.
 // Auth: client-credentials app token (cached). Requests: POST apicalypse bodies.
 
-import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, GameCompany, GameExtras, DeveloperGamesInfo } from './rawg'
+import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, GameCompany, GameExtras, DeveloperGamesInfo, RelatedGame } from './rawg'
 import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
 
@@ -200,25 +200,59 @@ function eventNetworks(raw: IgdbEventRow['event_networks']): IgdbEventNetwork[] 
   return out
 }
 
-// The next `limit` upcoming events (Gamescom ONL, Future Games Show, etc.),
-// soonest first. start_time/end_time are Unix seconds. [] on failure.
-export async function getUpcomingEvents(limit = 3): Promise<IgdbEvent[]> {
+const EVENT_FIELDS = 'fields name, start_time, end_time, live_stream_url, event_logo.image_id, event_networks.url, event_networks.network_type.name;'
+
+function toEvent(r: IgdbEventRow): IgdbEvent {
+  return {
+    id: r.id,
+    name: r.name,
+    startTime: r.start_time!,
+    endTime: r.end_time ?? null,
+    liveStreamUrl: r.live_stream_url ?? null,
+    logoUrl: r.event_logo?.image_id ? bannerUrl(r.event_logo.image_id) : null,
+    networks: eventNetworks(r.event_networks),
+  }
+}
+
+// Up to `limit` events for the dashboard card, prioritising the soonest future
+// events (soonest first); if there aren't enough, the remaining slots are filled
+// with the most recent past events (so the card always shows `limit` when the
+// DB has that many). start_time/end_time are Unix seconds. [] on failure.
+export async function getUpcomingEvents(limit = 5): Promise<IgdbEvent[]> {
   const now = Math.floor(Date.now() / 1000)
-  const rows = await igdbQuery<IgdbEventRow>(
+  const future = await igdbQuery<IgdbEventRow>(
     'events',
-    `fields name, start_time, end_time, live_stream_url, event_logo.image_id, event_networks.url, event_networks.network_type.name; where start_time > ${now}; sort start_time asc; limit ${limit};`,
+    `${EVENT_FIELDS} where start_time > ${now}; sort start_time asc; limit ${limit};`,
   )
+  const events = future.filter(r => r.start_time).map(toEvent)
+  if (events.length < limit) {
+    const past = await igdbQuery<IgdbEventRow>(
+      'events',
+      `${EVENT_FIELDS} where start_time < ${now}; sort start_time desc; limit ${limit - events.length};`,
+    )
+    events.push(...past.filter(r => r.start_time).map(toEvent))
+  }
+  return events.slice(0, limit)
+}
+
+// Most anticipated upcoming games — future releases ranked by IGDB hype
+// (pre-release excitement). Excludes DLC/editions (game_type 0, no
+// version_parent) and cancelled titles. Ordered most-hyped first.
+export async function getAnticipatedGames(limit = 12): Promise<RelatedGame[]> {
+  const now = Math.floor(Date.now() / 1000)
+  const rows = await igdbQuery<{ id: number; name: string; first_release_date?: number; cover?: { image_id?: string }; screenshots?: Array<{ image_id?: string }>; artworks?: Array<{ image_id?: string }>; game_status?: number }>(
+    'games',
+    `fields name, first_release_date, cover.image_id, screenshots.image_id, artworks.image_id, game_status; where first_release_date > ${now} & hypes > 0 & game_type = 0 & version_parent = null; sort hypes desc; limit ${limit + 8};`)
   return rows
-    .filter(r => r.start_time)
-    .map(r => ({
-      id: r.id,
-      name: r.name,
-      startTime: r.start_time!,
-      endTime: r.end_time ?? null,
-      liveStreamUrl: r.live_stream_url ?? null,
-      logoUrl: r.event_logo?.image_id ? bannerUrl(r.event_logo.image_id) : null,
-      networks: eventNetworks(r.event_networks),
+    .filter(g => g.game_status !== 6) // drop cancelled
+    .map(g => ({
+      id: g.id,
+      name: g.name,
+      coverUrl: coverUrl(g.cover?.image_id),
+      released: releasedFrom(g.first_release_date),
+      bannerUrl: heroImage(g), // landscape screenshot → artwork → cover
     }))
+    .slice(0, limit)
 }
 
 // Company logo — logos are transparent PNGs, so use .png (not .jpg).

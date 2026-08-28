@@ -5,7 +5,7 @@ import { getUpcomingEvents } from '@/lib/igdb'
 // igdbQuery POST isn't cached by Next automatically, and events change slowly.
 // Cache key is versioned — bump it when the event shape changes so stale
 // cached payloads (missing new fields) are discarded rather than served.
-const getCachedEvents = unstable_cache(() => getUpcomingEvents(5), ['upcoming-events-v3'], { revalidate: 3600 })
+const getCachedEvents = unstable_cache(() => getUpcomingEvents(5), ['upcoming-events-v4'], { revalidate: 3600 })
 
 // Whole calendar days from today until a Unix-seconds timestamp.
 function daysUntil(startTime: number): number {
@@ -16,11 +16,13 @@ function daysUntil(startTime: number): number {
   return Math.round((startDay.getTime() - today.getTime()) / 86_400_000)
 }
 
-// "today" / "tomorrow" / "in N days".
+// "yesterday" / "today" / "tomorrow" / "in N days" / "N days ago".
 function countdown(startTime: number): string {
   const days = daysUntil(startTime)
-  if (days <= 0) return 'today'
+  if (days === 0) return 'today'
   if (days === 1) return 'tomorrow'
+  if (days === -1) return 'yesterday'
+  if (days < 0) return `${-days} days ago`
   return `in ${days} days`
 }
 
@@ -44,19 +46,21 @@ export async function UpcomingEventsSection() {
           const time = event.startTime % 86400 !== 0
             ? date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
             : null
-          const isToday = daysUntil(event.startTime) <= 0
+          const delta = daysUntil(event.startTime)
+          const isToday = delta === 0
+          const isPast = delta < 0
           return (
             <div
               key={event.id}
-              className={`flex-1 flex items-center gap-3 px-4 py-3 ${isToday ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+              className={`flex-1 flex items-center gap-3 px-4 py-3 ${isToday ? 'bg-brand-50 dark:bg-brand-900/20' : ''} ${isPast ? 'opacity-60' : ''}`}
             >
-              {/* Calendar-style date badge */}
-              <div className="flex-shrink-0 w-12 flex flex-col items-center justify-center rounded-lg py-1.5 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300">
+              {/* Calendar-style date badge — muted for past events */}
+              <div className={`flex-shrink-0 w-12 flex flex-col items-center justify-center rounded-lg py-1.5 ${isPast ? 'bg-surface-active text-fg-muted' : 'bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'}`}>
                 <span className="text-lg font-bold leading-none">{day}</span>
                 <span className="text-[10px] font-semibold tracking-wider leading-none mt-0.5">{month}</span>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-fg-base truncate">{event.name}</p>
+                <p className={`font-medium truncate ${isPast ? 'line-through text-fg-muted' : 'text-fg-base'}`}>{event.name}</p>
                 <p className="text-xs text-fg-muted mt-0.5">{full}{time ? `, ${time}` : ''} · {countdown(event.startTime)}</p>
               </div>
               {/* Where to watch — per-network links, falling back to the single stream URL */}

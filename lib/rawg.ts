@@ -148,7 +148,8 @@ export async function getGameExtras(id: number): Promise<GameExtras> {
 }
 
 // Mainline games by a game's developer (for the detail page's "More from …" section).
-export type RelatedGame = { id: number; name: string; coverUrl: string | null; released: string | null }
+// `bannerUrl` is an optional landscape hero image (used by the anticipated-games carousel).
+export type RelatedGame = { id: number; name: string; coverUrl: string | null; released: string | null; bannerUrl?: string | null }
 export type DeveloperGamesInfo = { developer: string; games: RelatedGame[] } | null
 
 // IGDB-only (RAWG lacks the involved-company graph). Returns null when there's
@@ -156,6 +157,12 @@ export type DeveloperGamesInfo = { developer: string; games: RelatedGame[] } | n
 export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo> {
   if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getDeveloperGames(id)
   return null
+}
+
+// Most anticipated upcoming games (IGDB hype). IGDB-only; RAWG returns [].
+export async function getAnticipatedGames(limit = 12): Promise<RelatedGame[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getAnticipatedGames(limit)
+  return []
 }
 
 export type RawgAddition = {

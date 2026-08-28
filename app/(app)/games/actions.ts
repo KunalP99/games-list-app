@@ -485,6 +485,9 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
   let releaseDate = (formData.get('release_date') as string) || null
+  // Optional: chosen in the review modal (anticipated-games add flow).
+  const platform = (formData.get('platform') as string)?.trim() || null
+  const chosenImage = (formData.get('chosen_image') as string)?.trim() || null
 
   // Enrich from RAWG when the recommended game carries a rawg_id — keeps the
   // backlog row consistent with games added via the form/wheel (description,
@@ -507,6 +510,11 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     coverImageUrl = detail?.cover_image ?? null
     artworkUrl = detail?.artwork_image ?? null
   }
+  // A user-picked image (from the review modal) wins over the auto banner.
+  if (chosenImage) {
+    imageUrl = chosenImage
+    artworkUrl = chosenImage
+  }
 
   const { error } = await (supabase.from('games') as any).insert({
     user_id: user.id,
@@ -517,6 +525,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     artwork_url: artworkUrl,
     genres: finalGenres,
     status: 'backlog',
+    platform,
     // Store under the active provider's id column (rawg_id or igdb_id).
     [PROVIDER_ID_COLUMN]: rawgId,
     release_date: releaseDate,
