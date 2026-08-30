@@ -10,7 +10,13 @@ function formatDate(dateStr: string | null): string {
   return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
 }
 
-export default function GameTableView({ games, isOwner }: { games: Game[]; isOwner: boolean }) {
+function formatRelease(game: Game): string {
+  if (!game.release_date) return '—'
+  if (game.release_date_precision === 'year') return game.release_date.slice(0, 4)
+  return new Date(game.release_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export default function GameTableView({ games, isOwner, showReleaseDate = false }: { games: Game[]; isOwner: boolean; showReleaseDate?: boolean }) {
   const router = useRouter()
   const allBacklog = games.length > 0 && games.every(g => g.status === 'backlog')
 
@@ -24,6 +30,7 @@ export default function GameTableView({ games, isOwner }: { games: Game[]; isOwn
               <th className="px-4 py-3 text-left text-xs font-semibold text-fg-subtle uppercase tracking-wider">Developer</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-fg-subtle uppercase tracking-wider">Platform</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-fg-subtle uppercase tracking-wider">Status</th>
+              {showReleaseDate && <th className="px-4 py-3 text-right text-xs font-semibold text-fg-subtle uppercase tracking-wider">Releases</th>}
               {!allBacklog && <>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-fg-subtle uppercase tracking-wider">Hours</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-fg-subtle uppercase tracking-wider">Achiev.</th>
@@ -62,6 +69,11 @@ export default function GameTableView({ games, isOwner }: { games: Game[]; isOwn
                 <td className="px-4 py-3">
                   <StatusBadge status={game.status} />
                 </td>
+
+                {/* Release date — shown for the Coming Soon group */}
+                {showReleaseDate && (
+                  <td className="px-4 py-3 text-right text-fg-secondary tabular-nums">{formatRelease(game)}</td>
+                )}
 
                 {/* Hours / Achievements / Rating / Flags / Date — hidden for pure backlog views */}
                 {!allBacklog && <>

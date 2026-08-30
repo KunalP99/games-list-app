@@ -7,13 +7,50 @@ const COVER_GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-
 const CARD_GRID = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
 
 // A responsive grid of game cards in the given view (capsule or box-art cover).
-function CardGrid({ games, isOwner, cover }: { games: Game[]; isOwner: boolean; cover: boolean }) {
+function CardGrid({ games, isOwner, cover, showReleaseDate = false }: { games: Game[]; isOwner: boolean; cover: boolean; showReleaseDate?: boolean }) {
   return (
     <div className={cover ? COVER_GRID : CARD_GRID}>
       {games.map(game =>
         cover
-          ? <CoverCard key={game.id} game={game} isOwner={isOwner} />
-          : <GameCard key={game.id} game={game} isOwner={isOwner} />,
+          ? <CoverCard key={game.id} game={game} isOwner={isOwner} showReleaseDate={showReleaseDate} />
+          : <GameCard key={game.id} game={game} isOwner={isOwner} showReleaseDate={showReleaseDate} />,
+      )}
+    </div>
+  )
+}
+
+// A backlog game is "coming soon" when it has a release date still in the future.
+function isComingSoon(game: Game, today: string) {
+  return !!game.release_date && game.release_date > today
+}
+
+// Backlog view — splits games you can play now from unreleased ones, which go
+// into a separate "Coming Soon" section (soonest first) showing each release date.
+function BacklogView({ games, isOwner, view }: { games: Game[]; isOwner: boolean; view: 'grid' | 'table' | 'cover' }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const comingSoon = games
+    .filter(g => isComingSoon(g, today))
+    .sort((a, b) => (a.release_date ?? '').localeCompare(b.release_date ?? ''))
+  const available = games.filter(g => !isComingSoon(g, today))
+
+  const renderList = (list: Game[], showReleaseDate: boolean) =>
+    view === 'table'
+      ? <GameTableView games={list} isOwner={isOwner} showReleaseDate={showReleaseDate} />
+      : <CardGrid games={list} isOwner={isOwner} cover={view === 'cover'} showReleaseDate={showReleaseDate} />
+
+  return (
+    <div className="space-y-8">
+      {available.length > 0 && renderList(available, false)}
+      {comingSoon.length > 0 && (
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="text-lg font-bold text-fg-base">Coming Soon</h2>
+            <span className="text-xs text-fg-subtle font-medium">
+              {comingSoon.length} game{comingSoon.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          {renderList(comingSoon, true)}
+        </div>
       )}
     </div>
   )
@@ -81,6 +118,8 @@ export default function GameListView({
   isOwner?: boolean
   view?: 'grid' | 'table' | 'cover'
 }) {
+  if (status === 'backlog') return <BacklogView games={games} isOwner={isOwner} view={view} />
+
   if (view === 'cover') {
     if (status === 'completed') return <CompletedByYear games={games} isOwner={isOwner} cover />
     return <CardGrid games={games} isOwner={isOwner} cover />

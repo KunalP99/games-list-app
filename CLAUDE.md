@@ -83,6 +83,30 @@ The full implementation plan (including all database SQL per phase) is at:
 - **Ticket recalculation on edit** — When a completed game's hours/achievements are edited, the old completion transactions are deleted and new ones issued via the `reverse_game_completion_tickets` Postgres RPC, keeping the ledger clean.
 - **Game metadata provider (RAWG ↔ IGDB)** — `lib/rawg.ts` exposes the metadata API (`searchRawgGames`, `getRawgGameDetail`, `getRawgScreenshots`, `getRawgAdditions`, `getRawgAchievements`). It delegates to **IGDB** (`lib/igdb.ts`, Twitch OAuth + apicalypse; needs `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`) when `METADATA_PROVIDER=igdb`, else uses RAWG (`RAWG_API_KEY`). Provider results keep the same `Rawg*` shapes, so callers are unchanged. Each game stores its provider id in `rawg_id` **or** `igdb_id`; use `PROVIDER_ID_COLUMN` (write) and `providerIdOf(game)` (read) — never assume `rawg_id`. IGDB gaps: no achievements (`getRawgAchievements` returns `[]`) and no dominant colour (card tint absent for IGDB games). Flip `METADATA_PROVIDER` back to `rawg` if RAWG recovers — existing data is untouched. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS igdb_id INTEGER;`
 - **Game YouTube media** — The game form's Media section takes a single "video or playlist" URL (`fetchGameMedia` in `games/actions.ts`): a playlist pulls all its videos (`fetchYouTubePlaylistItems`, needs `YOUTUBE_API_KEY`), a single video uses keyless oEmbed. Videos are stored inline as `games.youtube_videos` JSONB (same hidden-field pattern as `dlc`); a playlist also sets `youtube_playlist_url` (watch-on-YouTube link). The reusable `components/games/GameVideos.tsx` renders them: 2+ → `VideoRow` carousel, 1 → a single `VideoCard`, 0 + legacy `youtube_playlist_url` → the classic `videoseries` embed. **The Videos page mirrors game media live** — it reads all games with `youtube_videos` and shows one `VideoRow` per game (titled + linked to the game, read-only); since games are world-readable, no duplication/sync. `mapGameVideos` (`lib/youtube.ts`) adapts stored items to the card shape. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_videos JSONB;`
+- **Release notifications** — a `game_released` in-app notification is created when a backlog game's `release_date` arrives. The nav's `components/layout/NotificationBell.tsx` (fed by `app/(app)/layout.tsx`) shows an unread badge + dropdown; opening it calls `markNotificationsRead` (`app/(app)/notifications/actions.ts`). Generation is a daily cron (`app/api/cron/check-releases/route.ts`) idempotent via `games.release_notified`. Unreleased backlog games are separately grouped as **"Coming Soon"** in `GameListView` and hidden from the wheel picker (`wheel/page.tsx`). SQL:
+  ```sql
+  CREATE TABLE IF NOT EXISTS public.notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    type TEXT NOT NULL, title TEXT NOT NULL, body TEXT,
+    game_id UUID REFERENCES public.games(id) ON DELETE CASCADE,
+    read BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "Users manage own notifications" ON public.notifications
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  CREATE INDEX IF NOT EXISTS notifications_user_idx ON public.notifications (user_id, created_at DESC);
+  ALTER TABLE public.games ADD COLUMN IF NOT EXISTS release_notified BOOLEAN NOT NULL DEFAULT false;
+  UPDATE public.games SET release_notified = true WHERE release_date IS NOT NULL AND release_date <= current_date;
+  -- Tracks which IGDB events have already been announced (event_live notifications).
+  CREATE TABLE IF NOT EXISTS public.notified_events (
+    event_id BIGINT PRIMARY KEY,
+    notified_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  ALTER TABLE public.notified_events ENABLE ROW LEVEL SECURITY; -- no policies: service-role cron only
+  ```
+  Notification `type`s: `game_released` (linked to a game), `event_live` (no game — the bell shows a 📣 tile).
 
 ---
 
@@ -101,6 +125,8 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/wheel` | `app/(app)/wheel/page.tsx` | Wheel spin — shows current turn, game input, spin animation, result flow |
 | `/videos` | `app/(app)/videos/page.tsx` | Curated YouTube library. Everyone views; only `profiles.is_admin` curators add/remove. Click-to-play thumbnails. |
 | `/api/cron/sync-playlists` | `app/api/cron/sync-playlists/route.ts` | Daily Vercel Cron. Mirrors YouTube-sourced playlists (in-site + game media) against their source. `CRON_SECRET`-guarded. |
+| `/api/cron/check-releases` | `app/api/cron/check-releases/route.ts` | Daily Vercel Cron. Creates a `game_released` notification for backlog games whose `release_date` has arrived (idempotent via `games.release_notified`). `CRON_SECRET`-guarded, service-role admin client. |
+| `/api/cron/check-events` | `app/api/cron/check-events/route.ts` | Daily Vercel Cron. Creates an `event_live` notification for every user when an IGDB event happens today (idempotent via the `notified_events` table). `CRON_SECRET`-guarded, service-role admin client. |
 
 ---
 

@@ -36,6 +36,11 @@ export default async function WheelPage() {
 
   if (!profile) redirect('/login')
 
+  // Unreleased games can't be played yet, so keep them off the wheel until their
+  // release date passes (games with no date are treated as available).
+  const today = new Date().toISOString().slice(0, 10)
+  const playableBacklog = (backlogGames ?? []).filter(g => !g.release_date || g.release_date <= today)
+
   return (
     <div>
       <div className="mb-6">
@@ -46,7 +51,7 @@ export default async function WheelPage() {
         turn={profile.wheel_turn}
         balance={profile.ticket_balance}
         accentColour={profile.accent_colour ?? '#7c3aed'}
-        backlogGames={(backlogGames ?? []).map(g => {
+        backlogGames={playableBacklog.map(g => {
           const pid = providerIdOf(g) // igdb_id in IGDB mode, else rawg_id
           return {
             name: g.title,

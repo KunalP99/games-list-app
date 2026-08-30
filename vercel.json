@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/sync-playlists",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/check-releases",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/check-events",
+      "schedule": "0 6 * * *"
     }
   ]
 }

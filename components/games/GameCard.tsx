@@ -3,8 +3,17 @@ import StatusBadge from './StatusBadge'
 import MarkCompletedButton from './MarkCompletedButton'
 import type { Game } from '@/lib/types'
 
-export default function GameCard({ game, isOwner = true }: { game: Game; isOwner?: boolean }) {
+// Formatted release date, respecting year-only precision. Null when no date.
+function formatRelease(game: Game): string | null {
+  const d = game.release_date
+  if (!d) return null
+  if (game.release_date_precision === 'year') return d.slice(0, 4)
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+export default function GameCard({ game, isOwner = true, showReleaseDate = false }: { game: Game; isOwner?: boolean; showReleaseDate?: boolean }) {
   const banner = (game as { artwork_url?: string | null }).artwork_url ?? game.image_url
+  const releaseLabel = showReleaseDate ? formatRelease(game) : null
   if (banner) {
     return (
       <Link
@@ -36,6 +45,7 @@ export default function GameCard({ game, isOwner = true }: { game: Game; isOwner
           )}
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 text-xs text-white/70 flex-wrap drop-shadow">
+              {releaseLabel && <span className="font-medium text-white/90">📅 Releases {releaseLabel}</span>}
               {game.is_replay && <span className="text-base text-orange-400 leading-none" title="Replay">↩</span>}
               {game.is_sequel && (
                 <span className="text-violet-400" title="Sequel">
@@ -85,6 +95,7 @@ export default function GameCard({ game, isOwner = true }: { game: Game; isOwner
 
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-4 text-xs text-fg-subtle">
+          {releaseLabel && <span className="font-medium text-fg-muted">📅 Releases {releaseLabel}</span>}
           {game.is_replay && <span className="text-orange-400" title="Replay">↩</span>}
           {game.is_sequel && (
             <span className="text-violet-500" title="Sequel">

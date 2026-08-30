@@ -235,6 +235,18 @@ export async function getUpcomingEvents(limit = 5): Promise<IgdbEvent[]> {
   return events.slice(0, limit)
 }
 
+// Events happening today (UTC), for the "showcase live today" notification.
+export async function getEventsToday(): Promise<IgdbEvent[]> {
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const start = Math.floor(new Date(`${todayStr}T00:00:00Z`).getTime() / 1000)
+  const end = start + 86400
+  const rows = await igdbQuery<IgdbEventRow>(
+    'events',
+    `${EVENT_FIELDS} where start_time >= ${start} & start_time < ${end}; sort start_time asc; limit 20;`,
+  )
+  return rows.filter(r => r.start_time).map(toEvent)
+}
+
 // Most anticipated upcoming games — future releases ranked by IGDB hype
 // (pre-release excitement). Excludes DLC/editions (game_type 0, no
 // version_parent) and cancelled titles. Ordered most-hyped first.

@@ -186,7 +186,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
 
 // ─── SPIN turn — paid: Spin Again (−3) ──────────────────────────────────────
 
-export async function paySpinAgain(games: string[]) {
+export async function paySpinAgain(games: string[], exclude: string[] = []) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -205,7 +205,9 @@ export async function paySpinAgain(games: string[]) {
     p_reason: 'spin',
   })
 
-  return { winner: pickWinner(games) }
+  // Don't land on a game already seen this turn (unless that leaves nothing).
+  const pool = games.filter(g => !exclude.includes(g))
+  return { winner: pickWinner(pool.length > 0 ? pool : games) }
 }
 
 // ─── SPIN/SPIN+REROLL — paid: Spin & Reroll upgrade (−6) ────────────────────
@@ -213,7 +215,7 @@ export async function paySpinAgain(games: string[]) {
 // existingGames = games already known (1 from reroll_prompt, 2 from final_choice).
 // Additional optional spins use pickNextUpgradeGame (already paid).
 
-export async function payUpgradeToSpinReroll(games: string[], existingGames: string[]) {
+export async function payUpgradeToSpinReroll(games: string[], existingGames: string[], exclude: string[] = []) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -231,11 +233,13 @@ export async function payUpgradeToSpinReroll(games: string[], existingGames: str
     p_reason: 'spin_reroll',
   })
 
-  const pool = games.filter(g => !existingGames.includes(g))
+  // Skip the current option(s) plus any games already seen this turn.
+  const skip = new Set([...existingGames, ...exclude])
+  const pool = games.filter(g => !skip.has(g))
   return { nextGame: pickWinner(pool.length > 0 ? pool : games) }
 }
 
-export async function pickNextUpgradeGame(games: string[], excludeGames: string[]) {
+export async function pickNextUpgradeGame(games: string[], excludeGames: string[], exclude: string[] = []) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -244,7 +248,8 @@ export async function pickNextUpgradeGame(games: string[], excludeGames: string[
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
 
-  const pool = games.filter(g => !excludeGames.includes(g))
+  const skip = new Set([...excludeGames, ...exclude])
+  const pool = games.filter(g => !skip.has(g))
   return { nextGame: pickWinner(pool.length > 0 ? pool : games) }
 }
 

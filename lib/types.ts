@@ -7,6 +7,7 @@ export type WheelSpin = Database['public']['Tables']['wheel_spins']['Row']
 export type ChangelogEntry = Database['public']['Tables']['changelog_entries']['Row']
 export type Video = Database['public']['Tables']['videos']['Row']
 export type Playlist = Database['public']['Tables']['playlists']['Row']
+export type Notification = Database['public']['Tables']['notifications']['Row']
 
 export type WheelTurn = Profile['wheel_turn']
 export type GameStatus = Game['status']

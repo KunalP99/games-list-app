@@ -197,6 +197,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   // Results
   const [winner, setWinner] = useState('')         // current/first spin result
+  // Games already landed on this SPIN turn — excluded from paid re-spins/upgrades
+  // so a paid spin never lands on a game you've already seen this turn.
+  const [excludedGames, setExcludedGames] = useState<string[]>([])
   const [rerollWinner, setRerollWinner] = useState('') // SPIN+REROLL turn second option
   // Upgrade (paid Spin&Reroll): all games in the upgrade flow (pre-existing + newly spun)
   const [upgradeGames, setUpgradeGames] = useState<string[]>([])
@@ -264,6 +267,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     setError('')
     setPaidRespin(false)
     setSpends([])
+    setExcludedGames([])
     startTransition(async () => {
       const res = await performSpin(uniqueGames, mode)
       if ('error' in res) { setError(res.error ?? ''); return }
@@ -330,23 +334,29 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     setError('')
     setPaidRespin(true)
     spendTickets(TICKET_COSTS.spin, 'spin_again')
+    // The game currently shown is now rejected — exclude it (and any earlier
+    // results this turn) from this and future paid spins.
+    const newExcluded = Array.from(new Set([...excludedGames, winner].filter(Boolean)))
+    setExcludedGames(newExcluded)
+    const pool = uniqueGames.filter(g => !newExcluded.includes(g))
+    const animPool = pool.length > 0 ? pool : uniqueGames
     startTransition(async () => {
-      const res = await paySpinAgain(uniqueGames)
+      const res = await paySpinAgain(uniqueGames, newExcluded)
       if ('error' in res) { setError(res.error ?? ''); return }
       const target = res.winner ?? ''
       setWinner(target)
       // Reuse elimination animation for paid spin too
       if (mode === 'first_land') {
-        setCurrentAnimGames(uniqueGames)
+        setCurrentAnimGames(animPool)
         setAnimTarget(target)
         setPhase('spin_paid_spinning')
       } else {
-        const nonWinners = shuffle(uniqueGames.filter(g => g !== target))
+        const nonWinners = shuffle(animPool.filter(g => g !== target))
         const queue = [...nonWinners, target]
         setElimQueue(queue)
         setElimIndex(0)
         setEliminated([])
-        setCurrentAnimGames(uniqueGames)
+        setCurrentAnimGames(animPool)
         setAnimTarget(queue[0])
         setPhase('spin_paid_spinning')
       }
@@ -365,7 +375,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     } else {
       const newElim = [...eliminated, landed]
       setEliminated(newElim)
-      const remaining = uniqueGames.filter(g => !newElim.includes(g))
+      const remaining = uniqueGames.filter(g => !newElim.includes(g) && !excludedGames.includes(g))
       if (remaining.length === 1) {
         setPhase('spin_result')
         return
@@ -377,7 +387,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
       setElimNextPhase('spin_paid_spinning')
       setPhase('elim_step')
     }
-  }, [mode, elimQueue, elimIndex, eliminated, uniqueGames])
+  }, [mode, elimQueue, elimIndex, eliminated, uniqueGames, excludedGames])
 
   // ─── SPIN / SPIN+REROLL: Paid — Spin & Reroll upgrade ────────────────────
   // existingGames: games already known before the upgrade starts
@@ -387,13 +397,15 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     setError('')
     spendTickets(TICKET_COSTS.spin_reroll, 'upgrade_choice')
     startTransition(async () => {
-      const res = await payUpgradeToSpinReroll(uniqueGames, existingGames)
+      // Exclude earlier results this turn (from paid re-spins) from the new pick,
+      // without adding them to the choosable options.
+      const res = await payUpgradeToSpinReroll(uniqueGames, existingGames, excludedGames)
       if ('error' in res) { setError(res.error ?? ''); return }
       const target = res.nextGame ?? ''
       const newUpgradeGames = [...existingGames, target]
       setUpgradeGames(newUpgradeGames)
       setUpgradeMaxGames(maxGames)
-      const pool = uniqueGames.filter(g => !existingGames.includes(g))
+      const pool = uniqueGames.filter(g => !existingGames.includes(g) && !excludedGames.includes(g))
       if (mode === 'first_land') {
         setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
         setAnimTarget(target)
@@ -441,12 +453,12 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   function handleUpgradeGetNextGame() {
     setError('')
     startTransition(async () => {
-      const res = await pickNextUpgradeGame(uniqueGames, upgradeGames)
+      const res = await pickNextUpgradeGame(uniqueGames, upgradeGames, excludedGames)
       if ('error' in res) { setError(res.error ?? ''); return }
       const target = res.nextGame ?? ''
       const newUpgradeGames = [...upgradeGames, target]
       setUpgradeGames(newUpgradeGames)
-      const pool = uniqueGames.filter(g => !upgradeGames.includes(g))
+      const pool = uniqueGames.filter(g => !upgradeGames.includes(g) && !excludedGames.includes(g))
       if (mode === 'first_land') {
         setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
         setAnimTarget(target)
@@ -1320,7 +1332,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
       <div className={`grid gap-4 items-stretch ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-2' : ''}`}>
 
         {/* Main card: RAWG search builder + mode + spin */}
-        <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
+        <div className="rounded-xl border border-edge-base bg-surface-base p-6 flex flex-col gap-5 md:min-h-[32rem]">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-fg-secondary">Add games to the wheel</label>
@@ -1429,6 +1441,8 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
             )}
           </div>
 
+          {/* Mode + spin — pushed to the bottom of the card */}
+          <div className="mt-auto space-y-5">
           <div className="space-y-2">
             <p className="text-sm font-medium text-fg-secondary">Spin mode</p>
             <div className="grid grid-cols-2 gap-3">
@@ -1472,13 +1486,17 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
           >
             {isPending ? 'Spinning…' : '🎰 Spin!'}
           </button>
+          </div>
         </div>
 
         {/* Backlog panel */}
         {backlogGames.length > 0 && (
-          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-80">
+          <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-80 md:h-auto md:min-h-[32rem]">
             <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
-            <div className="flex flex-col divide-y divide-edge-subtle overflow-y-auto flex-1 min-h-0 pr-3">
+            {/* Relative wrapper + absolute list so the scroll content doesn't inflate the
+                row height — the card stretches to match the card on its left instead. */}
+            <div className="relative flex-1 min-h-0">
+            <div className="absolute inset-0 flex flex-col divide-y divide-edge-subtle overflow-y-auto pr-3">
               {backlogGames.map(game => {
                 const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(game.name.toLowerCase())
                 return (
@@ -1499,6 +1517,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                   </div>
                 )
               })}
+            </div>
             </div>
           </div>
         )}

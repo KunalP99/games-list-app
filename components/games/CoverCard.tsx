@@ -3,9 +3,18 @@ import StatusBadge from './StatusBadge'
 import MarkCompletedButton from './MarkCompletedButton'
 import type { Game } from '@/lib/types'
 
+// Formatted release date, respecting year-only precision. Null when no date.
+function formatRelease(game: Game): string | null {
+  const d = game.release_date
+  if (!d) return null
+  if (game.release_date_precision === 'year') return d.slice(0, 4)
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 // Portrait box-art card. Cover on top, the same info GameCard shows beneath.
-export default function CoverCard({ game, isOwner = true }: { game: Game; isOwner?: boolean }) {
+export default function CoverCard({ game, isOwner = true, showReleaseDate = false }: { game: Game; isOwner?: boolean; showReleaseDate?: boolean }) {
   const cover = (game as { cover_image_url?: string | null }).cover_image_url ?? null
+  const releaseLabel = showReleaseDate ? formatRelease(game) : null
 
   return (
     <Link
@@ -39,6 +48,7 @@ export default function CoverCard({ game, isOwner = true }: { game: Game; isOwne
           {game.is_favourite && <span className="text-amber-400 shrink-0 leading-none">★</span>}
         </div>
         {game.developer && <p className="text-xs text-fg-muted truncate -mt-0.5">{game.developer}</p>}
+        {releaseLabel && <p className="text-xs font-medium text-fg-muted truncate">📅 Releases {releaseLabel}</p>}
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 text-xs text-fg-subtle min-w-0 flex-wrap">

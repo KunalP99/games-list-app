@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
+import type { NotificationWithGame } from '@/lib/notifications'
 import UserDropdown from '@/components/layout/UserDropdown'
+import NotificationBell from '@/components/layout/NotificationBell'
 
 const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -24,7 +26,7 @@ const historyItems = [
   { href: '/wheel/history', label: '🎰 Wheel History' },
 ]
 
-export default function Nav({ profile }: { profile: Profile }) {
+export default function Nav({ profile, notifications = [], unreadCount = 0, totalCount = 0 }: { profile: Profile; notifications?: NotificationWithGame[]; unreadCount?: number; totalCount?: number }) {
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -76,7 +78,7 @@ export default function Nav({ profile }: { profile: Profile }) {
           {/* Left: hamburger (mobile) + logo */}
           <div className="flex items-center gap-2">
             <button
-              className="md:hidden p-1.5 rounded-full text-fg-muted hover:text-fg-base hover:bg-black/[0.05] dark:hover:bg-white/[0.08] transition-colors"
+              className="lg:hidden p-1.5 rounded-full text-fg-muted hover:text-fg-base hover:bg-black/[0.05] dark:hover:bg-white/[0.08] transition-colors"
               onClick={() => setSidebarOpen(true)}
               aria-label="Open menu"
             >
@@ -100,7 +102,7 @@ export default function Nav({ profile }: { profile: Profile }) {
           </div>
 
           {/* Center: desktop nav links */}
-          <nav className="hidden md:flex items-center gap-0.5">
+          <nav className="hidden lg:flex items-center gap-0.5">
             {navItemsBefore.map((item) => {
               const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
               return (
@@ -175,11 +177,12 @@ export default function Nav({ profile }: { profile: Profile }) {
             })}
           </nav>
 
-          {/* Right: ticket balance + user dropdown */}
+          {/* Right: ticket balance + notifications + user dropdown */}
           <div className="flex items-center gap-2.5">
             <span className={`hidden sm:flex items-center gap-1 text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300 ${ticketAnimating ? 'animate-ticket-gain' : ''}`}>
               🎟️ {profile.ticket_balance}
             </span>
+            <NotificationBell notifications={notifications} unreadCount={unreadCount} totalCount={totalCount} accentColour={profile.accent_colour ?? '#7c3aed'} />
             <UserDropdown profile={profile} />
           </div>
         </header>
@@ -188,7 +191,7 @@ export default function Nav({ profile }: { profile: Profile }) {
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
@@ -196,7 +199,7 @@ export default function Nav({ profile }: { profile: Profile }) {
 
       {/* Mobile sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-surface-elevated shadow-xl flex flex-col transition-transform duration-300 ease-in-out md:hidden ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-surface-elevated shadow-xl flex flex-col transition-transform duration-300 ease-in-out lg:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

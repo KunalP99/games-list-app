@@ -123,6 +123,7 @@ export type Database = {
           youtube_videos: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
           youtube_item_count: number | null
           dlc: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
+          release_notified: boolean
           created_at: string
           updated_at: string
         }
@@ -284,6 +285,39 @@ export type Database = {
           tickets_spent?: number | null
           finalized_via?: 'accept' | 'spin_again' | 'reroll_choice' | 'upgrade_choice' | 'choose_any' | 'choose' | 'skip' | null
           ticket_spends?: { action: string; amount: number }[] | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          title: string
+          body: string | null
+          game_id: string | null
+          read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          title: string
+          body?: string | null
+          game_id?: string | null
+          read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          title?: string
+          body?: string | null
+          game_id?: string | null
+          read?: boolean
           created_at?: string
         }
         Relationships: []
