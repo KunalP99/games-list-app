@@ -80,6 +80,10 @@ export default function GameFilters() {
     if (key === 'status' && value === 'backlog' && params.get('sort') === 'completion_date') {
       params.set('sort', 'created_at')
     }
+    // Switching to Completed defaults the sort back to Completion Date.
+    if (key === 'status' && value === 'completed') {
+      params.set('sort', 'completion_date')
+    }
     router.push(`${pathname}?${params.toString()}`)
   }
 
