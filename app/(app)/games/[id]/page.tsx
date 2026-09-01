@@ -241,7 +241,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           </>
         ) : (
           <AddToBacklogButton
-            game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: game.rawg_id, release_date: game.release_date }}
+            game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: providerIdOf(game), release_date: game.release_date }}
             variant="glass"
           />
         )
@@ -261,7 +261,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           </>
         ) : (
           <AddToBacklogButton
-            game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: game.rawg_id, release_date: game.release_date }}
+            game={{ title: game.title, developer: game.developer, image_url: game.image_url, genres: game.genres, rawg_id: providerIdOf(game), release_date: game.release_date }}
             variant="outline"
           />
         )

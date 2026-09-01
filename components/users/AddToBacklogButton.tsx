@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { addRecommendationToBacklog } from '@/app/(app)/games/actions'
+import ReviewGameModal from '@/components/wheel/ReviewGameModal'
 
 type Game = {
   title: string
@@ -14,11 +15,11 @@ type Game = {
 
 export default function AddToBacklogButton({ game, variant = 'overlay' }: { game: Game; variant?: 'overlay' | 'outline' | 'glass' | 'expand' }) {
   const [added, setAdded] = useState(false)
+  const [showModal, setShowModal] = useState(false)
+  const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+  function doAdd(platform: string | null, image: string | null) {
     startTransition(async () => {
       const formData = new FormData()
       formData.set('title', game.title)
@@ -27,18 +28,42 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
       formData.set('genres', JSON.stringify(game.genres ?? []))
       formData.set('rawg_id', game.rawg_id != null ? String(game.rawg_id) : '')
       formData.set('release_date', game.release_date ?? '')
+      if (platform) formData.set('platform', platform)
+      if (image) formData.set('chosen_image', image)
       const result = await addRecommendationToBacklog(formData)
-      if (result.success) setAdded(true)
+      if (result.success) { setAdded(true); setShowModal(false); setError('') }
+      else setError(result.error ?? 'Failed to add to backlog')
     })
   }
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Review (details + image + required platform) when we have a game to look
+    // up; free-text games with no provider id are added directly.
+    if (game.rawg_id != null) setShowModal(true)
+    else doAdd(null, null)
+  }
+
+  const modal = showModal ? (
+    <ReviewGameModal
+      game={{ id: game.rawg_id!, name: game.title }}
+      isPending={isPending}
+      error={error}
+      heading="Add to your backlog"
+      confirmLabel="Add to backlog"
+      onConfirm={(platform, image) => doAdd(platform, image)}
+      onCancel={() => { setShowModal(false); setError('') }}
+    />
+  ) : null
+
+  let button: React.ReactNode
+
   // Pill that shows just an icon and expands on hover to reveal the label.
-  // On mobile (no hover) the label is always shown; from `sm` up it collapses
-  // to the icon and expands on hover.
   if (variant === 'expand') {
     const icon = added ? '✓' : isPending ? '…' : '+'
     const label = added ? 'Added' : 'Backlog'
-    return (
+    button = (
       <button
         onClick={handleClick}
         disabled={isPending || added}
@@ -53,17 +78,12 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
         </span>
       </button>
     )
-  }
-
-  if (added) {
-    if (variant === 'outline') {
-      return <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">✓ Added to backlog</span>
-    }
-    return <span className="text-xs font-semibold text-emerald-400">✓ Added</span>
-  }
-
-  if (variant === 'outline') {
-    return (
+  } else if (added) {
+    button = variant === 'outline'
+      ? <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">✓ Added to backlog</span>
+      : <span className="text-xs font-semibold text-emerald-400">✓ Added</span>
+  } else if (variant === 'outline') {
+    button = (
       <button
         onClick={handleClick}
         disabled={isPending}
@@ -72,10 +92,8 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
         {isPending ? 'Adding…' : '+ Add to Backlog'}
       </button>
     )
-  }
-
-  if (variant === 'glass') {
-    return (
+  } else if (variant === 'glass') {
+    button = (
       <button
         onClick={handleClick}
         disabled={isPending}
@@ -84,15 +102,17 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
         {isPending ? '…' : '+ Backlog'}
       </button>
     )
+  } else {
+    button = (
+      <button
+        onClick={handleClick}
+        disabled={isPending}
+        className="text-[10px] font-semibold text-white bg-white/20 hover:bg-white/35 backdrop-blur-sm rounded-full px-2 py-0.5 transition-colors disabled:opacity-40 shrink-0"
+      >
+        {isPending ? '...' : '+ Backlog'}
+      </button>
+    )
   }
 
-  return (
-    <button
-      onClick={handleClick}
-      disabled={isPending}
-      className="text-[10px] font-semibold text-white bg-white/20 hover:bg-white/35 backdrop-blur-sm rounded-full px-2 py-0.5 transition-colors disabled:opacity-40 shrink-0"
-    >
-      {isPending ? '...' : '+ Backlog'}
-    </button>
-  )
+  return <>{button}{modal}</>
 }
