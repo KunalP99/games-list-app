@@ -173,6 +173,7 @@ export async function createGame(formData: FormData) {
     is_favourite: formData.get('is_favourite') === 'on',
     is_replay: formData.get('is_replay') === 'on',
     is_sequel: formData.get('is_sequel') === 'on',
+    steam_deck: formData.get('steam_deck') === 'on',
     in_wheel: false,
     youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
     youtube_videos: youtubeVideos,
@@ -279,6 +280,7 @@ export async function updateGame(id: string, formData: FormData) {
     is_favourite: formData.get('is_favourite') === 'on',
     is_replay: formData.get('is_replay') === 'on',
     is_sequel: formData.get('is_sequel') === 'on',
+    steam_deck: formData.get('steam_deck') === 'on',
     in_wheel: false,
     youtube_playlist_url: (formData.get('youtube_playlist_url') as string)?.trim() || null,
     youtube_videos: youtubeVideos,
@@ -488,6 +490,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   // Optional: chosen in the review modal (anticipated-games add flow).
   const platform = (formData.get('platform') as string)?.trim() || null
   const chosenImage = (formData.get('chosen_image') as string)?.trim() || null
+  const steamDeck = formData.get('steam_deck') === 'on'
 
   // Enrich from RAWG when the recommended game carries a rawg_id — keeps the
   // backlog row consistent with games added via the form/wheel (description,
@@ -526,6 +529,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     genres: finalGenres,
     status: 'backlog',
     platform,
+    steam_deck: steamDeck,
     // Store under the active provider's id column (rawg_id or igdb_id).
     [PROVIDER_ID_COLUMN]: rawgId,
     release_date: releaseDate,

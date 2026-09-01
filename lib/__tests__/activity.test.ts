@@ -150,11 +150,18 @@ describe('buildActivityItems', () => {
     expect(items[0].date).toBe(baseGame.updated_at)
   })
 
-  it('maps a dnf game using updated_at as date', () => {
-    const game = { ...baseGame, status: 'dnf' }
+  it('maps a dnf game using completion_date (drop date) as date', () => {
+    const game = { ...baseGame, status: 'dnf', completion_date: '2024-03-08' }
     const items = buildActivityItems([game], [], profiles, {}, 'user-2')
     expect(items[0].type).toBe('dnf')
-    expect(items[0].date).toBe(baseGame.updated_at)
+    expect(items[0].date).toBe('2024-03-08')
+  })
+
+  it('falls back to created_at (not updated_at) for a dnf game with no drop date', () => {
+    const game = { ...baseGame, status: 'dnf', completion_date: null }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2')
+    expect(items[0].type).toBe('dnf')
+    expect(items[0].date).toBe(baseGame.created_at)
   })
 
   it('maps a backlog game using created_at as date', () => {

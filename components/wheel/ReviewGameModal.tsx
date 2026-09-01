@@ -16,14 +16,16 @@ export default function ReviewGameModal({
   onCancel,
   heading = 'Add to your list',
   confirmLabel = 'Add to my list',
+  showSteamDeck = false,
 }: {
   game: { id: number; name: string }
   isPending: boolean
   error: string
-  onConfirm: (platform: string, image: string | null) => void
+  onConfirm: (platform: string, image: string | null, steamDeck: boolean) => void
   onCancel: () => void
   heading?: string
   confirmLabel?: string
+  showSteamDeck?: boolean
 }) {
   const [mounted, setMounted] = useState(false)
   const [detail, setDetail] = useState<RawgGameDetail | null>(null)
@@ -33,6 +35,7 @@ export default function ReviewGameModal({
   const [selectedImage, setSelectedImage] = useState('')
   const [customUrl, setCustomUrl] = useState('')
   const [platform, setPlatform] = useState('')
+  const [steamDeck, setSteamDeck] = useState(false)
   const [localError, setLocalError] = useState('')
 
   useEffect(() => { setMounted(true) }, [])
@@ -67,7 +70,7 @@ export default function ReviewGameModal({
     if (!platform.trim()) { setLocalError('Please select a platform.'); return }
     setLocalError('')
     const image = customUrl.trim() || selectedImage || null
-    onConfirm(platform.trim(), image)
+    onConfirm(platform.trim(), image, steamDeck)
   }
 
   if (!mounted) return null
@@ -122,6 +125,17 @@ export default function ReviewGameModal({
                 ))}
               </select>
             </p>
+            {showSteamDeck && (
+              <p className="flex items-center gap-1.5">
+                <span className="text-fg-muted">Steam Deck?:</span>
+                <input
+                  type="checkbox"
+                  checked={steamDeck}
+                  onChange={e => setSteamDeck(e.target.checked)}
+                  className="w-4 h-4 rounded border-edge-input text-brand-600 focus:ring-brand-500 cursor-pointer"
+                />
+              </p>
+            )}
           </div>
         </div>
 

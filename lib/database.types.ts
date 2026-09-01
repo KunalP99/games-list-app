@@ -124,6 +124,7 @@ export type Database = {
           youtube_item_count: number | null
           dlc: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           release_notified: boolean
+          steam_deck: boolean
           created_at: string
           updated_at: string
         }

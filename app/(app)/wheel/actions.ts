@@ -99,6 +99,7 @@ async function addWonGameToLibrary(
       .update({
         status: 'playing',
         start_date: today,
+        assigned_by: userId, // marks it as a wheel-assigned game (for achievements)
         ...(plat ? { platform: plat } : {}),
         ...(art ? { image_url: art, artwork_url: art } : {}),
       })
@@ -128,6 +129,7 @@ async function addWonGameToLibrary(
     genres: detail?.genres?.map(g => g.name) ?? null,
     dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
     is_replay: decision.isReplay,
+    assigned_by: userId, // marks it as a wheel-assigned game (for achievements)
   }).select('id').single() as { data: { id: string } | null }
 
   return inserted?.id ?? null

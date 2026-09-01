@@ -161,9 +161,18 @@ export default async function GameDetailPage({ params }: { params: { id: string 
                 </span>
               )}
             </div>
-            {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
-              <p className="text-fg-muted text-sm">
-                {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
+            {([game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 || game.steam_deck) && (
+              <p className="text-fg-muted text-sm flex items-center gap-1.5 flex-wrap">
+                <span>{[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}</span>
+                {game.steam_deck && (
+                  <>
+                    {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
+                      <span aria-hidden>·</span>
+                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-4 w-auto" />
+                  </>
+                )}
               </p>
             )}
             {game.genres && game.genres.length > 0 && (
@@ -204,9 +213,18 @@ export default async function GameDetailPage({ params }: { params: { id: string 
                 </span>
               )}
             </div>
-            {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
-              <p className="text-white/80 text-sm drop-shadow">
-                {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}
+            {([game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 || game.steam_deck) && (
+              <p className="text-white/80 text-sm drop-shadow flex items-center gap-1.5 flex-wrap">
+                <span>{[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).join(' · ')}</span>
+                {game.steam_deck && (
+                  <>
+                    {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
+                      <span aria-hidden>·</span>
+                    )}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-4 w-auto drop-shadow" />
+                  </>
+                )}
               </p>
             )}
             {game.genres && game.genres.length > 0 && (

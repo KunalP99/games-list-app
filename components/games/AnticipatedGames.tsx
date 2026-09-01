@@ -30,7 +30,7 @@ export default function AnticipatedGames({ games }: { games: RelatedGame[] }) {
     return () => { emblaApi.off('select', onSelect) }
   }, [emblaApi, onSelect])
 
-  function confirm(platform: string, image: string | null) {
+  function confirm(platform: string, image: string | null, steamDeck: boolean) {
     if (!pendingAdd) return
     const game = pendingAdd
     startTransition(async () => {
@@ -39,6 +39,7 @@ export default function AnticipatedGames({ games }: { games: RelatedGame[] }) {
       fd.set('rawg_id', String(game.id))
       fd.set('platform', platform)
       if (image) fd.set('chosen_image', image)
+      if (steamDeck) fd.set('steam_deck', 'on')
       const res = await addRecommendationToBacklog(fd)
       if (res.success) {
         setAddedIds(prev => new Set(prev).add(game.id))
@@ -132,6 +133,7 @@ export default function AnticipatedGames({ games }: { games: RelatedGame[] }) {
           error={error}
           heading="Add to your backlog"
           confirmLabel="Add to backlog"
+          showSteamDeck
           onConfirm={confirm}
           onCancel={() => { setPendingAdd(null); setError('') }}
         />

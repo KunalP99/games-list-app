@@ -101,7 +101,10 @@ export function buildActivityItems(
         date: g.completion_date ?? g.updated_at,
       })
     } else if (g.status === 'dnf') {
-      items.push({ ...base, type: 'dnf', date: g.updated_at })
+      // Date by the drop date (completion_date); fall back to when it was added
+      // rather than last-modified, so an unrelated edit doesn't make it look like
+      // the game was just DNF'd.
+      items.push({ ...base, type: 'dnf', date: g.completion_date ?? g.created_at })
     } else if (g.status === 'backlog') {
       items.push({ ...base, type: 'backlog', date: g.created_at })
     } else if (g.status === 'playing') {

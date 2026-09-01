@@ -19,7 +19,7 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
-  function doAdd(platform: string | null, image: string | null) {
+  function doAdd(platform: string | null, image: string | null, steamDeck = false) {
     startTransition(async () => {
       const formData = new FormData()
       formData.set('title', game.title)
@@ -30,6 +30,7 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
       formData.set('release_date', game.release_date ?? '')
       if (platform) formData.set('platform', platform)
       if (image) formData.set('chosen_image', image)
+      if (steamDeck) formData.set('steam_deck', 'on')
       const result = await addRecommendationToBacklog(formData)
       if (result.success) { setAdded(true); setShowModal(false); setError('') }
       else setError(result.error ?? 'Failed to add to backlog')
@@ -52,7 +53,8 @@ export default function AddToBacklogButton({ game, variant = 'overlay' }: { game
       error={error}
       heading="Add to your backlog"
       confirmLabel="Add to backlog"
-      onConfirm={(platform, image) => doAdd(platform, image)}
+      showSteamDeck
+      onConfirm={(platform, image, steamDeck) => doAdd(platform, image, steamDeck)}
       onCancel={() => { setShowModal(false); setError('') }}
     />
   ) : null

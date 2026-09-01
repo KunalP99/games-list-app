@@ -40,6 +40,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
   const [isReplay, setIsReplay] = useState(game?.is_replay ?? false)
   const [replayDetected, setReplayDetected] = useState(false)
   const [isSequel, setIsSequel] = useState(game?.is_sequel ?? false)
+  const [steamDeck, setSteamDeck] = useState(game?.steam_deck ?? false)
   const [completionDatePrecision, setCompletionDatePrecision] = useState<'full' | 'year'>(game?.completion_date_precision ?? 'full')
   const [completionYear, setCompletionYear] = useState(
     (game?.completion_date_precision === 'year') ? (game?.completion_date?.slice(0, 4) ?? '') : ''
@@ -820,10 +821,23 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
               Only tick this if the last game you completed was a direct prequel to this one. You&apos;ll earn a bonus ticket when you complete it.
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setSteamDeck(s => !s)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              steamDeck
+                ? 'bg-brand-50 border-brand-300 text-brand-700 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300'
+                : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
+            }`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/steam-deck.png" alt="" className="h-4 w-auto" /> Steam Deck
+          </button>
         </div>
         {isFavourite && <input type="hidden" name="is_favourite" value="on" />}
         {isReplay && <input type="hidden" name="is_replay" value="on" />}
         {isSequel && <input type="hidden" name="is_sequel" value="on" />}
+        {steamDeck && <input type="hidden" name="steam_deck" value="on" />}
         {rawgId !== null && <input type="hidden" name="rawg_id" value={rawgId} />}
         <input type="hidden" name="dlc" value={JSON.stringify(
           dlcEntries.map(e => ({ name: e.name, rawg_id: e.rawgId, owned: e.owned, removed: e.removed ?? false }))

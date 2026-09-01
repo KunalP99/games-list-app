@@ -232,6 +232,16 @@ export async function getUpcomingEvents(limit = 5): Promise<IgdbEvent[]> {
     )
     events.push(...past.filter(r => r.start_time).map(toEvent))
   }
+  // Earliest date at the top, later dates below; events that have already finished
+  // (ended before today) are pushed to the bottom regardless of their date.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const dayOf = (e: IgdbEvent) => new Date((e.endTime ?? e.startTime) * 1000).toISOString().slice(0, 10)
+  events.sort((a, b) => {
+    const aDone = dayOf(a) < todayStr
+    const bDone = dayOf(b) < todayStr
+    if (aDone !== bDone) return aDone ? 1 : -1
+    return a.startTime - b.startTime
+  })
   return events.slice(0, limit)
 }
 

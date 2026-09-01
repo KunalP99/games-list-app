@@ -10,6 +10,7 @@ export type AchievementCategory =
   | 'variety'
   | 'dedication'
   | 'wheel'
+  | 'steam_deck'
   | 'misc'
 
 export type Achievement = {
@@ -122,6 +123,19 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'used_reroll',          name: 'Second Opinion',       description: 'Use a Spin & Reroll for the first time', icon: '🔁', rarity: 'common',   category: 'wheel', xp: 50  },
   { id: 'skipped_choose',       name: 'Pass',                 description: 'Skip a Choose turn for the first time',  icon: '⏭️', rarity: 'common',   category: 'wheel', xp: 50  },
 
+  // ── Steam Deck ──────────────────────────────────────────────────────────────
+  { id: 'deck_debut',            name: 'Deck Debut',           description: 'Complete your first game on Steam Deck',            icon: '🕹️', rarity: 'common',   category: 'steam_deck', xp: 75  },
+  { id: 'couch_commander',       name: 'Couch Commander',      description: 'Complete 5 games on Steam Deck',                    icon: '🛋️', rarity: 'uncommon', category: 'steam_deck', xp: 150 },
+  { id: 'portable_pro',          name: 'Portable Pro',         description: 'Complete 10 games on Steam Deck',                   icon: '🎒', rarity: 'rare',     category: 'steam_deck', xp: 300 },
+  { id: 'deck_devotee',          name: 'Deck Devotee',         description: 'Complete 25 games on Steam Deck',                   icon: '🔋', rarity: 'epic',     category: 'steam_deck', xp: 600 },
+  { id: 'deck_legend',           name: 'Deck Legend',          description: 'Complete 50 games on Steam Deck',                   icon: '🏆', rarity: 'epic',     category: 'steam_deck', xp: 900 },
+  { id: 'deck_hours_50',         name: 'Handheld Hours',       description: 'Log 50 hours on Steam Deck games',                  icon: '⏱️', rarity: 'uncommon', category: 'steam_deck', xp: 150 },
+  { id: 'deck_hours_250',        name: 'Battery Drainer',      description: 'Log 250 hours on Steam Deck games',                 icon: '🔌', rarity: 'rare',     category: 'steam_deck', xp: 300 },
+  { id: 'deck_hours_500',        name: 'Powered by Valve',     description: 'Log 500 hours on Steam Deck games',                 icon: '⚡', rarity: 'epic',     category: 'steam_deck', xp: 500 },
+  { id: 'deck_perfect',          name: 'Perfect on the Deck',  description: "100% a game's achievements on Steam Deck",          icon: '💎', rarity: 'rare',     category: 'steam_deck', xp: 250 },
+  { id: 'deck_collector',        name: 'Deck Collector',       description: 'Have 20 games in your library marked Steam Deck',   icon: '📦', rarity: 'uncommon', category: 'steam_deck', xp: 150 },
+  { id: 'big_screen_small_deck', name: 'Big Screen, Small Deck', description: 'Complete the same game on Steam Deck and another platform', icon: '🖥️', rarity: 'rare', category: 'steam_deck', xp: 250 },
+
   // ── Misc ──────────────────────────────────────────────────────────────────
   { id: 'backlog_twenty',       name: 'Library Card',         description: 'Have 20 games in your library',          icon: '📚', rarity: 'common',   category: 'misc', xp: 50   },
   { id: 'backlog_fifty',        name: 'Collector',            description: 'Have 50 games in your library',          icon: '🗄️', rarity: 'uncommon', category: 'misc', xp: 100  },
@@ -143,6 +157,7 @@ export const CATEGORY_LABELS: Record<AchievementCategory, string> = {
   variety: 'Variety',
   dedication: 'Dedication',
   wheel: 'Wheel',
+  steam_deck: 'Steam Deck',
   misc: 'Misc',
 }
 
@@ -231,11 +246,16 @@ type Stats = {
   hasSpeedRun: boolean
   backlogSlayerCount: number
   hasQuickTurnaround: boolean
+  steamDeckCompletedCount: number
+  steamDeckHours: number
+  hasSteamDeckPerfect: boolean
+  steamDeckLibraryCount: number
+  hasBigScreenSmallDeck: boolean
 }
 
 async function gatherStats(supabase: SupabaseClient, userId: string): Promise<Stats> {
   const { data: games } = await (supabase.from('games') as any)
-    .select('status, title, developer, review, hours_played, achievement_progress, rating, genres, platform, is_replay, is_sequel, is_favourite, assigned_by, release_date, completion_date, created_at')
+    .select('status, title, developer, review, hours_played, achievement_progress, rating, genres, platform, is_replay, is_sequel, is_favourite, assigned_by, release_date, completion_date, created_at, steam_deck')
     .eq('user_id', userId) as { data: Array<{
       status: string
       title: string
@@ -253,6 +273,7 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
       release_date: string | null
       completion_date: string | null
       created_at: string
+      steam_deck: boolean
     }> | null }
 
   const list = games ?? []
@@ -396,6 +417,15 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
   const dnfTitles = new Set(list.filter(g => g.status === 'dnf').map(g => g.title.toLowerCase()))
   const hasDnfRedemption = completed.some(g => dnfTitles.has(g.title.toLowerCase()))
 
+  // Steam Deck
+  const steamDeckCompletedCount = completed.filter(g => g.steam_deck).length
+  const steamDeckHours = list.filter(g => g.steam_deck).reduce((sum, g) => sum + (g.hours_played ?? 0), 0)
+  const hasSteamDeckPerfect = completed.some(g => g.steam_deck && g.achievement_progress === 100)
+  const steamDeckLibraryCount = list.filter(g => g.steam_deck).length
+  const deckTitles = new Set(completed.filter(g => g.steam_deck).map(g => g.title.toLowerCase()))
+  const nonDeckTitles = new Set(completed.filter(g => !g.steam_deck).map(g => g.title.toLowerCase()))
+  const hasBigScreenSmallDeck = Array.from(deckTitles).some(t => nonDeckTitles.has(t))
+
   // Lifetime tickets earned = sum of the positive rows in the ledger. Computed
   // from the ledger rather than the cached profiles.tickets_earned_total column,
   // which isn't kept in sync (award_tickets only updates ticket_balance), so the
@@ -453,6 +483,11 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
     hasSpeedRun,
     backlogSlayerCount,
     hasQuickTurnaround,
+    steamDeckCompletedCount,
+    steamDeckHours,
+    hasSteamDeckPerfect,
+    steamDeckLibraryCount,
+    hasBigScreenSmallDeck,
   }
 }
 
@@ -548,6 +583,18 @@ function evaluateAchievement(id: string, s: Stats): boolean {
     case 'assigned_loved':         return s.hasAssignedLoved
     case 'used_reroll':            return s.hasUsedReroll
     case 'skipped_choose':         return s.hasSkippedChoose
+    // Steam Deck
+    case 'deck_debut':             return s.steamDeckCompletedCount >= 1
+    case 'couch_commander':        return s.steamDeckCompletedCount >= 5
+    case 'portable_pro':           return s.steamDeckCompletedCount >= 10
+    case 'deck_devotee':           return s.steamDeckCompletedCount >= 25
+    case 'deck_legend':            return s.steamDeckCompletedCount >= 50
+    case 'deck_hours_50':          return s.steamDeckHours >= 50
+    case 'deck_hours_250':         return s.steamDeckHours >= 250
+    case 'deck_hours_500':         return s.steamDeckHours >= 500
+    case 'deck_perfect':           return s.hasSteamDeckPerfect
+    case 'deck_collector':         return s.steamDeckLibraryCount >= 20
+    case 'big_screen_small_deck':  return s.hasBigScreenSmallDeck
     // Misc
     case 'backlog_twenty':         return s.libraryCount >= 20
     case 'backlog_fifty':          return s.libraryCount >= 50

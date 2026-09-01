@@ -107,6 +107,7 @@ The full implementation plan (including all database SQL per phase) is at:
   ALTER TABLE public.notified_events ENABLE ROW LEVEL SECURITY; -- no policies: service-role cron only
   ```
   Notification `type`s: `game_released` (linked to a game), `event_live` (no game — the bell shows a 📣 tile).
+- **Steam Deck flag** — `games.steam_deck` boolean. Toggle in `GameForm` (Flags row) and a "Playing on Steam Deck" checkbox in `ReviewGameModal` (shown only for backlog adds via the `showSteamDeck` prop — not the wheel). Set on the detail page shows `/steam-deck.png` next to the title badges. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_deck BOOLEAN NOT NULL DEFAULT false;` Needs the icon at `public/steam-deck.png`.
 
 ---
 
