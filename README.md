@@ -147,7 +147,6 @@ create table public.profiles (
   id             uuid primary key references auth.users(id) on delete cascade,
   username       text unique not null,
   display_name   text,
-  avatar_url     text,
   ticket_balance integer not null default 0,
   xp             integer not null default 0,
   wheel_turn     text not null default 'spin'
@@ -213,14 +212,12 @@ create table public.games (
   is_favourite         boolean not null default false,
   is_replay            boolean not null default false,
   is_sequel            boolean not null default false,
-  in_wheel             boolean not null default false,
   assigned_by          uuid references public.profiles(id) on delete set null,
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now()
 );
 
 create index idx_games_user_id on public.games(user_id);
-create index idx_games_user_wheel on public.games(user_id, in_wheel) where in_wheel = true;
 
 create trigger trg_games_updated_at before update on public.games
   for each row execute procedure public.handle_updated_at();

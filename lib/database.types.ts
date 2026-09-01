@@ -17,9 +17,7 @@ export type Database = {
           id: string
           username: string
           display_name: string | null
-          avatar_url: string | null
           ticket_balance: number
-          tickets_earned_total: number
           xp: number
           wheel_turn: 'spin' | 'spin_reroll' | 'choose'
           pending_wheel_game_id: string | null
@@ -34,9 +32,7 @@ export type Database = {
           id: string
           username: string
           display_name?: string | null
-          avatar_url?: string | null
           ticket_balance?: number
-          tickets_earned_total?: number
           xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           pending_wheel_game_id?: string | null
@@ -51,9 +47,7 @@ export type Database = {
           id?: string
           username?: string
           display_name?: string | null
-          avatar_url?: string | null
           ticket_balance?: number
-          tickets_earned_total?: number
           xp?: number
           wheel_turn?: 'spin' | 'spin_reroll' | 'choose'
           pending_wheel_game_id?: string | null
@@ -117,7 +111,6 @@ export type Database = {
           is_replay: boolean
           is_sequel: boolean
           dominant_color: string | null
-          in_wheel: boolean
           assigned_by: string | null
           youtube_playlist_url: string | null
           youtube_videos: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
@@ -157,7 +150,6 @@ export type Database = {
           is_favourite?: boolean
           is_replay?: boolean
           is_sequel?: boolean
-          in_wheel?: boolean
           assigned_by?: string | null
           youtube_playlist_url?: string | null
           youtube_videos?: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
@@ -195,7 +187,6 @@ export type Database = {
           is_favourite?: boolean
           is_replay?: boolean
           is_sequel?: boolean
-          in_wheel?: boolean
           assigned_by?: string | null
           youtube_playlist_url?: string | null
           youtube_videos?: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null

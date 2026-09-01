@@ -61,6 +61,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- **Removed unused database columns** — dropped `profiles.avatar_url`, `profiles.tickets_earned_total` (lifetime tickets are computed from the ledger), `games.series` (superseded by the Sequel flag), and `games.in_wheel` (a leftover that was only ever written as false). No behaviour change. Requires SQL (see below).
 - **Dashboard section titles now sit above their cards** — Recommended by your friends, Friends Activity, Games Completed Per Year, Genres Played, and Platforms all show their heading outside the card (matching Upcoming Events), for a consistent look.
 - **Platform is now required** when adding or editing a game — the field shows a required asterisk and the form won't submit without a platform selected.
 - Activity feeds (the dashboard's **Friends Activity** card and the **/activity** page) now show each game's **portrait box-art cover** instead of a cropped square of the banner.

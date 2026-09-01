@@ -20,9 +20,7 @@ One row per user, created automatically by the `handle_new_user` trigger on sign
 | `id` | `uuid` | — | Matches `auth.users.id` (FK) |
 | `username` | `text` | — | Derived from email local part; immutable |
 | `display_name` | `text` | `null` | User-editable display name |
-| `avatar_url` | `text` | `null` | Not currently used in UI |
 | `ticket_balance` | `int4` | `0` | Cached running balance; updated by RPC |
-| `tickets_earned_total` | `int4` | `0` | Lifetime total earned |
 | `xp` | `int4` | `0` | Experience points; updated by `award_xp` RPC |
 | `wheel_turn` | `text` | `'spin'` | Current turn type: `spin`, `spin_reroll`, `choose` |
 | `theme_preference` | `text` | `'system'` | `light`, `dark`, or `system` |
@@ -60,7 +58,6 @@ One row per game per user.
 | `is_favourite` | `boolean` | `false` | |
 | `is_replay` | `boolean` | `false` | |
 | `is_sequel` | `boolean` | `false` | |
-| `in_wheel` | `boolean` | `false` | Included in the spin wheel pool |
 | `assigned_by` | `text` | `null` | Username of whoever assigned the game |
 | `created_at` | `timestamptz` | `now()` | |
 | `updated_at` | `timestamptz` | `now()` | |
