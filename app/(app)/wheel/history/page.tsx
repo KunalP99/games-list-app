@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { SPIN_TYPE_BADGE, SPIN_TYPE_LABEL, spinModeLabel, rerollRunnerUp, summariseSpends, type SpinType, type SpinMode, type FinalizedVia, type TicketSpend } from '@/lib/wheel-history'
 import { TICKET_AWARDS } from '@/lib/constants'
 import { getInitials } from '@/lib/activity'
+import SpinTime from '@/components/wheel/SpinTime'
 
 const PAGE_SIZE = 20
 
@@ -105,9 +106,7 @@ export default async function WheelHistoryPage({
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-fg-base truncate">{displayName}</p>
                         <p className="text-[11px] text-fg-subtle">
-                          {new Date(spin.created_at).toLocaleDateString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                          })}
+                          <SpinTime iso={spin.created_at} />
                         </p>
                       </div>
                     </div>
