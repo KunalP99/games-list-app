@@ -61,6 +61,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- **Steam Deck icon on game cards** — capsule game cards (including the dashboard/games "Now Playing" strip) now show the Steam Deck icon next to the platform for games flagged as played on Steam Deck.
 - **Wheel history cards now show the time** alongside the date (e.g. "2 Sept 2026, 14:30"), in your local timezone — applies to every card, including older spins (the time was already recorded).
 - **Removed unused database columns** — dropped `profiles.avatar_url`, `profiles.tickets_earned_total` (lifetime tickets are computed from the ledger), `games.series` (superseded by the Sequel flag), and `games.in_wheel` (a leftover that was only ever written as false). No behaviour change. Requires SQL (see below).
 - **Dashboard section titles now sit above their cards** — Recommended by your friends, Friends Activity, Games Completed Per Year, Genres Played, and Platforms all show their heading outside the card (matching Upcoming Events), for a consistent look.

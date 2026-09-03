@@ -51,7 +51,7 @@ export const PLATFORM_GROUPS = [
     platforms: [
       'Mobile (iOS)', 'Mobile (Android)', 'Mobile (iOS/Android)',
       'Arcade', 'Neo Geo', 'Neo Geo Pocket', 'TurboGrafx-16 / PC Engine',
-      'Commodore 64', 'Amiga', 'Other',
+      'Commodore 64', 'Amiga', 'Cracked', 'Other',
     ],
   },
 ]

@@ -38,9 +38,13 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
             <h3 className="font-semibold text-white truncate drop-shadow">{game.title}</h3>
             {game.is_favourite && <span className="text-amber-400 shrink-0 leading-none">★</span>}
           </div>
-          {(game.developer || game.platform) && (
-            <p className="text-xs text-white/70 truncate mt-0.5 drop-shadow">
-              {[game.developer, game.platform].filter(Boolean).join(' · ')}
+          {(game.developer || game.platform || game.steam_deck) && (
+            <p className="text-xs text-white/70 mt-0.5 drop-shadow flex items-center gap-1.5 min-w-0">
+              <span className="truncate">{[game.developer, game.platform].filter(Boolean).join(' · ')}</span>
+              {game.steam_deck && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+              )}
             </p>
           )}
           <div className="mt-1.5 flex items-center justify-between gap-2">
@@ -86,8 +90,14 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
           {game.developer && (
             <p className="text-sm text-fg-muted truncate mt-0.5">{game.developer}</p>
           )}
-          {game.platform && (
-            <p className="text-xs text-fg-subtle truncate mt-0.5">{game.platform}</p>
+          {(game.platform || game.steam_deck) && (
+            <p className="text-xs text-fg-subtle mt-0.5 flex items-center gap-1.5 min-w-0">
+              {game.platform && <span className="truncate">{game.platform}</span>}
+              {game.steam_deck && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+              )}
+            </p>
           )}
         </div>
         <StatusBadge status={game.status} />
