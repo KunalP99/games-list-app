@@ -41,12 +41,13 @@ export async function awardCompletionTickets(
 ) {
   const awards = calculateCompletionAwards(hours, achievementProgress)
   for (const { reason, amount } of awards) {
-    await supabase.rpc('award_tickets', {
+    const { error } = await supabase.rpc('award_tickets', {
       p_user_id: userId,
       p_amount: amount,
       p_reason: reason,
       p_game_id: gameId,
     })
+    if (error) throw new Error(`awardCompletionTickets failed (${reason}): ${error.message}`)
   }
   await checkAndAwardSequelBonus(supabase, userId, gameId)
 }
@@ -90,10 +91,11 @@ async function checkAndAwardSequelBonus(
 
   if (!game?.is_sequel) return
 
-  await supabase.rpc('award_tickets', {
+  const { error } = await supabase.rpc('award_tickets', {
     p_user_id: userId,
     p_amount: TICKET_AWARDS.sequel_back_to_back,
     p_reason: 'sequel_back_to_back',
     p_game_id: gameId,
   })
+  if (error) throw new Error(`checkAndAwardSequelBonus failed: ${error.message}`)
 }

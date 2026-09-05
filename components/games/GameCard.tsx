@@ -42,8 +42,11 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
             <p className="text-xs text-white/70 mt-0.5 drop-shadow flex items-center gap-1.5 min-w-0">
               <span className="truncate">{[game.developer, game.platform].filter(Boolean).join(' · ')}</span>
               {game.steam_deck && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+                <>
+                  {(game.developer || game.platform) && <span className="shrink-0">·</span>}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+                </>
               )}
             </p>
           )}
@@ -94,8 +97,11 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
             <p className="text-xs text-fg-subtle mt-0.5 flex items-center gap-1.5 min-w-0">
               {game.platform && <span className="truncate">{game.platform}</span>}
               {game.steam_deck && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+                <>
+                  {game.platform && <span className="shrink-0">·</span>}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+                </>
               )}
             </p>
           )}

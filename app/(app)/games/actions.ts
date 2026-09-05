@@ -97,10 +97,11 @@ async function awardGameCompletionXp(
 }
 
 async function reverseGameCompletionTickets(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, gameId: string) {
-  await (supabase.rpc as any)('reverse_game_completion_tickets', {
+  const { error } = await (supabase.rpc as any)('reverse_game_completion_tickets', {
     p_user_id: userId,
     p_game_id: gameId,
   })
+  if (error) throw new Error(`reverseGameCompletionTickets failed: ${error.message}`)
 }
 
 export async function createGame(formData: FormData) {

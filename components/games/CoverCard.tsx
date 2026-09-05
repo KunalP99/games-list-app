@@ -67,6 +67,10 @@ export default function CoverCard({ game, isOwner = true, showReleaseDate = fals
                 ? <span className="font-bold bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent">100%</span>
                 : <span>{Math.round(game.achievement_progress)}%</span>
             )}
+            {game.steam_deck && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
+            )}
           </div>
           {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} />}
         </div>

@@ -180,8 +180,10 @@ The full implementation plan (including all database SQL per phase) is at:
 
 | Function | Purpose |
 |---|---|
-| `award_tickets(p_user_id, p_amount, p_reason, p_game_id?, p_note?)` | Atomically inserts a transaction row and updates `profiles.ticket_balance`. Uses `FOR UPDATE` lock. Security definer. |
+| `award_tickets(p_user_id, p_amount, p_reason, p_game_id?, p_note?)` | Atomically inserts a transaction row and updates `profiles.ticket_balance`. Uses `FOR UPDATE` lock. Security definer. **Also writes `profiles.tickets_earned_total`** — that column looks unused from a codebase grep (nothing in the app reads it) but is a real dependency of this function's body, not dead. Never drop it without first checking (or updating) the function itself. |
 | `reverse_game_completion_tickets(p_user_id, p_game_id)` | Deletes all completion-reason transactions for a game and reverses their sum from the profile balance. Called before re-awarding on edit. Security definer. |
+
+**Caveat on "unused column" audits**: a codebase grep only proves a column is unread/unwritten by the *app*. Postgres functions (`award_tickets` and friends) live in Supabase itself, not in this repo, and can reference columns invisibly to that grep. Before dropping any column, also check whether a DB function touches it (e.g. `select pg_get_functiondef(oid) from pg_proc where proname = '<fn>';` in the SQL editor) — this bit us once already (`tickets_earned_total` was dropped on 2026-09-05, silently breaking every `award_tickets` call until the column was restored).
 
 ---
 
