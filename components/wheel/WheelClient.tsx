@@ -71,6 +71,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   const [phase, setPhase] = useState<Phase>(turn === 'choose' ? 'choose_input' : 'setup')
   const [entries, setEntries] = useState<WheelEntry[]>([])
+  // Names of the backlog games the "Random 5" button added last click — lets
+  // the next click swap them out instead of piling on top.
+  const [randomBatch, setRandomBatch] = useState<string[]>([])
   const [mode, setMode] = useState<'elimination' | 'first_land'>('elimination')
   const [chooseInput, setChooseInput] = useState('')
   const [chooseSearchResults, setChooseSearchResults] = useState<RawgSearchResult[]>([])
@@ -227,6 +230,23 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function removeEntry(name: string) {
     setEntries(prev => prev.filter(e => e.name.toLowerCase() !== name.toLowerCase()))
+  }
+
+  function addAllBacklog() {
+    backlogGames.forEach(addEntry)
+  }
+
+  // Swaps out the 5 backlog games this button added last time for a fresh
+  // random 5 — repeated clicks keep re-randomising instead of piling up.
+  function addRandomBacklog() {
+    randomBatch.forEach(removeEntry)
+    const keptNames = new Set(
+      entries.filter(e => !randomBatch.includes(e.name)).map(e => e.name.toLowerCase())
+    )
+    const pool = backlogGames.filter(g => !keptNames.has(g.name.toLowerCase()))
+    const picks = shuffle(pool).slice(0, 5)
+    picks.forEach(addEntry)
+    setRandomBatch(picks.map(p => p.name))
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -1492,7 +1512,25 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
         {/* Backlog panel */}
         {backlogGames.length > 0 && (
           <div className="rounded-xl border border-edge-base bg-surface-base p-4 flex flex-col gap-3 h-80 md:h-auto md:min-h-[32rem]">
-            <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Your Backlog</p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={addAllBacklog}
+                  className="text-xs font-semibold px-2 py-0.5 rounded-md text-brand-600 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 dark:hover:bg-brand-900/50 transition-colors"
+                >
+                  Add all
+                </button>
+                <button
+                  type="button"
+                  onClick={addRandomBacklog}
+                  className="text-xs font-semibold px-2 py-0.5 rounded-md text-brand-600 bg-brand-50 hover:bg-brand-100 dark:bg-brand-900/30 dark:text-brand-300 dark:hover:bg-brand-900/50 transition-colors"
+                >
+                  🎲 Random 5
+                </button>
+              </div>
+            </div>
             {/* Relative wrapper + absolute list so the scroll content doesn't inflate the
                 row height — the card stretches to match the card on its left instead. */}
             <div className="relative flex-1 min-h-0">

@@ -62,8 +62,7 @@ export default async function UserProfilePage({
       .select('*')
       .eq('user_id', profile.id)
       .eq('status', 'playing')
-      .order('created_at', { ascending: false })
-      .limit(2),
+      .order('created_at', { ascending: false }),
   ])
 
   const games = gamesRes.data as Game[] | null
