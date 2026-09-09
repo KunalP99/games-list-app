@@ -654,11 +654,11 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
       {/* Flags */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6">
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-4">Flags</h2>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap sm:flex-nowrap gap-2 sm:overflow-x-auto sm:pb-1">
           <button
             type="button"
             onClick={() => setIsFavourite(f => !f)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
               isFavourite
                 ? 'bg-amber-50 border-amber-300 text-amber-700'
                 : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
@@ -669,7 +669,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
           <button
             type="button"
             onClick={() => setIsReplay(r => !r)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
               isReplay
                 ? 'bg-brand-50 border-brand-300 text-brand-700 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300'
                 : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
@@ -681,7 +681,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
             <button
               type="button"
               onClick={() => setIsSequel(s => !s)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
                 isSequel
                   ? 'bg-blue-50 border-blue-300 text-blue-700'
                   : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
@@ -696,7 +696,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
           <button
             type="button"
             onClick={() => setSteamDeck(s => !s)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
               steamDeck
                 ? 'bg-brand-50 border-brand-300 text-brand-700 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300'
                 : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
@@ -708,7 +708,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
           <button
             type="button"
             onClick={() => setIsEmulated(e => !e)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors whitespace-nowrap ${
               isEmulated
                 ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-300'
                 : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'

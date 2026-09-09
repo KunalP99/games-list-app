@@ -74,6 +74,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   // Names of the backlog games the "Random 5" button added last click — lets
   // the next click swap them out instead of piling on top.
   const [randomBatch, setRandomBatch] = useState<string[]>([])
+  const [backlogSearch, setBacklogSearch] = useState('')
   const [mode, setMode] = useState<'elimination' | 'first_land'>('elimination')
   const [chooseInput, setChooseInput] = useState('')
   const [chooseSearchResults, setChooseSearchResults] = useState<RawgSearchResult[]>([])
@@ -1345,6 +1346,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   const gameCount = uniqueGames.length
   const countOk = gameCount >= WHEEL_MIN_GAMES
+  const filteredBacklog = backlogGames.filter(game =>
+    game.name.toLowerCase().includes(backlogSearch.trim().toLowerCase())
+  )
 
   return (
     <div className="space-y-5">
@@ -1531,11 +1535,23 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
                 </button>
               </div>
             </div>
+
+            <input
+              type="text"
+              value={backlogSearch}
+              onChange={e => setBacklogSearch(e.target.value)}
+              placeholder="Search your backlog…"
+              className="w-full border border-edge-input rounded-lg px-3 py-1.5 text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 bg-surface-input"
+            />
+
             {/* Relative wrapper + absolute list so the scroll content doesn't inflate the
                 row height — the card stretches to match the card on its left instead. */}
             <div className="relative flex-1 min-h-0">
             <div className="absolute inset-0 flex flex-col divide-y divide-edge-subtle overflow-y-auto pr-3">
-              {backlogGames.map(game => {
+              {filteredBacklog.length === 0 && (
+                <p className="text-xs text-fg-subtle py-2">No backlog games match &ldquo;{backlogSearch.trim()}&rdquo;.</p>
+              )}
+              {filteredBacklog.map(game => {
                 const alreadyAdded = uniqueGames.map(g => g.toLowerCase()).includes(game.name.toLowerCase())
                 return (
                   <div key={game.name} className="flex items-center justify-between gap-2 py-2">
