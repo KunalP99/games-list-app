@@ -118,6 +118,7 @@ export type Database = {
           dlc: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           release_notified: boolean
           steam_deck: boolean
+          is_emulated: boolean
           created_at: string
           updated_at: string
         }

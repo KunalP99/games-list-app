@@ -41,6 +41,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
   const [replayDetected, setReplayDetected] = useState(false)
   const [isSequel, setIsSequel] = useState(game?.is_sequel ?? false)
   const [steamDeck, setSteamDeck] = useState(game?.steam_deck ?? false)
+  const [isEmulated, setIsEmulated] = useState(game?.is_emulated ?? false)
   const [completionDatePrecision, setCompletionDatePrecision] = useState<'full' | 'year'>(game?.completion_date_precision ?? 'full')
   const [completionYear, setCompletionYear] = useState(
     (game?.completion_date_precision === 'year') ? (game?.completion_date?.slice(0, 4) ?? '') : ''
@@ -425,135 +426,6 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
         </div>
       </section>
 
-      {/* Cover Image */}
-      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Banner Image</h2>
-
-        {/* Banner (submitted as artwork_url) — shown on the list card + detail hero */}
-        <input type="hidden" name="artwork_url" value={bannerImage} />
-
-        <div className="flex gap-3 items-start">
-          {(bannerImage || imageUrl) && (
-            <img
-              src={bannerImage || imageUrl}
-              alt="Banner preview"
-              className="w-32 h-[72px] object-cover rounded-lg border border-edge-base shrink-0 bg-surface-active"
-            />
-          )}
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-fg-secondary mb-1">
-              Image URL{' '}
-              <span className="text-xs text-fg-subtle font-normal">
-                (auto-filled, or paste your own)
-              </span>
-            </label>
-            <input
-              name="image_url"
-              type="url"
-              value={imageUrl}
-              onChange={e => { setImageUrl(e.target.value); setBannerImage(e.target.value) }}
-              className={input}
-              placeholder="https://example.com/cover.jpg"
-            />
-          </div>
-        </div>
-
-        {/* Image chooser — pick which of the game's images is the banner */}
-        {bannerLoading && (
-          <p className="text-xs text-fg-subtle">Loading images…</p>
-        )}
-        {bannerOptions.length > 0 && (
-          <div>
-            <p className="text-xs text-fg-subtle mb-2">Choose an image for this game</p>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {bannerOptions.map(url => (
-                <button
-                  key={url}
-                  type="button"
-                  onClick={() => setBannerImage(url)}
-                  className={`relative aspect-video rounded-lg bg-cover bg-center border transition-all ${
-                    bannerImage === url
-                      ? 'ring-2 ring-brand-500 border-brand-500'
-                      : 'border-edge-base hover:border-brand-300'
-                  }`}
-                  style={{ backgroundImage: `url(${url})` }}
-                  aria-label="Select this image"
-                  aria-pressed={bannerImage === url}
-                >
-                  {bannerImage === url && (
-                    <span className="absolute top-1 right-1 bg-brand-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">✓</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Media */}
-      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Media</h2>
-        <div>
-          <label className="block text-sm font-medium text-fg-secondary mb-1">
-            YouTube video or playlist{' '}
-            <span className="text-xs text-fg-subtle font-normal">(optional — shown on the game page and the Videos page)</span>
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="url"
-              value={mediaInput}
-              onChange={e => setMediaInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMedia() } }}
-              className={input}
-              placeholder="Paste a video or playlist URL…"
-            />
-            <button
-              type="button"
-              onClick={handleAddMedia}
-              disabled={ytImporting || !mediaInput.trim()}
-              className="shrink-0 px-3 py-2 text-sm font-semibold text-brand-700 bg-brand-100 rounded-lg hover:bg-brand-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
-            >
-              {ytImporting ? 'Adding…' : 'Add'}
-            </button>
-          </div>
-          {ytImportError && <p className="text-xs text-red-600 mt-1">{ytImportError}</p>}
-          {ytImportNote && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{ytImportNote}</p>}
-        </div>
-
-        {/* Hidden fields carrying the media (mirror the dlc field) */}
-        <input type="hidden" name="youtube_playlist_url" value={youtubePlaylistUrl} />
-        <input type="hidden" name="youtube_videos" value={JSON.stringify(youtubeVideos)} />
-
-        {youtubeVideos.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">
-              {youtubeVideos.length} video{youtubeVideos.length !== 1 ? 's' : ''}
-            </p>
-            <ul className="flex flex-col divide-y divide-edge-subtle max-h-64 overflow-y-auto pr-1">
-              {youtubeVideos.map((v, i) => (
-                <li key={`${v.youtube_id}-${i}`} className="flex items-center gap-3 py-2">
-                  {v.thumbnail_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={v.thumbnail_url} alt="" className="w-14 h-8 rounded object-cover shrink-0" />
-                  ) : (
-                    <div className="w-14 h-8 rounded bg-surface-sunken shrink-0" />
-                  )}
-                  <span className="text-sm text-fg-base truncate flex-1">{v.title}</span>
-                  <button
-                    type="button"
-                    onClick={() => setYoutubeVideos(prev => prev.filter((_, j) => j !== i))}
-                    className="shrink-0 text-fg-subtle hover:text-red-500 transition-colors text-sm px-1"
-                    aria-label={`Remove ${v.title}`}
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
       {/* Status & Progress */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Status & Progress</h2>
@@ -833,15 +705,92 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/steam-deck.png" alt="" className="h-4 w-auto" /> Steam Deck
           </button>
+          <button
+            type="button"
+            onClick={() => setIsEmulated(e => !e)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              isEmulated
+                ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-900/30 dark:border-violet-700 dark:text-violet-300'
+                : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
+            }`}
+          >
+            <span>🕹️</span> Emulated
+          </button>
         </div>
         {isFavourite && <input type="hidden" name="is_favourite" value="on" />}
         {isReplay && <input type="hidden" name="is_replay" value="on" />}
         {isSequel && <input type="hidden" name="is_sequel" value="on" />}
         {steamDeck && <input type="hidden" name="steam_deck" value="on" />}
+        {isEmulated && <input type="hidden" name="is_emulated" value="on" />}
         {rawgId !== null && <input type="hidden" name="rawg_id" value={rawgId} />}
         <input type="hidden" name="dlc" value={JSON.stringify(
           dlcEntries.map(e => ({ name: e.name, rawg_id: e.rawgId, owned: e.owned, removed: e.removed ?? false }))
         )} />
+      </section>
+
+      {/* Cover Image */}
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Banner Image</h2>
+
+        {/* Banner (submitted as artwork_url) — shown on the list card + detail hero */}
+        <input type="hidden" name="artwork_url" value={bannerImage} />
+
+        <div className="flex gap-3 items-start">
+          {(bannerImage || imageUrl) && (
+            <img
+              src={bannerImage || imageUrl}
+              alt="Banner preview"
+              className="w-32 h-[72px] object-cover rounded-lg border border-edge-base shrink-0 bg-surface-active"
+            />
+          )}
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-fg-secondary mb-1">
+              Image URL{' '}
+              <span className="text-xs text-fg-subtle font-normal">
+                (auto-filled, or paste your own)
+              </span>
+            </label>
+            <input
+              name="image_url"
+              type="url"
+              value={imageUrl}
+              onChange={e => { setImageUrl(e.target.value); setBannerImage(e.target.value) }}
+              className={input}
+              placeholder="https://example.com/cover.jpg"
+            />
+          </div>
+        </div>
+
+        {/* Image chooser — pick which of the game's images is the banner */}
+        {bannerLoading && (
+          <p className="text-xs text-fg-subtle">Loading images…</p>
+        )}
+        {bannerOptions.length > 0 && (
+          <div>
+            <p className="text-xs text-fg-subtle mb-2">Choose an image for this game</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {bannerOptions.map(url => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setBannerImage(url)}
+                  className={`relative aspect-video rounded-lg bg-cover bg-center border transition-all ${
+                    bannerImage === url
+                      ? 'ring-2 ring-brand-500 border-brand-500'
+                      : 'border-edge-base hover:border-brand-300'
+                  }`}
+                  style={{ backgroundImage: `url(${url})` }}
+                  aria-label="Select this image"
+                  aria-pressed={bannerImage === url}
+                >
+                  {bannerImage === url && (
+                    <span className="absolute top-1 right-1 bg-brand-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow">✓</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* DLC & Expansions */}
@@ -963,6 +912,70 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
           className={input}
           placeholder="Reminders, tips, etc."
         />
+      </section>
+
+      {/* Media */}
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Media</h2>
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">
+            YouTube video or playlist{' '}
+            <span className="text-xs text-fg-subtle font-normal">(optional — shown on the game page and the Videos page)</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="url"
+              value={mediaInput}
+              onChange={e => setMediaInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddMedia() } }}
+              className={input}
+              placeholder="Paste a video or playlist URL…"
+            />
+            <button
+              type="button"
+              onClick={handleAddMedia}
+              disabled={ytImporting || !mediaInput.trim()}
+              className="shrink-0 px-3 py-2 text-sm font-semibold text-brand-700 bg-brand-100 rounded-lg hover:bg-brand-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors dark:bg-brand-900/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
+            >
+              {ytImporting ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+          {ytImportError && <p className="text-xs text-red-600 mt-1">{ytImportError}</p>}
+          {ytImportNote && <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">{ytImportNote}</p>}
+        </div>
+
+        {/* Hidden fields carrying the media (mirror the dlc field) */}
+        <input type="hidden" name="youtube_playlist_url" value={youtubePlaylistUrl} />
+        <input type="hidden" name="youtube_videos" value={JSON.stringify(youtubeVideos)} />
+
+        {youtubeVideos.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-fg-muted uppercase tracking-wider">
+              {youtubeVideos.length} video{youtubeVideos.length !== 1 ? 's' : ''}
+            </p>
+            <ul className="flex flex-col divide-y divide-edge-subtle max-h-64 overflow-y-auto pr-1">
+              {youtubeVideos.map((v, i) => (
+                <li key={`${v.youtube_id}-${i}`} className="flex items-center gap-3 py-2">
+                  {v.thumbnail_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.thumbnail_url} alt="" className="w-14 h-8 rounded object-cover shrink-0" />
+                  ) : (
+                    <div className="w-14 h-8 rounded bg-surface-sunken shrink-0" />
+                  )}
+                  <span className="text-sm text-fg-base truncate flex-1">{v.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => setYoutubeVideos(prev => prev.filter((_, j) => j !== i))}
+                    className="shrink-0 text-fg-subtle hover:text-red-500 transition-colors text-sm px-1"
+                    aria-label={`Remove ${v.title}`}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {error && (

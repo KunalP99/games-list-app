@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Emulated flag** — a new "🕹️ Emulated" toggle in the add/edit game form's Flags row, for marking a game as played via emulation. Requires SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS is_emulated BOOLEAN NOT NULL DEFAULT false;`
 - **Wheel: "Add all" and "Random 5" backlog shortcuts** — the "Your Backlog" panel on `/wheel` now has two buttons: **Add all** adds your whole backlog to the spin list in one click, and **🎲 Random 5** adds 5 random backlog games — clicking it again swaps out the 5 it added last time for a fresh random 5 instead of piling on top.
 - **Steam Deck achievements** — a new "Steam Deck" achievement category: complete games on Steam Deck (Deck Debut → Couch Commander → Portable Pro → Deck Devotee → Deck Legend at 1/5/10/25/50), log Steam Deck hours (Handheld Hours 50h, Battery Drainer 250h, Powered by Valve 500h), plus Perfect on the Deck (100% a game on Steam Deck), Deck Collector (20 library games marked Steam Deck), and Big Screen, Small Deck (complete the same game on Steam Deck and another platform).
 - **Steam Deck flag** — mark a game as one you play on your Steam Deck. There's a "Steam Deck" toggle in the add/edit game form and a "Playing on Steam Deck" checkbox in the add-to-backlog review modal, and games marked this way show a Steam Deck icon on their detail page. Requires SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_deck BOOLEAN NOT NULL DEFAULT false;` and a `public/steam-deck.png` icon.
@@ -64,6 +65,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- **Reordered the add/edit game form** — Status & Progress and Flags now sit right under Basic Info, and Media has moved down to the very bottom of the form (after Notes).
 - **Steam Deck icon on game cards** — capsule game cards (including the dashboard/games "Now Playing" strip, separated from the platform by a `·`) and the portrait cover-view card (next to the achievement percentage) now show the Steam Deck icon for games flagged as played on Steam Deck.
 - **Wheel history cards now show the time** alongside the date (e.g. "2 Sept 2026, 14:30"), in your local timezone — applies to every card, including older spins (the time was already recorded).
 - **Removed unused database columns** — dropped `profiles.avatar_url`, `games.series` (superseded by the Sequel flag), and `games.in_wheel` (a leftover that was only ever written as false). No behaviour change. Requires SQL (see below). (`profiles.tickets_earned_total` was also dropped here but restored — see Fixed below; it's a real dependency of the `award_tickets` function, not dead.)

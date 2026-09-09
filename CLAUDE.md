@@ -108,6 +108,7 @@ The full implementation plan (including all database SQL per phase) is at:
   ```
   Notification `type`s: `game_released` (linked to a game), `event_live` (no game — the bell shows a 📣 tile).
 - **Steam Deck flag** — `games.steam_deck` boolean. Toggle in `GameForm` (Flags row) and a "Playing on Steam Deck" checkbox in `ReviewGameModal` (shown only for backlog adds via the `showSteamDeck` prop — not the wheel). Set on the detail page shows `/steam-deck.png` next to the title badges. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_deck BOOLEAN NOT NULL DEFAULT false;` Needs the icon at `public/steam-deck.png`.
+- **Emulated flag** — `games.is_emulated` boolean, marks a game as played via emulation. Toggle in `GameForm` (Flags row, 🕹️) only — not wired into `ReviewGameModal`/backlog-add flows or shown elsewhere yet. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS is_emulated BOOLEAN NOT NULL DEFAULT false;`
 
 ---
 
