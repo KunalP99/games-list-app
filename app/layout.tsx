@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import { Orbitron } from 'next/font/google'
 import './globals.css'
+import EnvBanner from '@/components/layout/EnvBanner'
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -26,7 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})();` }} />
       </head>
-      <body className={`${geistSans.variable} ${orbitron.variable} font-sans antialiased`}>{children}</body>
+      <body className={`${geistSans.variable} ${orbitron.variable} font-sans antialiased`}>
+        {children}
+        <EnvBanner />
+      </body>
     </html>
   )
 }

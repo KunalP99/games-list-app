@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Local test database** — a full Supabase stack (Postgres, Auth, API, Studio) now runs locally in Docker, so new features can be tested without touching real data. `npm run env:dev` / `npm run env:prod` switch which database local dev talks to, `npm run db:reset` rebuilds the local schema from migrations generated out of production, and `npm run seed:dev` fills it with fake users and games. A "🧪 TEST DATABASE" pill shows in the corner whenever the app is pointed at the local stack (never in production).
 - **Emulated flag** — a new "🕹️ Emulated" toggle in the add/edit game form's Flags row, for marking a game as played via emulation. Requires SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS is_emulated BOOLEAN NOT NULL DEFAULT false;`
 - **Search your backlog on the wheel page** — the "Your Backlog" panel on `/wheel` now has a search box to filter the list down by title before adding games to the spin list.
 - **Wheel: "Add all" and "Random 5" backlog shortcuts** — the "Your Backlog" panel on `/wheel` now has two buttons: **Add all** adds your whole backlog to the spin list in one click, and **🎲 Random 5** adds 5 random backlog games — clicking it again swaps out the 5 it added last time for a fresh random 5 instead of piling on top.
