@@ -17,6 +17,43 @@ npm test         # Run Vitest suite (45 tests across tickets, wheel, achievement
 
 **Run `npm test` after every change.** Test files live in `lib/__tests__/`.
 
+## End-to-end tests (`e2e/`)
+
+A small **Playwright** suite covers what Vitest structurally cannot: a real
+browser, a real reload, state actually round-tripping through the database.
+It exists specifically for the wheel's resumable-turn feature (see below) —
+not a general e2e layer for the whole app. Most features stay covered by
+Vitest alone; only add here when a flow's correctness genuinely depends on a
+real page load/reload, not just the logic behind it.
+
+```bash
+npm run test:e2e       # run the suite (headless)
+npm run test:e2e:ui    # Playwright's interactive UI mode, for debugging
+```
+
+Requires the local stack running and active (`npm run supabase:start && npm run
+env:dev`), and `npm run dev` up at `localhost:3000` — same prerequisites as
+manual local testing.
+
+**Safety**: `e2e/global-setup.ts` hard-refuses to run unless the app at
+`localhost:3000` is showing the 🧪 TEST DATABASE pill (`EnvBanner`) — the same
+signal used everywhere else to make the active environment unmistakable. These
+tests log in and spend tickets; they must never be able to run against
+production, and this check doesn't trust an env var that could be stale —
+it trusts what the running app is actually rendering. `e2e/reset-state.ts`
+independently re-checks the Supabase URL is local before writing anything.
+
+**Test isolation**: each test resets `test-alex`'s (and `test-sam`'s)
+`wheel_turn`/`wheel_session`/`ticket_balance` to a known state in
+`beforeEach` — otherwise a previous run's *correctly* saved session would
+resume instead of a fresh setup screen, since that's exactly what the feature
+is supposed to do. One test (`a finalized turn does not resurrect…`) uses
+`test-sam` instead of `test-alex`, because finalizing a turn advances
+`wheel_turn` and would change what every other test in the file sees.
+
+`vitest.config.ts` excludes `e2e/**` — it's a different runner with its own
+`test`/`expect`, incompatible with Vitest's.
+
 ## Dev / test database
 
 A full Supabase stack runs locally in Docker, so new features can be exercised
@@ -355,7 +392,43 @@ ALTER TABLE public.wheel_spins ADD COLUMN IF NOT EXISTS ticket_spends JSONB;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pending_wheel_game_id UUID;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS pending_wheel_turn TEXT
   CHECK (pending_wheel_turn IN ('spin','spin_reroll','choose'));
+
+-- Resumable turns: the in-progress wheel turn, so closing the tab doesn't lose
+-- it. NULL means no turn underway; advanceTurn clears it on every finalize.
+-- Shape is WheelSession in lib/wheel-session.ts (versioned via `v`).
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS wheel_session JSONB;
 ```
+
+### Resumable turns
+
+An in-progress turn is mirrored to `profiles.wheel_session`, so closing the tab
+mid-turn no longer loses it — the entry list, spin mode, elimination progress
+and a result awaiting acceptance all come back.
+
+- `lib/wheel-session.ts` holds the pure logic (validation, phase collapsing,
+  elimination stepping) and is heavily unit tested. Supabase access stays in
+  `app/(app)/wheel/actions.ts`, per the usual split.
+- **Animation phases are never persisted.** `collapsePhase` maps each to the
+  stable phase it settles into, because resuming into one would replay the spin
+  and re-run its completion handler. Closing the tab mid-spin therefore lands
+  you on the settled result — the winner was already decided server-side before
+  the animation began, so nothing is lost by skipping the theatre.
+- **`elimQueue` is stored verbatim.** `handleShuffle` rewrites its unplayed tail
+  while pinning the winner last, so it cannot be regenerated from the winner.
+- **Paid actions persist server-side, in the same request that spends the
+  tickets.** This fixes a real bug: `paySpinAgain` (−3) and
+  `payUpgradeToSpinReroll` (−6) used to deduct tickets and return the winner
+  *only* in the HTTP response, so a lost response meant the tickets were gone
+  with no record of what they bought. The client sends its session captured
+  **before** its optimistic `spendTickets` call, so the server appends the spend
+  exactly once.
+- A restored turn shows a banner listing what it already cost (`resumeSummary`,
+  reusing `spendNote` from `lib/wheel-history.ts`).
+- Invalid, malformed or wrong-version blobs are discarded silently by
+  `restoreSession` and the user simply starts fresh — a bad session must never
+  break the wheel.
+- There is deliberately **no** "start over" button: a turn ends by finalizing
+  it (or, on a Choose turn, skipping).
 
 ---
 

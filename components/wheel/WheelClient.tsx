@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useCallback, useEffect, useRef } from 'react'
+import { useState, useTransition, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import WheelAnimation, { WheelStatic } from './WheelAnimation'
 import ReviewGameModal from './ReviewGameModal'
@@ -17,12 +17,22 @@ import {
   chooseGame,
   chooseGameWithRawg,
   skipChooseTurn,
+  saveWheelSession,
 } from '@/app/(app)/wheel/actions'
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_TURN_LABELS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import type { WheelTurn } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
 import { fetchGameSearchPage } from '@/lib/searchGamesClient'
 import type { TicketSpend } from '@/lib/wheel-history'
+import {
+  restoreSession,
+  collapsePhase,
+  isAnimationPhase,
+  isWorthSaving,
+  resumeSummary,
+  SESSION_VERSION,
+  type WheelSession,
+} from '@/lib/wheel-session'
 
 type Phase =
   | 'setup'
@@ -63,19 +73,31 @@ interface Props {
   balance: number
   accentColour: string
   backlogGames: WheelEntry[]
+  /** In-progress turn read from profiles.wheel_session, or null. */
+  savedSession?: unknown
 }
 
-export default function WheelClient({ turn, balance, accentColour, backlogGames }: Props) {
+export default function WheelClient({ turn, balance, accentColour, backlogGames, savedSession }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
-  const [phase, setPhase] = useState<Phase>(turn === 'choose' ? 'choose_input' : 'setup')
-  const [entries, setEntries] = useState<WheelEntry[]>([])
+  // A turn saved before the tab was closed. Validated once here; anything
+  // malformed or from another version yields null and we start fresh.
+  const resumed = useMemo(() => restoreSession(savedSession), [savedSession])
+  // Frozen at mount: what the turn had already cost before this visit.
+  const resumedSpends = useMemo(() => resumeSummary(resumed?.spends ?? null), [resumed])
+
+  const [phase, setPhase] = useState<Phase>(
+    resumed ? (resumed.phase as Phase) : (turn === 'choose' ? 'choose_input' : 'setup'),
+  )
+  const [entries, setEntries] = useState<WheelEntry[]>(
+    (resumed?.entries as WheelEntry[] | undefined) ?? [],
+  )
   // Names of the backlog games the "Random 5" button added last click — lets
   // the next click swap them out instead of piling on top.
   const [randomBatch, setRandomBatch] = useState<string[]>([])
   const [backlogSearch, setBacklogSearch] = useState('')
-  const [mode, setMode] = useState<'elimination' | 'first_land'>('elimination')
+  const [mode, setMode] = useState<'elimination' | 'first_land'>(resumed?.mode ?? 'elimination')
   const [chooseInput, setChooseInput] = useState('')
   const [chooseSearchResults, setChooseSearchResults] = useState<RawgSearchResult[]>([])
   const [chooseSelectedRawg, setChooseSelectedRawg] = useState<RawgSearchResult | null>(null)
@@ -96,18 +118,18 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   // Review-and-pick-platform modal shown before a real game is added to the library.
   const [pendingAdd, setPendingAdd] = useState<{ game: { id: number; name: string }; confirm: (platform: string, image: string | null) => void } | null>(null)
   const [reviewError, setReviewError] = useState('')
-  const [elimNextPhase, setElimNextPhase] = useState<Phase>('spinning')
+  const [elimNextPhase, setElimNextPhase] = useState<Phase>((resumed?.elimNextPhase as Phase) ?? 'spinning')
   // True once a paid Spin Again has happened this turn — the eventual Accept is
   // then recorded as 'spin_again' rather than a plain 'accept' in wheel history.
-  const [paidRespin, setPaidRespin] = useState(false)
+  const [paidRespin, setPaidRespin] = useState(resumed?.paidRespin ?? false)
 
   // Optimistic balance — updated immediately on spend, synced from server after revalidation
   const [localBalance, setLocalBalance] = useState(balance)
   const [ticketFlash, setTicketFlash] = useState<{ amount: number; id: number } | null>(null)
-  const [spentThisTurn, setSpentThisTurn] = useState(0)
+  const [spentThisTurn, setSpentThisTurn] = useState(resumed?.spentThisTurn ?? 0)
   // Every paid action this turn, in order — a turn can stack several (e.g. Spin
   // Again then Choose a Game). Recorded so history shows the full breakdown.
-  const [spends, setSpends] = useState<TicketSpend[]>([])
+  const [spends, setSpends] = useState<TicketSpend[]>((resumed?.spends as TicketSpend[] | undefined) ?? [])
 
   useEffect(() => { setLocalBalance(balance) }, [balance])
 
@@ -193,28 +215,89 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   }
 
   // Animation state
-  const [animTarget, setAnimTarget] = useState('')
-  const [currentAnimGames, setCurrentAnimGames] = useState<string[]>([])
-  const [elimQueue, setElimQueue] = useState<string[]>([])
-  const [elimIndex, setElimIndex] = useState(0)
-  const [eliminated, setEliminated] = useState<string[]>([])
+  // Not persisted - recomputed from the restored elimination queue.
+  const [animTarget, setAnimTarget] = useState(resumed?.elimQueue?.[resumed.elimIndex] ?? '')
+  const [currentAnimGames, setCurrentAnimGames] = useState<string[]>(
+    resumed ? resumed.entries.map(e => e.name).filter(n => !resumed.eliminated.includes(n)) : [],
+  )
+  const [elimQueue, setElimQueue] = useState<string[]>(resumed?.elimQueue ?? [])
+  const [elimIndex, setElimIndex] = useState(resumed?.elimIndex ?? 0)
+  const [eliminated, setEliminated] = useState<string[]>(resumed?.eliminated ?? [])
 
   // Results
-  const [winner, setWinner] = useState('')         // current/first spin result
+  const [winner, setWinner] = useState(resumed?.winner ?? '')  // current/first spin result
   // Games already landed on this SPIN turn — excluded from paid re-spins/upgrades
   // so a paid spin never lands on a game you've already seen this turn.
-  const [excludedGames, setExcludedGames] = useState<string[]>([])
-  const [rerollWinner, setRerollWinner] = useState('') // SPIN+REROLL turn second option
+  const [excludedGames, setExcludedGames] = useState<string[]>(resumed?.excludedGames ?? [])
+  const [rerollWinner, setRerollWinner] = useState(resumed?.rerollWinner ?? '') // SPIN+REROLL turn second option
   // Upgrade (paid Spin&Reroll): all games in the upgrade flow (pre-existing + newly spun)
-  const [upgradeGames, setUpgradeGames] = useState<string[]>([])
-  const [upgradeMaxGames, setUpgradeMaxGames] = useState(3) // 3 from reroll_prompt, 4 from final_choice
-  const [finalChosen, setFinalChosen] = useState('')
-  const [chooseAnyReturnPhase, setChooseAnyReturnPhase] = useState<Phase>('spin_result')
+  const [upgradeGames, setUpgradeGames] = useState<string[]>(resumed?.upgradeGames ?? [])
+  const [upgradeMaxGames, setUpgradeMaxGames] = useState(resumed?.upgradeMaxGames ?? 3) // 3 from reroll_prompt, 4 from final_choice
+  const [finalChosen, setFinalChosen] = useState(resumed?.finalChosen ?? '')
+  const [chooseAnyReturnPhase, setChooseAnyReturnPhase] = useState<Phase>((resumed?.chooseAnyReturnPhase as Phase) ?? 'spin_result')
 
   // Entries are kept unique by name (dedup enforced in addEntry), so the wire
   // format for actions/animation stays a plain string[] of names.
   const uniqueGames = entries.map(e => e.name)
   const canSpin = uniqueGames.length >= WHEEL_MIN_GAMES
+
+  // ─── Turn persistence ──────────────────────────────────────────────────────
+  // The turn is mirrored to profiles.wheel_session so closing the tab doesn't
+  // lose it. Paid actions write their own copy server-side, in the same request
+  // that spends the tickets; this covers the free transitions.
+
+  // Held in a ref so the debounce timer doesn't need re-arming on every change
+  // and always sees the latest values when it fires.
+  const sessionRef = useRef<WheelSession | null>(null)
+  sessionRef.current = {
+    v: SESSION_VERSION,
+    // Never persist a transient animation phase: resuming into one would
+    // replay the spin and re-run its completion handler.
+    phase: collapsePhase(phase as never, turn),
+    entries: entries as never,
+    mode,
+    winner,
+    rerollWinner,
+    upgradeGames,
+    upgradeMaxGames,
+    elimQueue,
+    elimIndex,
+    eliminated,
+    elimNextPhase: elimNextPhase as never,
+    excludedGames,
+    paidRespin,
+    spentThisTurn,
+    spends: spends as never,
+    chooseAnyReturnPhase: chooseAnyReturnPhase as never,
+    finalChosen,
+    pendingIntent: null,
+  }
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveSession = useCallback((immediate = false) => {
+    const run = () => {
+      const session = sessionRef.current
+      if (!session) return
+      // 'done' means the turn already finalized and advanceTurn cleared the
+      // row — re-saving would resurrect a finished turn.
+      if (session.phase === 'done' || !isWorthSaving(session)) return
+      void saveWheelSession(session)
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    if (immediate) run()
+    else saveTimer.current = setTimeout(run, 600)
+  }, [])
+
+  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current) }, [])
+
+  // Persist whenever the turn reaches a state worth returning to. Animation
+  // phases are skipped — their settled successor saves a moment later. Setup
+  // edits are debounced; everything else saves immediately.
+  useEffect(() => {
+    if (isAnimationPhase(phase as never)) return
+    saveSession(phase !== 'setup')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, entries, mode, elimIndex, eliminated, winner, rerollWinner, upgradeGames, spends])
 
   // Resolve a winning name back to its RAWG object to auto-add it to the library.
   const rawgByName = new Map(entries.filter(e => e.rawg).map(e => [e.name, e.rawg!]))
@@ -353,6 +436,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handlePaySpinAgain() {
     setError('')
+    // Captured before spendTickets: the server appends the spend itself, so
+    // sending a session that already contained it would double-count.
+    const sessionBefore = sessionRef.current
     setPaidRespin(true)
     spendTickets(TICKET_COSTS.spin, 'spin_again')
     // The game currently shown is now rejected — exclude it (and any earlier
@@ -362,7 +448,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     const pool = uniqueGames.filter(g => !newExcluded.includes(g))
     const animPool = pool.length > 0 ? pool : uniqueGames
     startTransition(async () => {
-      const res = await paySpinAgain(uniqueGames, newExcluded)
+      const res = await paySpinAgain(uniqueGames, newExcluded, sessionBefore)
       if ('error' in res) { setError(res.error ?? ''); return }
       const target = res.winner ?? ''
       setWinner(target)
@@ -416,11 +502,13 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
 
   function handlePayUpgradeToReroll(existingGames: string[], maxGames: number) {
     setError('')
+    // See handlePaySpinAgain: captured before the optimistic spend.
+    const sessionBefore = sessionRef.current
     spendTickets(TICKET_COSTS.spin_reroll, 'upgrade_choice')
     startTransition(async () => {
       // Exclude earlier results this turn (from paid re-spins) from the new pick,
       // without adding them to the choosable options.
-      const res = await payUpgradeToSpinReroll(uniqueGames, existingGames, excludedGames)
+      const res = await payUpgradeToSpinReroll(uniqueGames, existingGames, excludedGames, sessionBefore, maxGames)
       if ('error' in res) { setError(res.error ?? ''); return }
       const target = res.nextGame ?? ''
       const newUpgradeGames = [...existingGames, target]
@@ -474,7 +562,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   function handleUpgradeGetNextGame() {
     setError('')
     startTransition(async () => {
-      const res = await pickNextUpgradeGame(uniqueGames, upgradeGames, excludedGames)
+      const res = await pickNextUpgradeGame(uniqueGames, upgradeGames, excludedGames, sessionRef.current, upgradeMaxGames)
       if ('error' in res) { setError(res.error ?? ''); return }
       const target = res.nextGame ?? ''
       const newUpgradeGames = [...upgradeGames, target]
@@ -680,10 +768,33 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     setSpentThisTurn(0)
     setPaidRespin(false)
     setSpends([])
+    // Clear the elimination scratch state too. Harmless before this turn was
+    // persisted, but a stale queue would otherwise be saved with the next turn.
+    setElimQueue([])
+    setElimIndex(0)
+    setExcludedGames([])
+    setUpgradeMaxGames(3)
+    setElimNextPhase('spinning')
+    setChooseAnyReturnPhase('spin_result')
     router.refresh()
   }
 
   // ─── Shared UI pieces ─────────────────────────────────────────────────────
+
+  // Shown on a turn picked back up from a previous session, so the user isn't
+  // surprised by a balance already reduced by spends they can no longer see.
+  const resumeBanner = resumedSpends.length > 0 && phase !== 'setup' && phase !== 'done' ? (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+      <span className="font-semibold">Turn resumed.</span>{' '}
+      Already spent this turn:{' '}
+      {resumedSpends.map((r, i) => (
+        <span key={r.note}>
+          {i > 0 && ', '}
+          {r.note}{r.count > 1 ? ` ×${r.count}` : ''} (−{r.amount} 🎟️)
+        </span>
+      ))}
+    </div>
+  ) : null
 
   const turnBadge = (
     <div className="flex items-center gap-2 flex-wrap">
@@ -843,6 +954,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-4 max-w-2xl">
         {turnBadge}
+        {resumeBanner}
         {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
           <div>
@@ -922,6 +1034,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-4 max-w-2xl">
         {turnBadge}
+        {resumeBanner}
         {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
           <div>
@@ -1108,6 +1221,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-4 max-w-2xl">
         {turnBadge}
+        {resumeBanner}
         {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-5">
           <p className="text-base font-semibold text-fg-base">Choose your game</p>
@@ -1183,6 +1297,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
     return (
       <div className="space-y-5 max-w-2xl">
         {turnBadge}
+        {resumeBanner}
         {reviewModal}
         <div className="rounded-xl border border-edge-base bg-surface-base p-6 space-y-4">
           <div>
@@ -1353,6 +1468,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames 
   return (
     <div className="space-y-5">
       {turnBadge}
+      {resumeBanner}
       <div className={`grid gap-4 items-stretch ${backlogGames.length > 0 ? 'grid-cols-1 md:grid-cols-2' : ''}`}>
 
         {/* Main card: RAWG search builder + mode + spin */}

@@ -8,6 +8,7 @@ import { nextWheelTurn, pickWinner, decideWonGameAction } from '@/lib/wheel'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
 import { checkAndAwardAchievements } from '@/lib/achievements'
+import { restoreSession, collapsePhase, type WheelSession } from '@/lib/wheel-session'
 
 async function advanceTurn(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -24,8 +25,76 @@ async function advanceTurn(
       wheel_turn: nextWheelTurn(current),
       pending_wheel_game_id: wonGameId ?? null,
       pending_wheel_turn: wonGameId ? current : null,
+      // The turn is over, so there is nothing left to resume. Every finalizing
+      // action routes through here, so this one line covers them all.
+      wheel_session: null,
     })
     .eq('id', userId)
+}
+
+// ─── Resumable turn state ───────────────────────────────────────────────────
+// Persists the in-progress turn so closing the tab doesn't lose it. Paid
+// actions write it themselves, in the same request that spends the tickets —
+// otherwise a lost response means the tickets are gone with no record of what
+// they bought.
+
+async function persistSession(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  session: WheelSession,
+) {
+  const { error } = await (supabase.from('profiles') as any)
+    .update({ wheel_session: session })
+    .eq('id', userId)
+  if (error) console.error('persistSession failed:', error.message)
+}
+
+// Merges a freshly-paid result into the client's session and stores it. The
+// phase is collapsed to a stable one: the animation hasn't played yet, and on
+// resume we jump straight to the settled outcome rather than replaying it.
+// Elimination theatre is deliberately not reconstructed here — the client
+// overwrites this with the full queue as soon as it starts animating, so this
+// is purely the crash-safety copy.
+function mergePaidResult(
+  raw: unknown,
+  patch: Partial<WheelSession>,
+  spend?: { action: string; amount: number },
+): WheelSession | null {
+  const base = restoreSession(raw)
+  if (!base) return null
+  const merged: WheelSession = {
+    ...base,
+    ...patch,
+    spends: spend ? [...base.spends, spend] : base.spends,
+    spentThisTurn: base.spentThisTurn + (spend?.amount ?? 0),
+  }
+  return { ...merged, phase: collapsePhase(merged.phase) }
+}
+
+// Client-driven save for the cheap transitions (entry list, mode, reaching a
+// stable phase). Validated and version-checked before it is stored.
+export async function saveWheelSession(session: unknown) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not signed in' }
+
+  const valid = restoreSession(session)
+  if (!valid) return { error: 'Invalid session' }
+
+  await persistSession(supabase, user.id, { ...valid, phase: collapsePhase(valid.phase) })
+  return { success: true as const }
+}
+
+// Clearing is separate from advanceTurn so the client can reset without one.
+export async function clearWheelSession() {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not signed in' }
+
+  await (supabase.from('profiles') as any)
+    .update({ wheel_session: null })
+    .eq('id', user.id)
+  return { success: true as const }
 }
 
 async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
@@ -188,7 +257,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
 
 // ─── SPIN turn — paid: Spin Again (−3) ──────────────────────────────────────
 
-export async function paySpinAgain(games: string[], exclude: string[] = []) {
+export async function paySpinAgain(games: string[], exclude: string[] = [], session?: unknown) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -201,15 +270,29 @@ export async function paySpinAgain(games: string[], exclude: string[] = []) {
   }
   if (games.length < WHEEL_MIN_GAMES) return { error: `Need at least ${WHEEL_MIN_GAMES} games.` }
 
-  await (supabase.rpc as any)('award_tickets', {
+  // Decide the winner BEFORE spending, so the result exists to be recorded.
+  // Don't land on a game already seen this turn (unless that leaves nothing).
+  const pool = games.filter(g => !exclude.includes(g))
+  const winner = pickWinner(pool.length > 0 ? pool : games)
+
+  const { error: spendError } = await (supabase.rpc as any)('award_tickets', {
     p_user_id: user.id,
     p_amount: -TICKET_COSTS.spin,
     p_reason: 'spin',
   })
+  // Don't hand back a result the user wasn't charged for.
+  if (spendError) return { error: `Could not spend tickets: ${spendError.message}` }
 
-  // Don't land on a game already seen this turn (unless that leaves nothing).
-  const pool = games.filter(g => !exclude.includes(g))
-  return { winner: pickWinner(pool.length > 0 ? pool : games) }
+  // Record it immediately. Previously the winner existed only in this response,
+  // so a closed tab meant 3 tickets gone and nothing to show for them.
+  const merged = mergePaidResult(
+    session,
+    { winner, phase: 'spin_result', paidRespin: true, excludedGames: [...exclude, winner] },
+    { action: 'spin_again', amount: TICKET_COSTS.spin },
+  )
+  if (merged) await persistSession(supabase, user.id, merged)
+
+  return { winner }
 }
 
 // ─── SPIN/SPIN+REROLL — paid: Spin & Reroll upgrade (−6) ────────────────────
@@ -217,7 +300,13 @@ export async function paySpinAgain(games: string[], exclude: string[] = []) {
 // existingGames = games already known (1 from reroll_prompt, 2 from final_choice).
 // Additional optional spins use pickNextUpgradeGame (already paid).
 
-export async function payUpgradeToSpinReroll(games: string[], existingGames: string[], exclude: string[] = []) {
+export async function payUpgradeToSpinReroll(
+  games: string[],
+  existingGames: string[],
+  exclude: string[] = [],
+  session?: unknown,
+  upgradeMaxGames = 3,
+) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -229,19 +318,41 @@ export async function payUpgradeToSpinReroll(games: string[], existingGames: str
     return { error: `Need ${TICKET_COSTS.spin_reroll} tickets, have ${profile.ticket_balance}.` }
   }
 
-  await (supabase.rpc as any)('award_tickets', {
+  // Decided before spending, so the result can be recorded alongside the charge.
+  // Skip the current option(s) plus any games already seen this turn.
+  const skip = new Set([...existingGames, ...exclude])
+  const pool = games.filter(g => !skip.has(g))
+  const nextGame = pickWinner(pool.length > 0 ? pool : games)
+
+  const { error: spendError } = await (supabase.rpc as any)('award_tickets', {
     p_user_id: user.id,
     p_amount: -TICKET_COSTS.spin_reroll,
     p_reason: 'spin_reroll',
   })
+  if (spendError) return { error: `Could not spend tickets: ${spendError.message}` }
 
-  // Skip the current option(s) plus any games already seen this turn.
-  const skip = new Set([...existingGames, ...exclude])
-  const pool = games.filter(g => !skip.has(g))
-  return { nextGame: pickWinner(pool.length > 0 ? pool : games) }
+  const merged = mergePaidResult(
+    session,
+    {
+      phase: 'spin_upgrade_reroll_prompt',
+      upgradeGames: [...existingGames, nextGame],
+      upgradeMaxGames,
+      excludedGames: [...exclude, nextGame],
+    },
+    { action: 'upgrade_choice', amount: TICKET_COSTS.spin_reroll },
+  )
+  if (merged) await persistSession(supabase, user.id, merged)
+
+  return { nextGame }
 }
 
-export async function pickNextUpgradeGame(games: string[], excludeGames: string[], exclude: string[] = []) {
+export async function pickNextUpgradeGame(
+  games: string[],
+  excludeGames: string[],
+  exclude: string[] = [],
+  session?: unknown,
+  upgradeMaxGames = 3,
+) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -252,7 +363,26 @@ export async function pickNextUpgradeGame(games: string[], excludeGames: string[
 
   const skip = new Set([...excludeGames, ...exclude])
   const pool = games.filter(g => !skip.has(g))
-  return { nextGame: pickWinner(pool.length > 0 ? pool : games) }
+  const nextGame = pickWinner(pool.length > 0 ? pool : games)
+
+  // Free (the 6 was already paid), but still worth recording — losing this
+  // would strand the user in a flow they had paid to enter.
+  const upgradeGames = [...excludeGames, nextGame]
+  const merged = mergePaidResult(
+    session,
+    {
+      phase: upgradeGames.length >= upgradeMaxGames
+        ? 'spin_upgrade_final_choice'
+        : 'spin_upgrade_reroll_prompt',
+      upgradeGames,
+      upgradeMaxGames,
+      excludedGames: [...exclude, nextGame],
+    },
+    // No spend: the 6 tickets were charged by payUpgradeToSpinReroll.
+  )
+  if (merged) await persistSession(supabase, user.id, merged)
+
+  return { nextGame }
 }
 
 export async function finalizeUpgradeChoice(
@@ -313,11 +443,13 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
   }
   if (!gameName.trim()) return { error: 'Game name cannot be empty' }
 
-  await (supabase.rpc as any)('award_tickets', {
+  const { error: spendError } = await (supabase.rpc as any)('award_tickets', {
     p_user_id: user.id,
     p_amount: -TICKET_COSTS.choose_game,
     p_reason: 'choose_game',
   })
+  // Bail rather than handing over a game the user wasn't charged for.
+  if (spendError) return { error: `Could not spend tickets: ${spendError.message}` }
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
@@ -466,11 +598,13 @@ export async function skipChooseTurn() {
   const profile = await getProfile(supabase, user.id)
   if (profile?.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
 
-  await (supabase.rpc as any)('award_tickets', {
+  const { error: awardError } = await (supabase.rpc as any)('award_tickets', {
     p_user_id: user.id,
     p_amount: TICKET_AWARDS.turn_skipped,
     p_reason: 'turn_skipped',
   })
+  // Don't burn the turn if the reward for skipping it never landed.
+  if (awardError) return { error: `Could not award tickets: ${awardError.message}` }
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,

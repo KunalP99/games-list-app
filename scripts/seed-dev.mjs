@@ -108,6 +108,26 @@ function gamesFor(userId, variant) {
       // Future-dated so it lands in the "Coming Soon" group and is hidden from the wheel.
       release_date: '2027-05-01', release_date_precision: 'full',
     },
+    // The rest of these backlog entries exist so both seeded accounts clear
+    // WHEEL_MIN_GAMES (5) on backlog alone — the wheel e2e suite
+    // (e2e/wheel-resume.spec.ts) spins using "Add all", and needs enough
+    // eligible (non-future) backlog games to do that on either account.
+    {
+      title: 'Portal 2', developer: 'Valve', platform: 'Steam', status: 'backlog',
+      release_date: '2011-04-19', release_date_precision: 'full',
+    },
+    {
+      title: 'Baba Is You', developer: 'Hempuli', platform: 'Steam', status: 'backlog',
+      release_date: '2019-03-13', release_date_precision: 'full',
+    },
+    {
+      title: 'Into the Breach', developer: 'Subset Games', platform: 'Steam', status: 'backlog',
+      release_date: '2018-02-27', release_date_precision: 'full',
+    },
+    {
+      title: 'Kentucky Route Zero', developer: 'Cardboard Computer', platform: 'Steam', status: 'backlog',
+      release_date: '2013-01-07', release_date_precision: 'full',
+    },
     {
       title: 'Starfield', developer: 'Bethesda', platform: 'Xbox Series X/S', status: 'dnf',
       hours_played: 11.3, rating: 2.5,

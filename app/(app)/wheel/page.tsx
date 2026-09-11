@@ -12,7 +12,7 @@ export default async function WheelPage() {
   const [profileRes, backlogGamesRes] = await Promise.all([
     supabase
       .from('profiles')
-      .select('wheel_turn, ticket_balance, accent_colour')
+      .select('wheel_turn, ticket_balance, accent_colour, wheel_session')
       .eq('id', user.id)
       .single(),
     supabase
@@ -23,7 +23,13 @@ export default async function WheelPage() {
       .order('title', { ascending: true }),
   ])
 
-  const profile = profileRes.data as { wheel_turn: WheelTurn; ticket_balance: number; accent_colour: string | null } | null
+  const profile = profileRes.data as {
+    wheel_turn: WheelTurn
+    ticket_balance: number
+    accent_colour: string | null
+    // An in-progress turn, or null. Validated client-side by restoreSession.
+    wheel_session: unknown
+  } | null
   const backlogGames = backlogGamesRes.data as {
     id: string
     title: string
@@ -51,6 +57,7 @@ export default async function WheelPage() {
         turn={profile.wheel_turn}
         balance={profile.ticket_balance}
         accentColour={profile.accent_colour ?? '#7c3aed'}
+        savedSession={profile.wheel_session ?? null}
         backlogGames={playableBacklog.map(g => {
           const pid = providerIdOf(g) // igdb_id in IGDB mode, else rawg_id
           return {
