@@ -544,7 +544,15 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
     } else {
       const newElim = [...eliminated, landed]
       setEliminated(newElim)
-      const pool = uniqueGames.filter(g => !upgradeGames.includes(g) && !newElim.includes(g))
+      // Derived from elimQueue itself, not a fresh uniqueGames filter:
+      // upgradeGames already includes THIS spin's own target (set before the
+      // animation started), so filtering by it would self-exclude the winner
+      // from the pool the wheel is animating toward — WheelAnimation can then
+      // never find its target (games.indexOf(target) === -1) and silently
+      // hangs forever, no error. elimQueue was built once with the correct
+      // exclusions (prior upgrade options), so its un-eliminated tail is
+      // always a safe pool that's guaranteed to contain the target.
+      const pool = elimQueue.filter(g => !newElim.includes(g))
       const next = elimIndex + 1
       setElimIndex(next)
       setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
@@ -552,7 +560,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
       setElimNextPhase('spin_upgrade_spinning')
       setPhase('elim_step')
     }
-  }, [mode, elimQueue, elimIndex, eliminated, uniqueGames, upgradeGames])
+  }, [mode, elimQueue, elimIndex, eliminated, uniqueGames])
 
   function handleUpgradeKeepGame2() {
     // Skip game3 — go straight to final choice with game1 + game2
@@ -598,7 +606,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
     } else {
       const newElim = [...eliminated, landed]
       setEliminated(newElim)
-      const pool = uniqueGames.filter(g => !upgradeGames.includes(g) && !newElim.includes(g))
+      // See handleUpgradeSpinAnimComplete — same fix: derive from elimQueue,
+      // not a uniqueGames filter by upgradeGames (which already includes this
+      // spin's own target and would self-exclude it, freezing the wheel).
+      const pool = elimQueue.filter(g => !newElim.includes(g))
       const next = elimIndex + 1
       setElimIndex(next)
       setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)

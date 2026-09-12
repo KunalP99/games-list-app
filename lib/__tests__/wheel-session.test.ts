@@ -216,9 +216,46 @@ describe('settleSpinStep', () => {
   })
 
   describe('upgrade spins', () => {
-    it('bars options already collected', () => {
+    // Excluding options already collected in an earlier upgrade spin is the
+    // responsibility of whoever builds elimQueue in the first place (the
+    // caller filters by the prior upgradeGames before this spin's target is
+    // known) — not of each per-step pool here. Stepping never re-filters by
+    // upgradeGames, which is exactly what lets the current test below hold:
+    // upgradeGames can safely already contain this spin's own target.
+    it('does not re-exclude by upgradeGames — that already happened when elimQueue was built', () => {
       const r = settleSpinStep(settleInput({ kind: 'upgrade', upgradeGames: ['Delta'] }))
-      expect(r.currentAnimGames).not.toContain('Delta')
+      expect(r.currentAnimGames).toContain('Delta') // Delta is in QUEUE, so it's a legitimate step
+    })
+
+    // Regression: upgradeGames is updated to include THIS spin's own target
+    // before the spin even starts (the caller sets it as soon as the target
+    // comes back from the server). If the pool were filtered by upgradeGames
+    // directly, the target would be excluded from its own animation pool —
+    // WheelAnimation can never find a target that isn't in its games list, so
+    // it silently hangs forever with no error. Every step of a multi-step
+    // elimination run must keep the target reachable.
+    it('never excludes the current spin\'s own target, even when upgradeGames already contains it', () => {
+      const r = settleSpinStep(settleInput({
+        kind: 'upgrade',
+        upgradeGames: ['Delta', 'Alpha'], // Alpha is QUEUE's target — already "collected"
+      }))
+      expect(r.currentAnimGames).toContain('Alpha')
+    })
+
+    it('keeps the target reachable across every step of a multi-step run', () => {
+      let elimIndex = 0
+      let eliminated: string[] = []
+      let last = settleSpinStep(settleInput({ kind: 'upgrade', upgradeGames: ['Delta', 'Alpha'] }))
+      const guardExhausted = () => elimIndex >= QUEUE.length
+      while (!last.finished && !guardExhausted()) {
+        expect(last.currentAnimGames).toContain(last.animTarget)
+        elimIndex = last.elimIndex
+        eliminated = last.eliminated
+        last = settleSpinStep(settleInput({
+          kind: 'upgrade', upgradeGames: ['Delta', 'Alpha'], elimIndex, eliminated,
+        }))
+      }
+      expect(last.finished).toBe(true)
     })
 
     it('settles to the reroll prompt', () => {
@@ -230,8 +267,16 @@ describe('settleSpinStep', () => {
       expect(r.phase).toBe('spin_upgrade_reroll_prompt')
     })
 
-    it('falls back to the full list rather than emptying the wheel', () => {
-      const r = settleSpinStep(settleInput({ kind: 'upgrade', upgradeGames: GAMES }))
+    // The pool is derived from elimQueue's un-eliminated tail, so it's only
+    // ever empty if elimQueue itself is exhausted (every entry already
+    // eliminated) — a genuinely-drained queue, not merely a large
+    // upgradeGames. That's the only case the allGames fallback exists for.
+    it('falls back to allGames only when elimQueue itself is exhausted', () => {
+      const r = settleSpinStep(settleInput({
+        kind: 'upgrade',
+        elimIndex: 3,
+        eliminated: QUEUE, // every entry, including the target — an exhausted queue
+      }))
       expect(r.currentAnimGames).toEqual(GAMES)
     })
   })

@@ -149,14 +149,19 @@ function finishedPhase(input: SettleInput): WheelPhase {
 function remainingPool(input: SettleInput, eliminated: string[]): string[] {
   const { kind, allGames } = input
   const excluded = input.excludedGames ?? []
-  const upgrades = input.upgradeGames ?? []
 
   if (kind === 'paid') {
     const pool = allGames.filter(g => !eliminated.includes(g) && !excluded.includes(g))
     return pool.length > 0 ? pool : allGames.filter(g => !eliminated.includes(g))
   }
   if (kind === 'upgrade' || kind === 'upgrade_game3') {
-    const pool = allGames.filter(g => !upgrades.includes(g) && !eliminated.includes(g))
+    // upgradeGames may already include THIS spin's own target — it's added to
+    // that list before the spin starts, once the target is known. Filtering
+    // allGames by it would then self-exclude the very winner elimQueue is
+    // animating toward, leaving nothing for the animation to land on. Derive
+    // from elimQueue's own un-eliminated tail instead: it was built once with
+    // the correct (pre-target) exclusions, so it always contains the target.
+    const pool = input.elimQueue.filter(g => !eliminated.includes(g))
     return pool.length > 0 ? pool : allGames
   }
   return allGames.filter(g => !eliminated.includes(g))
