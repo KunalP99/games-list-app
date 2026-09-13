@@ -434,6 +434,10 @@ and a result awaiting acceptance all come back.
 
 ## Videos system (`app/(app)/videos/`)
 
+**Not linked from the nav** — the Videos tab was removed from `Nav.tsx`. The
+route, its data and everything below still work; `/videos` is just reachable by
+URL only now. Re-add an entry to `navItemsAfter` to bring the tab back.
+
 A curated library of YouTube videos and **in-site playlists**. YouTube-only.
 Everyone signed in can view; only curators (`profiles.is_admin = true`) can
 add/remove — enforced in the UI, the server actions, and RLS. Video cards are

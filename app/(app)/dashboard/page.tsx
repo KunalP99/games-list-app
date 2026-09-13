@@ -172,6 +172,7 @@ export default async function DashboardPage() {
         <StatCard
           label="Current Turn"
           value={formatTurn(profile?.wheel_turn ?? 'spin')}
+          href="/wheel"
         />
         <StatCard label="Games" value={String(allGames?.length ?? 0)} href="/games" linkLabel="View list" />
         <StatCard label="Total Hours" value={`${totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}h`} />
@@ -369,11 +370,33 @@ function StatCard({
   href?: string
   linkLabel?: string
 }) {
-  return (
-    <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+  const body = (
+    <>
       <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">{label}</p>
       <p className="mt-1 text-xl font-bold text-fg-base">{value}</p>
       {sub && <p className="mt-0.5 text-xs text-fg-subtle">{sub}</p>}
+    </>
+  )
+
+  // A card with its own "View history →" link keeps that link and stays a
+  // plain div — an <a> can't be nested inside another <a>. A card given an
+  // href but no link label becomes clickable in its entirety instead.
+  // brand-* resolves from the --brand-* vars applyAccentPalette sets, so the
+  // hover automatically uses whatever accent colour the user picked.
+  if (href && !linkLabel) {
+    return (
+      <Link
+        href={href}
+        className="block bg-surface-base border border-edge-base rounded-xl p-4 transition-colors hover:bg-brand-50 hover:border-brand-300 dark:hover:bg-brand-900/30 dark:hover:border-brand-700"
+      >
+        {body}
+      </Link>
+    )
+  }
+
+  return (
+    <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+      {body}
       {href && linkLabel && (
         <Link href={href} className="mt-2 text-xs text-brand-600 hover:text-brand-800 transition-colors">
           {linkLabel} →

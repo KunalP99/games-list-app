@@ -73,6 +73,8 @@ All notable changes to **GamesList** are documented here, newest first.
 - Achievement toast popup is now clickable — navigates to `/achievements` and scrolls directly to the unlocked achievement card; a "View →" label appears on hover
 
 ### Changed
+- **The dashboard's "Current Turn" card is now clickable** — the whole card links straight to the wheel, and highlights in your own accent colour on hover.
+- **Removed the Videos tab from the nav.** The page itself is untouched and still reachable at `/videos`; it just isn't linked from the navbar any more.
 - **Flags row now fits on one line on desktop** — the flag pills (Favourite/Replay/Sequel/Steam Deck/Emulated) are more compact and no longer wrap to a second line at desktop widths (they still wrap on mobile).
 - **Reordered the add/edit game form** — Status & Progress and Flags now sit right under Basic Info, and Media has moved down to the very bottom of the form (after Notes).
 - **Steam Deck icon on game cards** — capsule game cards (including the dashboard/games "Now Playing" strip, separated from the platform by a `·`) and the portrait cover-view card (next to the achievement percentage) now show the Steam Deck icon for games flagged as played on Steam Deck.
