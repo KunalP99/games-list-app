@@ -241,6 +241,17 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   const uniqueGames = entries.map(e => e.name)
   const canSpin = uniqueGames.length >= WHEEL_MIN_GAMES
 
+  // What's actually on the wheel right now. `currentAnimGames` is exactly the
+  // slice list handed to WheelAnimation/WheelStatic — already filtered by
+  // whichever of eliminated / excludedGames / upgradeGames applies to the flow
+  // in progress — so deriving from it keeps the entries list and the
+  // "N remaining" count honest without re-deriving those rules separately (and
+  // getting them subtly wrong, which is how they drifted apart before). The
+  // fallback mirrors the wheel's own when the pool is empty.
+  const wheelGames = currentAnimGames.length > 0 ? currentAnimGames : uniqueGames
+  const offWheel = new Set(uniqueGames.filter(g => !wheelGames.includes(g)))
+  const stillOnWheel = uniqueGames.length - offWheel.size
+
   // ─── Turn persistence ──────────────────────────────────────────────────────
   // The turn is mirrored to profiles.wheel_session so closing the tab doesn't
   // lose it. Paid actions write their own copy server-side, in the same request
@@ -553,6 +564,11 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
       // exclusions (prior upgrade options), so its un-eliminated tail is
       // always a safe pool that's guaranteed to contain the target.
       const pool = elimQueue.filter(g => !newElim.includes(g))
+      if (pool.length === 1) {
+        // Last game standing — no need to spin a one-slice wheel.
+        setPhase('spin_upgrade_reroll_prompt')
+        return
+      }
       const next = elimIndex + 1
       setElimIndex(next)
       setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
@@ -610,6 +626,11 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
       // not a uniqueGames filter by upgradeGames (which already includes this
       // spin's own target and would self-exclude it, freezing the wheel).
       const pool = elimQueue.filter(g => !newElim.includes(g))
+      if (pool.length === 1) {
+        // Last game standing — no need to spin a one-slice wheel.
+        setPhase(goToFinal ? 'spin_upgrade_final_choice' : 'spin_upgrade_reroll_prompt')
+        return
+      }
       const next = elimIndex + 1
       setElimIndex(next)
       setCurrentAnimGames(pool.length > 0 ? pool : uniqueGames)
@@ -858,7 +879,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
       <div className="rounded-xl border border-edge-base bg-surface-base p-4 space-y-3 w-52 shrink-0">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">
-            Entries <span className="font-bold text-fg-base">{uniqueGames.length}</span>
+            Entries <span className="font-bold text-fg-base">{stillOnWheel}/{uniqueGames.length}</span>
           </p>
           {onShuffle && (
             <button
@@ -874,7 +895,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
             <li
               key={g}
               className={`text-sm truncate ${
-                eliminated.includes(g)
+                offWheel.has(g)
                   ? 'line-through text-fg-subtle'
                   : 'text-fg-secondary'
               }`}
@@ -930,7 +951,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   }
 
   if (phase === 'elim_step') {
-    const remaining = uniqueGames.length - eliminated.length
+    const remaining = stillOnWheel
     return (
       <div className="flex flex-col lg:flex-row lg:items-start gap-6">
         <WheelStatic games={currentAnimGames} accentColour={accentColour} />
