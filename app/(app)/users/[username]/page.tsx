@@ -1,20 +1,17 @@
 import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { computeUserStats } from '@/lib/user-stats'
+import { resolveBannerImage } from '@/lib/hero-banner'
+import { buildActivityItems, type RawAchievementUnlock } from '@/lib/activity'
+import { ACHIEVEMENTS } from '@/lib/achievements'
 import type { Game, Profile } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
-import GameCard from '@/components/games/GameCard'
+import ProfileHero from '@/components/profile/ProfileHero'
+import ProfileStatCards from '@/components/profile/ProfileStatCards'
+import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import { Suspense } from 'react'
-
-
-function StatPill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1 px-3 py-1 bg-surface-elevated border border-edge-base rounded-full text-sm text-fg-secondary">
-      {children}
-    </span>
-  )
-}
 
 export default async function UserProfilePage({
   params,
@@ -51,118 +48,141 @@ export default async function UserProfilePage({
   if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
-  const [gamesRes, allGamesRes, playingGamesRes] = await Promise.all([
+  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats] = await Promise.all([
     gamesQuery,
-    supabase
-      .from('games')
-      .select('status, hours_played')
-      .eq('user_id', profile.id),
     supabase
       .from('games')
       .select('*')
       .eq('user_id', profile.id)
       .eq('status', 'playing')
+      // Most recently picked up first. `start_date` is what actually records
+      // when a game became "playing" (the wheel stamps it on assignment, and
+      // the form asks for it), so it leads; `created_at` breaks ties and covers
+      // games with no start date, which sort last.
+      .order('start_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false }),
+    // For the Recent Activity card — same shape lib/activity.ts's shared
+    // buildActivityItems() expects, mirroring app/(app)/activity/page.tsx.
+    supabase
+      .from('games')
+      .select('id, user_id, title, status, image_url, cover_image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
+      .eq('user_id', profile.id)
+      .order('updated_at', { ascending: false })
+      .limit(20),
+    supabase
+      .from('wheel_spins')
+      .select('id, user_id, spin_type, result_name, created_at')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(10),
+    (supabase.from('user_achievements') as any)
+      .select('achievement_id, unlocked_at')
+      .eq('user_id', profile.id)
+      .order('unlocked_at', { ascending: false })
+      .limit(10),
+    computeUserStats(supabase, profile.id),
   ])
 
   const games = gamesRes.data as Game[] | null
-  const allGames = allGamesRes.data as { status: string; hours_played: number | null }[] | null
-  const playingGames = playingGamesRes.data as Game[] | null
+  const playingGames = (playingGamesRes.data ?? []) as Game[]
+
+  type RecentGameRow = { id: string; user_id: string; title: string; status: string; image_url: string | null; cover_image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }
+  const recentGames = (recentGamesRes.data ?? []) as RecentGameRow[]
+  const completedIds = recentGames.filter(g => g.status === 'completed').map(g => g.id)
+
+  // Depends on stats.heroGame and completedIds, so this second wave can't join
+  // the Promise.all above — bannerImage may fetch the game's screenshots live
+  // (lib/hero-banner.ts), bounded by that call's own timeout.
+  const [bannerImage, ticketRowsRes] = await Promise.all([
+    stats.heroGame ? resolveBannerImage(stats.heroGame) : Promise.resolve(null),
+    completedIds.length > 0
+      ? supabase.from('ticket_transactions').select('game_id, amount').in('game_id', completedIds).gt('amount', 0)
+      : Promise.resolve({ data: [] as { game_id: string; amount: number }[] }),
+  ])
+
+  const ticketsByGame = ((ticketRowsRes.data ?? []) as { game_id: string; amount: number }[]).reduce<Record<string, number>>((acc, r) => {
+    acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
+    return acc
+  }, {})
+
+  const achievementLookup = new Map(ACHIEVEMENTS.map(a => [a.id, a]))
+  const recentUnlocks = (recentUnlocksRes.data ?? []) as { achievement_id: string; unlocked_at: string }[]
+  const achievementUnlocks: RawAchievementUnlock[] = recentUnlocks.flatMap(r => {
+    const ach = achievementLookup.get(r.achievement_id)
+    if (!ach) return []
+    return [{ user_id: profile.id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, xp: ach.xp, unlocked_at: r.unlocked_at }]
+  })
+
+  const profileMap = new Map([[profile.id, {
+    displayName: profile.display_name ?? profile.username,
+    username: profile.username,
+    accentColour: profile.accent_colour ?? null,
+  }]])
+  type RecentSpinRow = { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }
+  const recentSpins = (recentSpinsRes.data ?? []) as RecentSpinRow[]
+  // A generous buffer — ProfileStatCards decides how many are actually
+  // shown (currently 4, to sit level with the genre card next to it).
+  const activityItems = buildActivityItems(recentGames, recentSpins, profileMap, ticketsByGame, user?.id ?? '', achievementUnlocks).slice(0, 12)
 
   const rawView = searchParams.view ?? cookies().get('gameView')?.value
   // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
   const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 
-  const totalCompleted = allGames?.filter(g => g.status === 'completed').length ?? 0
-  const totalPlaying   = allGames?.filter(g => g.status === 'playing').length ?? 0
-  const totalBacklog   = allGames?.filter(g => g.status === 'backlog').length ?? 0
-  const totalHours     = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
-
+  // Only letters/digits start an initial — a display name like "Alex (test)"
+  // would otherwise render as "A(".
   const initials = (profile.display_name ?? profile.username)
-    .split(' ')
+    .split(/[\s_-]+/)
+    // Strip leading punctuation so a word like "(test)" contributes "t", not "(".
+    // No \p{…} escapes here — the TS target predates the `u` flag.
+    .map((w: string) => w.replace(/^[^0-9A-Za-zÀ-ɏ]+/, '').charAt(0))
+    .filter(Boolean)
     .slice(0, 2)
-    .map((w: string) => w[0])
     .join('')
-    .toUpperCase()
+    .toUpperCase() || '?'
 
-  const accentColour = profile.accent_colour ?? '#7c3aed'
-  const bannerStyle = {
-    background: `linear-gradient(135deg, ${accentColour}cc 0%, ${accentColour}44 100%)`,
-  }
+  // Their accent, never the viewer's — `brand-*` classes resolve to whoever is
+  // logged in, so the friend's colour is always passed down as a value.
+  const accent = profile.accent_colour ?? '#7c3aed'
 
   return (
     <div className="space-y-6">
-      {/* Hero card */}
-      <div className="bg-surface-base border border-edge-base rounded-xl overflow-visible">
-        {/* Banner */}
-        <div className="h-36 rounded-t-xl" style={bannerStyle} />
+      <ProfileHero
+        stats={stats}
+        bannerImage={bannerImage}
+        initials={initials}
+        accent={accent}
+        wheelTurn={profile.wheel_turn ?? null}
+      />
 
-        {/* Avatar — overlaps banner with negative margin */}
-        <div className="px-6">
-          <div
-            className="w-24 h-24 rounded-full border-4 border-surface-base flex items-center justify-center text-3xl font-bold text-white -mt-12 select-none"
-            style={{ backgroundColor: accentColour }}
-          >
-            {initials}
-          </div>
-        </div>
+      {/* Everything runs full width in a single column. An earlier version put
+          the stat cards in a right-hand rail, but the grid row was then as tall
+          as the rail, leaving a large gap above the games list whenever the
+          content beside it was shorter. */}
+      <NowPlayingGrid games={playingGames} isOwner={isOwner} />
 
-        {/* Name + stats */}
-        <div className="px-6 pt-3 pb-6">
-          <h1 className="text-2xl font-bold text-fg-base">
-            {profile.display_name ?? profile.username}
-          </h1>
-          <p className="text-sm text-fg-muted mt-0.5">@{profile.username}</p>
+      <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            <StatPill>🎟️ {profile.ticket_balance}</StatPill>
-            <StatPill>{totalCompleted} completed</StatPill>
-            {totalPlaying > 0 && <StatPill>{totalPlaying} playing</StatPill>}
-            {totalBacklog > 0 && <StatPill>{totalBacklog} in backlog</StatPill>}
-            {totalHours > 0 && <StatPill>{totalHours.toLocaleString()}h played</StatPill>}
-            {profile.wheel_turn && (
-              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium border ${
-                profile.wheel_turn === 'spin'        ? 'bg-brand-100 text-brand-700 border-brand-200 dark:bg-brand-900/40 dark:text-brand-300 dark:border-brand-700' :
-                profile.wheel_turn === 'spin_reroll' ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700' :
-                                                       'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700'
-              }`}>
-                🎡 {profile.wheel_turn === 'spin' ? 'Spin turn' : profile.wheel_turn === 'spin_reroll' ? 'Spin + Reroll turn' : 'Choose turn'}
-              </span>
-            )}
-          </div>
+      <div>
+        <Suspense>
+          <GameFilters />
+        </Suspense>
+
+        <div className="mt-4">
+          {games && games.length > 0 ? (
+            <GameListView games={games} status={searchParams.status} isOwner={isOwner} view={view} />
+          ) : (
+            <div className="text-center py-16 text-fg-subtle">
+              <p className="text-4xl mb-3">🎮</p>
+              <p className="font-medium text-fg-secondary">No games found</p>
+              <p className="text-sm mt-1">
+                {status
+                  ? `${profile.display_name ?? profile.username} has no ${status} games`
+                  : `${profile.display_name ?? profile.username} hasn't added any games yet`}
+              </p>
+            </div>
+          )}
         </div>
       </div>
-
-      {playingGames && playingGames.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
-            Now Playing · {playingGames.length}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {playingGames.map(game => (
-              <GameCard key={game.id} game={game} isOwner={isOwner} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Suspense>
-        <GameFilters />
-      </Suspense>
-
-      {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={isOwner} view={view} />
-      ) : (
-        <div className="text-center py-16 text-fg-subtle">
-          <p className="text-4xl mb-3">🎮</p>
-          <p className="font-medium text-fg-secondary">No games found</p>
-          <p className="text-sm mt-1">
-            {status
-              ? `${profile.display_name ?? profile.username} has no ${status} games`
-              : `${profile.display_name ?? profile.username} hasn't added any games yet`}
-          </p>
-        </div>
-      )}
     </div>
   )
 }
