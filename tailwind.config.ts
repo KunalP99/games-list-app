@@ -6,6 +6,13 @@ const config: Config = {
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    // lib/ holds Tailwind class strings too (e.g. lib/wheel-history.ts's badge
+    // colours) — without this, any class that isn't *also* used verbatim
+    // somewhere already-scanned silently never gets generated. That's exactly
+    // why blue/emerald "worked" here before (they coincidentally match
+    // StatusBadge.tsx's playing/completed colours) while pink, matching
+    // nothing else in the app, rendered with no colour at all.
+    './lib/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {

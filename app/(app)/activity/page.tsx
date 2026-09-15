@@ -97,7 +97,7 @@ export default async function ActivityPage() {
                 </div>
 
                 {/* Game thumbnail — portrait box art (falls back to the banner) */}
-                {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
+                {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
                   <img
                     src={item.gameCoverUrl ?? item.gameImageUrl}
                     alt={item.gameTitle}
@@ -113,7 +113,7 @@ export default async function ActivityPage() {
                     </span>
                     {' '}
                     <span className="text-fg-muted">{activityVerb(item)}</span>
-                    {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'choose_skip' && (
+                    {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
                       <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                     )}
                     {item.achievementName && (

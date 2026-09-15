@@ -2,9 +2,18 @@ export type SpinType = 'spin' | 'spin_reroll' | 'choose' | 'choose_skip'
 export type SpinMode = 'elimination' | 'first_land' | null
 
 export const SPIN_TYPE_BADGE: Record<SpinType, { label: string; className: string }> = {
-  spin:        { label: 'Spin',   className: 'bg-brand-100 text-brand-700 border border-brand-200 dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-700' },
+  // Was `brand-*` — that resolves to whichever accent the logged-in viewer has
+  // personally chosen (lib/accent.ts), so this badge would silently be a
+  // different colour depending on who's looking, and could land on any hue,
+  // including one already used elsewhere on this page. Fixed blue instead —
+  // it's the same blue StatusBadge.tsx already uses for "Playing".
+  spin:        { label: 'Spin',   className: 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
   spin_reroll: { label: 'Reroll', className: 'bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700' },
-  choose:      { label: 'Choose', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700' },
+  // Was emerald — too washed out to read in dark mode, and it doubled as the
+  // colour ticket-award amounts already use on this same page. Teal stays
+  // clear of every other fixed badge on this page (amber ×2, blue for Spin,
+  // emerald for tickets).
+  choose:      { label: 'Choose', className: 'bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
   choose_skip: { label: 'Skip',   className: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700' },
 }
 

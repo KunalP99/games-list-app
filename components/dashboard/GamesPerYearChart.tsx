@@ -44,10 +44,19 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
 
   const barColor = accentColor ?? 'rgb(var(--brand-600))'
 
+  // Recharts' category axis always spreads its bars evenly across the full
+  // chart width, so with only a couple of years present they end up stranded
+  // near opposite edges of the card with a wide empty gap between them. Capping
+  // the chart's own width to roughly one slot per year keeps the bars packed
+  // at a consistent width and left-aligned instead — it only grows back out to
+  // the card's full width once there are enough years to actually want it.
+  const chartWidth = Math.max(data.length * 140, 220)
+
   return (
     <div className="relative z-10">
       <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">Games Completed Per Year</h2>
       <div className="bg-surface-base border border-edge-base rounded-xl p-5">
+      <div style={{ width: '100%', maxWidth: chartWidth }}>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
@@ -77,6 +86,7 @@ export default function GamesPerYearChart({ data, accentColor }: { data: YearDat
           <Bar dataKey="count" fill="url(#barGradient)" radius={[4, 4, 0, 0]} maxBarSize={48} />
         </BarChart>
       </ResponsiveContainer>
+      </div>
       </div>
     </div>
   )

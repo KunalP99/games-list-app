@@ -25,7 +25,7 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
             </div>
 
             {/* Game thumbnail — portrait box art (falls back to the banner) */}
-            {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'achievement_unlock' && (
+            {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'achievement_unlock' && (
               <img
                 src={item.gameCoverUrl ?? item.gameImageUrl}
                 alt={item.gameTitle}
@@ -39,7 +39,7 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
                 <span className="font-semibold">{item.displayName}</span>
                 {' '}
                 <span className="text-fg-muted">{activityVerb(item)}</span>
-                {item.gameTitle && item.type !== 'wheel_spin' && (
+                {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && (
                   <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                 )}
                 {item.achievementName && (

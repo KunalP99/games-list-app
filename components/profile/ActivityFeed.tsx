@@ -11,12 +11,13 @@ const TYPE_ICON: Record<ActivityItem['type'], string> = {
   backlog: '📚',
   playing: '🎮',
   wheel_spin: '🎡',
+  game_chosen: '🎯',
   choose_skip: '⏭️',
   achievement_unlock: '🏆',
 }
 
 function Row({ item }: { item: ActivityItem }) {
-  const showGameTitle = item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'choose_skip'
+  const showGameTitle = item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip'
   return (
     // py-1.5, not the more common py-2: measured against "What they play"'s
     // real rendered height at its 8-row cap (Playwright getBoundingClientRect,

@@ -21,12 +21,16 @@ const ACTIVITY_SHOWN = 4
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div>
+    // h-full on the outer wrapper too, not just the box: the grid row stretches
+    // this whole column, and without h-full here the box inside would still
+    // only be as tall as its own content, leaving the header row absorb the
+    // extra space instead of the box matching its neighbour.
+    <div className="h-full flex flex-col">
       <div className="flex items-center justify-between gap-3 mb-3">
         <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider">{title}</h2>
         {action}
       </div>
-      <div className="bg-surface-base border border-edge-base rounded-xl p-4">
+      <div className="flex-1 bg-surface-base border border-edge-base rounded-xl p-4">
         {children}
       </div>
     </div>
@@ -64,10 +68,10 @@ export default function ProfileStatCards({
   const hasTaste = genreRows.length > 0
 
   return (
-    // items-start: CSS Grid stretches row items to match the tallest one by
-    // default even with no class asking for it — without this, the shorter
-    // card still gets padded out to match the taller one, empty space and all.
-    <div className={`grid items-start gap-4 ${hasTaste ? 'md:grid-cols-2' : ''}`}>
+    // items-stretch: both cards match the taller one's height, blank space
+    // and all, so their bottoms always line up rather than staggering when
+    // one has noticeably more content than the other.
+    <div className={`grid items-stretch gap-4 ${hasTaste ? 'md:grid-cols-2' : ''}`}>
       {hasTaste && (
         <Section title="What they play">
           <Bars rows={genreRows} accent={accent} />

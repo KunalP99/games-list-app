@@ -1,5 +1,5 @@
 export type ActivityItem = {
-  type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'choose_skip' | 'achievement_unlock'
+  type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'game_chosen' | 'choose_skip' | 'achievement_unlock'
   userId: string
   displayName: string
   username: string
@@ -116,7 +116,11 @@ export function buildActivityItems(
     const profile = profiles.get(spin.user_id)
     if (!profile) continue
     items.push({
-      type: spin.spin_type === 'choose_skip' ? 'choose_skip' : 'wheel_spin',
+      // A 'choose' turn never spins — the player picked directly, so it needs
+      // its own wording rather than collapsing into "spun the wheel".
+      type: spin.spin_type === 'choose_skip' ? 'choose_skip'
+          : spin.spin_type === 'choose'      ? 'game_chosen'
+          : 'wheel_spin',
       userId: spin.user_id,
       displayName: profile.displayName,
       username: profile.username,
@@ -155,6 +159,7 @@ export function activityVerb(item: ActivityItem): string {
     case 'backlog':            return 'added to backlog'
     case 'playing':            return 'started playing'
     case 'wheel_spin':         return item.wheelResult ? `spun the wheel → ${item.wheelResult}` : 'spun the wheel'
+    case 'game_chosen':        return item.wheelResult ? `chose ${item.wheelResult}` : 'chose a game'
     case 'choose_skip':        return 'skipped a choose game turn'
     case 'achievement_unlock': return 'unlocked'
   }
