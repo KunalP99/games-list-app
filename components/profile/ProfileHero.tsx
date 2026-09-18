@@ -15,6 +15,24 @@ function StatFigure({ value, label }: { value: string; label: string }) {
   )
 }
 
+// Tickets get two numbers instead of one: the lifetime total (the headline
+// figure, same size as every other stat) and their current spendable balance
+// right beside it, smaller — since they've usually spent some of what they've
+// earned, and both numbers tell a different part of the story.
+function TicketFigure({ total, current }: { total: number; current: number }) {
+  return (
+    <div>
+      <span className="text-xl font-bold text-white tabular-nums" title="Total tickets earned">
+        🎟️ {total.toLocaleString()}
+      </span>
+      <span className="text-sm font-semibold text-white/70 tabular-nums ml-1.5" title="Current balance">
+        {current.toLocaleString()}
+      </span>
+      <span className="text-xs text-white/65 ml-1.5">tickets</span>
+    </div>
+  )
+}
+
 /** Avatar with an XP level ring around it. */
 export function LevelAvatar({
   initials,
@@ -67,7 +85,6 @@ export default function ProfileHero({
     [`${Math.round(stats.totalHours).toLocaleString()}h`, 'played'],
     ...(stats.avgRating != null ? [[String(stats.avgRating), 'avg rating'] as [string, string]] : []),
     ...(stats.perfectedCount > 0 ? [[String(stats.perfectedCount), 'at 100%'] as [string, string]] : []),
-    [`🎟️ ${profile.ticket_balance}`, 'tickets'],
   ]
 
   return (
@@ -119,6 +136,7 @@ export default function ProfileHero({
           {figures.map(([value, label]) => (
             <StatFigure key={label} value={value} label={label} />
           ))}
+          <TicketFigure total={stats.ticketsEarned} current={profile.ticket_balance} />
         </div>
 
         {stats.heroGame && bannerImage && (
