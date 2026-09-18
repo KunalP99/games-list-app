@@ -2,20 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { SPIN_TYPE_BADGE, SPIN_TYPE_LABEL, spinModeLabel, rerollRunnerUp, summariseSpends, type SpinType, type SpinMode, type FinalizedVia, type TicketSpend } from '@/lib/wheel-history'
 import { TICKET_AWARDS } from '@/lib/constants'
+import { getInitials } from '@/lib/activity'
 import SpinTime from '@/components/wheel/SpinTime'
 
 const PAGE_SIZE = 20
-
-// Leads each timeline entry, tinted with that player's accent colour — it
-// carries the turn type at a glance where the old card layout used a badge in
-// a header bar. 'choose_skip' never reaches the list (it's filtered out below),
-// but the map stays exhaustive over SpinType.
-const SPIN_TYPE_ICON: Record<SpinType, string> = {
-  spin: '🎡',
-  spin_reroll: '🔁',
-  choose: '🎯',
-  choose_skip: '⏭️',
-}
 
 // What the player did, phrased to run on from their name: "Sam spun the wheel → X".
 const SPIN_TYPE_VERB: Record<SpinType, string> = {
@@ -98,6 +88,7 @@ export default async function WheelHistoryPage({
                 ? 'You'
                 : (spin.profiles?.display_name ?? spin.profiles?.username ?? 'Unknown')
               const accentColour = spin.profiles?.accent_colour ?? '#7c3aed'
+              const initials = getInitials(spin.profiles?.display_name ?? spin.profiles?.username ?? '?')
               const badge = SPIN_TYPE_BADGE[spin.spin_type]
               const label = SPIN_TYPE_LABEL[spin.spin_type]
               const spendRows = summariseSpends(spin.ticket_spends, spin.finalized_via, spin.tickets_spent)
@@ -120,12 +111,14 @@ export default async function WheelHistoryPage({
                   // header and accent border, neither of which exists now.
                   style={isCurrentUser ? { backgroundColor: `${accentColour}0f` } : undefined}
                 >
+                  {/* Same avatar the Activity feed and dashboard use — the
+                      player's accent colour doubles as an at-a-glance "whose
+                      spin is this" marker on a page listing everyone's. */}
                   <div
-                    className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-sm select-none"
-                    style={{ backgroundColor: `${accentColour}26` }}
-                    aria-hidden
+                    className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white select-none"
+                    style={{ backgroundColor: accentColour }}
                   >
-                    {SPIN_TYPE_ICON[spin.spin_type]}
+                    {initials}
                   </div>
 
                   <div className="min-w-0 flex-1">
