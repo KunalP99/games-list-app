@@ -185,11 +185,14 @@ export default async function WheelHistoryPage({
                                   title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
                                   className={
                                     isRunnerUp
-                                      // Pink, not amber: the Reroll badge on
-                                      // this same row is amber, and two
-                                      // different meanings sharing one hue
-                                      // read as related when they aren't.
-                                      ? 'text-[11px] font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded-md px-2 py-0.5 dark:bg-pink-900/40 dark:text-pink-300 dark:border-pink-700'
+                                      // Deliberately a lighter, lower-weight
+                                      // amber than the "Spin + Reroll" badge
+                                      // on the same row (amber-100 / 700 /
+                                      // semibold). Same hue reads as related,
+                                      // which they are — but the pill stays
+                                      // clearly subordinate instead of
+                                      // competing with the badge.
+                                      ? 'text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-0.5 dark:bg-amber-900/20 dark:text-amber-300/90 dark:border-amber-800'
                                       : 'text-[11px] text-fg-secondary bg-surface-active border border-edge-base rounded-md px-2 py-0.5'
                                   }
                                 >
