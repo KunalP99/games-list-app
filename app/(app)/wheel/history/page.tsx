@@ -184,15 +184,13 @@ export default async function WheelHistoryPage({
                                   title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
                                   className={
                                     isRunnerUp
-                                      // No hue at all — a dark grey fill with
-                                      // an inset shadow, reading as a button
-                                      // held down rather than a status colour
-                                      // competing with anything else on the
-                                      // row. One step darker in dark mode
-                                      // (zinc-950 read as flat black there;
-                                      // zinc-700 alone was too close to the
-                                      // dark card to still read as "pressed").
-                                      ? 'text-[11px] font-medium text-white bg-zinc-700 dark:bg-zinc-800 rounded-md px-2 py-0.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]'
+                                      // Same family as the "Spin + Reroll"
+                                      // badge (amber), but a solid dark fill
+                                      // instead of its light tint — related in
+                                      // colour, not equal in weight, so it
+                                      // reads as a pressed variant of the
+                                      // badge rather than competing with it.
+                                      ? 'text-[11px] font-medium text-white bg-amber-700 dark:bg-amber-800 rounded-md px-2 py-0.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]'
                                       : 'text-[11px] text-fg-secondary bg-surface-active border border-edge-base rounded-md px-2 py-0.5'
                                   }
                                 >
