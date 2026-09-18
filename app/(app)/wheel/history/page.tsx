@@ -105,7 +105,14 @@ export default async function WheelHistoryPage({
               return (
                 <div
                   key={spin.id}
-                  className="flex gap-3 px-4 py-3"
+                  // relative + z-10 on hover: once the row scales up it needs
+                  // to render above its neighbours rather than under them.
+                  // bg-surface-base gives it a solid backing while raised —
+                  // otherwise the lifted edges would show whatever's behind.
+                  // Only transform/shadow/radius are hover-conditional, so
+                  // there's no fight with the inline background below (an
+                  // inline style always wins over a class either way).
+                  className="group relative bg-surface-base flex gap-3 px-4 py-3 transition-transform duration-200 ease-out hover:z-10 hover:scale-[1.015] hover:shadow-md hover:rounded-lg motion-reduce:hover:scale-100"
                   // Your own spins stay distinguishable on a page showing
                   // everyone's — the old layout did this with a tinted card
                   // header and accent border, neither of which exists now.
