@@ -2,10 +2,13 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { computeUserStats } from '@/lib/user-stats'
+import { resolveBannerImage } from '@/lib/hero-banner'
 import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameCard from '@/components/games/GameCard'
 import GameFilters from '@/components/games/GameFilters'
+import ProfileHero from '@/components/profile/ProfileHero'
 import { Suspense } from 'react'
 
 export default async function GamesPage({
@@ -42,8 +45,10 @@ export default async function GamesPage({
   if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
   if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
-  // Playing games always fetched separately for the Now Playing strip — run both in parallel
-  const [playingGamesRes, gamesRes] = await Promise.all([
+  // Playing games always fetched separately for the Now Playing strip — run
+  // alongside the main games query and the profile-banner stats (computeUserStats
+  // is the same helper the friend profile page uses — see lib/user-stats.ts).
+  const [playingGamesRes, gamesRes, stats] = await Promise.all([
     supabase
       .from('games')
       .select(GAME_LIST_COLS)
@@ -51,6 +56,7 @@ export default async function GamesPage({
       .eq('status', 'playing')
       .order('created_at', { ascending: false }),
     gamesQuery,
+    computeUserStats(supabase, user!.id),
   ])
 
   const playingGames = playingGamesRes.data as Game[] | null
@@ -60,8 +66,26 @@ export default async function GamesPage({
     games = [...games].sort((a, b) => (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3))
   }
 
+  // Depends on stats.heroGame, so it can't join the Promise.all above — see
+  // the identical pattern on the friend profile page.
+  const bannerImage = stats.heroGame ? await resolveBannerImage(stats.heroGame) : null
+
+  // Same initials logic as the friend profile page (app/(app)/users/[username]/page.tsx) —
+  // only letters/digits start an initial, so "Alex (test)" doesn't render as "A(".
+  const displayName = stats.profile.display_name ?? stats.profile.username
+  const initials = displayName
+    .split(/[\s_-]+/)
+    .map((w: string) => w.replace(/^[^0-9A-Za-zÀ-ɏ]+/, '').charAt(0))
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?'
+  const accent = stats.profile.accent_colour ?? '#7c3aed'
+
   return (
     <div className="space-y-6">
+      <ProfileHero stats={stats} bannerImage={bannerImage} initials={initials} accent={accent} wheelTurn={null} />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-fg-base">My Games</h1>
