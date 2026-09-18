@@ -43,6 +43,11 @@ async function withConcurrency<T, R>(
 type RawgData = {
   rawg_id: number
   image_url: string | null
+  // Portrait box art. Was fetched but discarded — the default games-list view
+  // is Box Art (CoverCard.tsx), which reads cover_image_url specifically, so
+  // an imported game rendered as a blank placeholder tile regardless of how
+  // good image_url (the landscape banner) was.
+  cover_image_url: string | null
   release_date: string | null        // ISO "YYYY-MM-DD"
   release_date_precision: 'full' | 'year'
   developer: string | null
@@ -60,6 +65,7 @@ async function fetchRawgData(title: string): Promise<RawgData | null> {
     return {
       rawg_id: top.id,
       image_url: detail?.background_image ?? top.background_image ?? null,
+      cover_image_url: detail?.cover_image ?? top.cover_image ?? null,
       release_date: detail?.released ?? top.released ?? null,
       release_date_precision: 'full',
       developer: detail?.developers?.[0]?.name ?? top.developers?.[0]?.name ?? null,
@@ -131,6 +137,7 @@ export async function bulkImportGames(
           release_date: releaseDate,
           release_date_precision: releasePrecision,
           image_url: rawg?.image_url ?? null,
+          cover_image_url: rawg?.cover_image_url ?? null,
           [PROVIDER_ID_COLUMN]: rawg?.rawg_id ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
@@ -167,6 +174,7 @@ export async function bulkImportGames(
           platform: g.platform ?? null,
           developer: rawg?.developer ?? null,
           image_url: rawg?.image_url ?? null,
+          cover_image_url: rawg?.cover_image_url ?? null,
           [PROVIDER_ID_COLUMN]: rawg?.rawg_id ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
