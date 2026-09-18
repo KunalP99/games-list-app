@@ -184,12 +184,15 @@ export default async function WheelHistoryPage({
                                   title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
                                   className={
                                     isRunnerUp
-                                      // No hue at all — a solid dark neutral
-                                      // fill with an inset shadow, reading as
-                                      // a button held down rather than a
+                                      // No hue at all — a dark grey fill (not
+                                      // black) with an inset shadow, reading
+                                      // as a button held down rather than a
                                       // status colour competing with anything
-                                      // else on the row.
-                                      ? 'text-[11px] font-medium text-white bg-zinc-800 dark:bg-zinc-950 rounded-md px-2 py-0.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]'
+                                      // else on the row. Same shade in both
+                                      // themes — it's meant to read as its own
+                                      // fixed "pressed" surface, not one that
+                                      // tracks light/dark.
+                                      ? 'text-[11px] font-medium text-white bg-zinc-700 rounded-md px-2 py-0.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]'
                                       : 'text-[11px] text-fg-secondary bg-surface-active border border-edge-base rounded-md px-2 py-0.5'
                                   }
                                 >
