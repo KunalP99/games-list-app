@@ -15,19 +15,17 @@ function StatFigure({ value, label }: { value: string; label: string }) {
   )
 }
 
-// Tickets get two numbers instead of one: "X total tickets" reads as its own
-// phrase (matching every other figure's "value + label" shape), then their
-// current spendable balance sits right after it, smaller — since they've
-// usually spent some of what they've earned, and both numbers tell a
-// different part of the story.
+// Tickets get two numbers instead of one: the lifetime total leads at full
+// size, their current spendable balance follows in parentheses at a smaller
+// size, then "tickets" labels the whole figure — "120 (214) tickets".
 function TicketFigure({ total, current }: { total: number; current: number }) {
   return (
     <div>
       <span className="text-xl font-bold text-white tabular-nums">🎟️ {total.toLocaleString()}</span>
-      <span className="text-xs text-white/65 ml-1.5">total tickets</span>
-      <span className="text-sm font-semibold text-white/70 tabular-nums ml-2" title="Current balance">
-        {current.toLocaleString()}
+      <span className="text-sm font-semibold text-white/70 tabular-nums ml-1" title="Current balance">
+        ({current.toLocaleString()})
       </span>
+      <span className="text-xs text-white/65 ml-1.5">tickets</span>
     </div>
   )
 }
