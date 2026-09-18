@@ -22,7 +22,7 @@ function TicketFigure({ total, current }: { total: number; current: number }) {
   return (
     <div>
       <span className="text-xl font-bold text-white tabular-nums">🎟️ {total.toLocaleString()}</span>
-      <span className="text-sm font-semibold text-white/70 tabular-nums ml-1" title="Current balance">
+      <span className="text-[11px] font-semibold text-white/70 tabular-nums ml-1" title="Current balance">
         ({current.toLocaleString()})
       </span>
       <span className="text-xs text-white/65 ml-1.5">tickets</span>
