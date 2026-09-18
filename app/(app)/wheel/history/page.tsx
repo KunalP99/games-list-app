@@ -185,7 +185,11 @@ export default async function WheelHistoryPage({
                                   title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
                                   className={
                                     isRunnerUp
-                                      ? 'text-[11px] font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-md px-2 py-0.5 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
+                                      // Pink, not amber: the Reroll badge on
+                                      // this same row is amber, and two
+                                      // different meanings sharing one hue
+                                      // read as related when they aren't.
+                                      ? 'text-[11px] font-semibold text-pink-700 bg-pink-100 border border-pink-300 rounded-md px-2 py-0.5 dark:bg-pink-900/40 dark:text-pink-300 dark:border-pink-700'
                                       : 'text-[11px] text-fg-secondary bg-surface-active border border-edge-base rounded-md px-2 py-0.5'
                                   }
                                 >
