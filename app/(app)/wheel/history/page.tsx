@@ -167,9 +167,15 @@ export default async function WheelHistoryPage({
                         ))}
                         {otherGames.length > 0 && (
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[11px] text-fg-subtle mr-0.5">
-                              {spin.games_list ? 'Also on the wheel:' : 'Also considered:'}
-                            </span>
+                            {/* No label for the games_list case — a "spun the
+                                wheel → X" row followed by a row of game chips
+                                already says these were the other games on the
+                                wheel. "Also considered:" stays for the two-
+                                option case (games_list is null), where that
+                                context isn't already stated on the row. */}
+                            {!spin.games_list && (
+                              <span className="text-[11px] text-fg-subtle mr-0.5">Also considered:</span>
+                            )}
                             {otherGames.map((opt, i) => {
                               const isRunnerUp = runnerUp != null && opt.toLowerCase() === runnerUp.toLowerCase()
                               return (
