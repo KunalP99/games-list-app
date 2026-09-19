@@ -34,6 +34,29 @@ export async function updatePassword(formData: FormData): Promise<ActionResult> 
   return { success: true, data: undefined }
 }
 
+export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      wheel_enabled: enabled,
+      // Turning the wheel off discards any half-finished spin — resuming one
+      // from months ago would be more confusing than starting the turn fresh.
+      // `wheel_turn` is deliberately untouched, so re-enabling puts them back
+      // on the same turn they left on.
+      ...(enabled ? {} : { wheel_session: null }),
+    } as never)
+    .eq('id', user.id)
+
+  if (error) return { success: false, error: error.message }
+  // Layout-wide: the nav reads wheel_enabled, so it has to re-render too.
+  revalidatePath('/', 'layout')
+  return { success: true, data: undefined }
+}
+
 export async function updateAppearance(formData: FormData): Promise<ActionResult> {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()

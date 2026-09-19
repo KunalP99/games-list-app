@@ -25,6 +25,8 @@ export type Database = {
           // In-progress wheel turn, so closing the tab doesn't lose it.
           // Null when no turn is underway. Shape: WheelSession in lib/wheel-session.ts.
           wheel_session: Record<string, unknown> | null
+          /** Opt out of wheel turns entirely (settings toggle). */
+          wheel_enabled: boolean
           theme_preference: 'light' | 'dark' | 'system'
           accent_colour: string | null
           is_admin: boolean
@@ -41,6 +43,7 @@ export type Database = {
           pending_wheel_game_id?: string | null
           pending_wheel_turn?: 'spin' | 'spin_reroll' | 'choose' | null
           wheel_session?: Record<string, unknown> | null
+          wheel_enabled?: boolean
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
           is_admin?: boolean
@@ -57,6 +60,7 @@ export type Database = {
           pending_wheel_game_id?: string | null
           pending_wheel_turn?: 'spin' | 'spin_reroll' | 'choose' | null
           wheel_session?: Record<string, unknown> | null
+          wheel_enabled?: boolean
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
           is_admin?: boolean

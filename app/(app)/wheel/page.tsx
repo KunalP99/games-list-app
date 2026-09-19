@@ -12,7 +12,7 @@ export default async function WheelPage() {
   const [profileRes, backlogGamesRes] = await Promise.all([
     supabase
       .from('profiles')
-      .select('wheel_turn, ticket_balance, accent_colour, wheel_session')
+      .select('wheel_turn, ticket_balance, accent_colour, wheel_session, wheel_enabled')
       .eq('id', user.id)
       .single(),
     supabase
@@ -29,6 +29,7 @@ export default async function WheelPage() {
     accent_colour: string | null
     // An in-progress turn, or null. Validated client-side by restoreSession.
     wheel_session: unknown
+    wheel_enabled: boolean | null
   } | null
   const backlogGames = backlogGamesRes.data as {
     id: string
@@ -41,6 +42,13 @@ export default async function WheelPage() {
   }[] | null
 
   if (!profile) redirect('/login')
+
+  // Opted out of wheel turns in Settings — the nav hides this page, so anyone
+  // landing here came from a stale link or typed the URL. Guarded here rather
+  // than in middleware.ts, which never touches `profiles` and shouldn't take a
+  // DB round-trip on every request. Page-level is also naturally path-exact,
+  // so /wheel/history stays reachable, which is the agreed behaviour.
+  if (!(profile.wheel_enabled ?? true)) redirect('/dashboard')
 
   // Unreleased games can't be played yet, so keep them off the wheel until their
   // release date passes (games with no date are treated as available).

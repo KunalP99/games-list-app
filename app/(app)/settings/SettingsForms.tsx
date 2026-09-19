@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { updateProfile, updatePassword, updateAppearance } from './actions'
+import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled } from './actions'
 import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
 
@@ -26,9 +26,14 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
   const [appearanceMsg, setAppearanceMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [appearanceLoading, setAppearanceLoading] = useState(false)
 
+  const [wheelMsg, setWheelMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [wheelLoading, setWheelLoading] = useState(false)
+
   const profileData = profile as any
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(profileData.theme_preference ?? 'system')
   const [accent, setAccent] = useState<string>(profileData.accent_colour ?? '#ff5722')
+  // Existing accounts predate the column, so treat a missing value as opted in.
+  const [wheelEnabled, setWheelEnabled] = useState<boolean>(profileData.wheel_enabled ?? true)
 
   async function handleProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -47,6 +52,22 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
     setPasswordMsg(result.success ? { ok: true, text: 'Password updated.' } : { ok: false, text: result.error })
     if (result.success) (e.target as HTMLFormElement).reset()
     setPasswordLoading(false)
+  }
+
+  async function handleWheelToggle(next: boolean) {
+    setWheelLoading(true)
+    setWheelMsg(null)
+    const result = await updateWheelEnabled(next)
+    if (result.success) {
+      setWheelEnabled(next)
+      setWheelMsg({
+        ok: true,
+        text: next ? 'Wheel turns are back on.' : 'Wheel turns are off. Your turn is saved.',
+      })
+    } else {
+      setWheelMsg({ ok: false, text: result.error })
+    }
+    setWheelLoading(false)
   }
 
   async function handleAppearance(e: React.FormEvent<HTMLFormElement>) {
@@ -253,6 +274,42 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
             <StatusMessage msg={appearanceMsg} />
           </div>
         </form>
+      </section>
+
+      {/* Wheel */}
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Wheel</h2>
+
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-fg-secondary">Wheel turns</p>
+            <p className="text-xs text-fg-subtle mt-1 leading-relaxed">
+              {wheelEnabled
+                ? 'Turn this off to stop taking wheel turns. The Wheel page and your current turn will be hidden, but you’ll keep earning tickets as normal, and your turn will be waiting if you come back.'
+                : 'Wheel turns are off. You’re still earning tickets as normal, and your current turn is saved — turn this back on to pick up exactly where you left off.'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={wheelEnabled}
+            aria-label="Wheel turns"
+            disabled={wheelLoading}
+            onClick={() => handleWheelToggle(!wheelEnabled)}
+            className={`relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${
+              wheelEnabled ? 'bg-brand-600' : 'bg-surface-active border border-edge-base'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                wheelEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        </div>
+
+        <StatusMessage msg={wheelMsg} />
       </section>
 
     </div>
