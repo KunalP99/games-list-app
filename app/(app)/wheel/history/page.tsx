@@ -7,6 +7,14 @@ import SpinTime from '@/components/wheel/SpinTime'
 
 const PAGE_SIZE = 20
 
+// What the player did, phrased to run on from their name: "Sam spun the wheel → X".
+const SPIN_TYPE_VERB: Record<SpinType, string> = {
+  spin: 'spun the wheel →',
+  spin_reroll: 'spun & rerolled →',
+  choose: 'chose',
+  choose_skip: 'skipped their turn',
+}
+
 type RawSpin = {
   id: string
   user_id: string
@@ -68,7 +76,12 @@ export default async function WheelHistoryPage({
 
       {pageSpins.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {/* One continuous log rather than a card grid: a grid row stretches
+              every card to the tallest one in it, so a Choose turn with nothing
+              but a result got padded out with dead space to match a Spin &
+              Reroll carrying spend rows and a wheel list. Here each entry is
+              only as tall as what it actually has to show. */}
+          <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden divide-y divide-edge-subtle">
             {pageSpins.map(spin => {
               const isCurrentUser = spin.user_id === user!.id
               const displayName = isCurrentUser
@@ -84,110 +97,119 @@ export default async function WheelHistoryPage({
                 ? spin.games_list.filter(g => g.toLowerCase() !== (spin.result_name ?? '').toLowerCase())
                 : [spin.option_a_name, spin.option_b_name].filter(Boolean) as string[]
               const runnerUp = rerollRunnerUp(spin.spin_type, spin.finalized_via, spin.option_a_name, spin.option_b_name, spin.result_name)
+              const wasSkipped = skippedBefore.has(spin.id)
+              // The whole point of the layout: this block only exists when
+              // there is something to put in it.
+              const hasDetail = wasSkipped || spendRows.length > 0 || otherGames.length > 0
 
               return (
                 <div
                   key={spin.id}
-                  className="bg-surface-base border border-edge-base rounded-xl overflow-hidden flex flex-col"
-                  style={isCurrentUser ? { borderColor: `${accentColour}60` } : undefined}
+                  // relative + z-10 on hover: once the row scales up it needs
+                  // to render above its neighbours rather than under them.
+                  // bg-surface-base gives it a solid backing while raised —
+                  // otherwise the lifted edges would show whatever's behind.
+                  // Only transform/shadow/radius are hover-conditional, so
+                  // there's no fight with the inline background below (an
+                  // inline style always wins over a class either way).
+                  className="group relative bg-surface-base flex gap-3 px-4 py-3 transition-transform duration-200 ease-out hover:z-10 hover:scale-[1.015] hover:shadow-md hover:rounded-lg motion-reduce:hover:scale-100"
+                  // Your own spins stay distinguishable on a page showing
+                  // everyone's — the old layout did this with a tinted card
+                  // header and accent border, neither of which exists now.
+                  style={isCurrentUser ? { backgroundColor: `${accentColour}0f` } : undefined}
                 >
-                  {/* Card header */}
+                  {/* Same avatar the Activity feed and dashboard use — the
+                      player's accent colour doubles as an at-a-glance "whose
+                      spin is this" marker on a page listing everyone's. */}
                   <div
-                    className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle"
-                    style={isCurrentUser ? { backgroundColor: `${accentColour}10` } : undefined}
+                    className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold text-white select-none"
+                    style={{ backgroundColor: accentColour }}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white"
-                        style={{ backgroundColor: accentColour }}
-                      >
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-fg-base truncate">{displayName}</p>
-                        <p className="text-[11px] text-fg-subtle">
-                          <SpinTime iso={spin.created_at} />
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    {initials}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-x-2 gap-y-1 flex-wrap">
+                      <span className="text-sm font-semibold text-fg-base">{displayName}</span>
+                      <span className="text-sm text-fg-muted">{SPIN_TYPE_VERB[spin.spin_type]}</span>
+                      {spin.result_name ? (
+                        <span className="text-sm font-bold text-fg-base">{spin.result_name}</span>
+                      ) : (
+                        <span className="text-sm text-fg-subtle italic">No game selected</span>
+                      )}
                       {badge && (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold border ${badge.className}`}>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold border ${badge.className}`}>
                           {label}
                         </span>
                       )}
                       {modeLabel && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-surface-active text-fg-muted border border-edge-base">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-surface-active text-fg-muted border border-edge-base">
                           {modeLabel}
                         </span>
                       )}
-                    </div>
-                  </div>
-
-                  {/* Card body */}
-                  <div className="px-4 py-4 flex-1 space-y-3">
-                    {/* Skip note */}
-                    {skippedBefore.has(spin.id) && (
-                      <div className="flex items-center justify-between">
-                        <p className="text-[11px] text-fg-muted font-medium flex items-center gap-1">
-                          <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 11.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5zm.75-3.5a.75.75 0 0 1-1.5 0v-4a.75.75 0 0 1 1.5 0v4z"/>
-                          </svg>
-                          Choose turn skipped
-                        </p>
-                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">+{TICKET_AWARDS.turn_skipped} 🎟️</span>
-                      </div>
-                    )}
-                    {/* One row per paid action — same treatment as the skip note */}
-                    {spendRows.map((row, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <p className="text-[11px] text-fg-muted font-medium flex items-center gap-1">
-                          <svg className="w-3 h-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 11.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5zm.75-3.5a.75.75 0 0 1-1.5 0v-4a.75.75 0 0 1 1.5 0v4z"/>
-                          </svg>
-                          {row.note}{row.count > 1 ? ` (×${row.count})` : ''}
-                        </p>
-                        <span className="text-[11px] font-semibold text-red-500 dark:text-red-400">−{row.amount} 🎟️</span>
-                      </div>
-                    ))}
-                    {/* Result */}
-                    <div>
-                      <p className="text-[10px] font-semibold text-fg-subtle uppercase tracking-wider mb-1">Result</p>
-                      {spin.result_name ? (
-                        <p className="text-base font-bold text-fg-base leading-snug">{spin.result_name}</p>
-                      ) : (
-                        <p className="text-sm text-fg-subtle italic">No game selected</p>
-                      )}
+                      <span className="ml-auto text-[11px] text-fg-subtle whitespace-nowrap">
+                        <SpinTime iso={spin.created_at} />
+                      </span>
                     </div>
 
-                    {/* Also on the wheel / also considered */}
-                    {otherGames.length > 0 && (
-                      <div>
-                        <p className="text-[10px] font-semibold text-fg-subtle uppercase tracking-wider mb-1.5">
-                          {spin.games_list ? 'Also on the wheel' : 'Also considered'}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {otherGames.map((opt, i) => {
-                            const isRunnerUp = runnerUp != null && opt.toLowerCase() === runnerUp.toLowerCase()
-                            return (
-                              <span
-                                key={i}
-                                title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
-                                className={
-                                  isRunnerUp
-                                    ? 'text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-lg px-2.5 py-1 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700'
-                                    : 'text-xs text-fg-secondary bg-surface-active border border-edge-base rounded-lg px-2.5 py-1'
-                                }
-                              >
-                                {opt}
-                              </span>
-                            )
-                          })}
-                        </div>
+                    {hasDetail && (
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        {/* Amount sits directly after its label rather than
+                            pushed to the far edge — these rows now span the
+                            full page width, and a number a thousand pixels
+                            from its label doesn't read as belonging to it. */}
+                        {wasSkipped && (
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="text-fg-muted font-medium">Choose turn skipped</span>
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">+{TICKET_AWARDS.turn_skipped} 🎟️</span>
+                          </div>
+                        )}
+                        {spendRows.map((row, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px]">
+                            <span className="text-fg-muted font-medium">
+                              {row.note}{row.count > 1 ? ` (×${row.count})` : ''}
+                            </span>
+                            <span className="font-semibold text-red-500 dark:text-red-400 whitespace-nowrap">−{row.amount} 🎟️</span>
+                          </div>
+                        ))}
+                        {otherGames.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {/* No label for the games_list case — a "spun the
+                                wheel → X" row followed by a row of game chips
+                                already says these were the other games on the
+                                wheel. "Also considered:" stays for the two-
+                                option case (games_list is null), where that
+                                context isn't already stated on the row. */}
+                            {!spin.games_list && (
+                              <span className="text-[11px] text-fg-subtle mr-0.5">Also considered:</span>
+                            )}
+                            {otherGames.map((opt, i) => {
+                              const isRunnerUp = runnerUp != null && opt.toLowerCase() === runnerUp.toLowerCase()
+                              return (
+                                <span
+                                  key={i}
+                                  title={isRunnerUp ? `Rerolled away from — you chose ${spin.result_name} over this` : undefined}
+                                  className={
+                                    isRunnerUp
+                                      // Same family as the "Spin + Reroll"
+                                      // badge (amber), but a solid dark fill
+                                      // instead of its light tint — related in
+                                      // colour, not equal in weight, so it
+                                      // reads as a pressed variant of the
+                                      // badge rather than competing with it.
+                                      ? 'text-[11px] font-medium text-white bg-amber-700 dark:bg-amber-800 rounded-md px-2 py-0.5 shadow-[inset_0_1px_3px_rgba(0,0,0,0.45)]'
+                                      : 'text-[11px] text-fg-secondary bg-surface-active border border-edge-base rounded-md px-2 py-0.5'
+                                  }
+                                >
+                                  {opt}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
-
                 </div>
               )
             })}
