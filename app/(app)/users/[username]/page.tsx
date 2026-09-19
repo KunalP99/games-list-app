@@ -27,7 +27,7 @@ export default async function UserProfilePage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, display_name, username, ticket_balance, accent_colour, wheel_turn')
+    .select('id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
     .eq('username', params.username)
     .single() as { data: Profile | null }
 
@@ -144,6 +144,10 @@ export default async function UserProfilePage({
   // logged in, so the friend's colour is always passed down as a value.
   const accent = profile.accent_colour ?? '#7c3aed'
 
+  // Someone who's opted out of wheel turns in Settings doesn't advertise one.
+  // Accounts predating the column read as opted in.
+  const wheelTurnBadge = (profile.wheel_enabled ?? true) ? (profile.wheel_turn ?? null) : null
+
   return (
     <div className="space-y-6">
       <ProfileHero
@@ -151,7 +155,7 @@ export default async function UserProfilePage({
         bannerImage={bannerImage}
         initials={initials}
         accent={accent}
-        wheelTurn={profile.wheel_turn ?? null}
+        wheelTurn={wheelTurnBadge}
       />
 
       {/* Everything runs full width in a single column. An earlier version put

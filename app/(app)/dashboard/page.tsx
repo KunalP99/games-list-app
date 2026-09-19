@@ -65,6 +65,11 @@ export default async function DashboardPage() {
   const friendIds = (friendProfiles ?? []).map(f => f.id)
   const allUserIds = [user!.id, ...friendIds]
 
+  // Opted out of wheel turns in Settings → the Current Turn card and the
+  // "Spin the Wheel" quick action drop out. Accounts predating the column
+  // read as opted in.
+  const wheelEnabled = profile?.wheel_enabled ?? true
+
   const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
 
   const completedCount = allGames?.filter(g => g.status === 'completed').length ?? 0
@@ -167,13 +172,18 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* auto-fit rather than a fixed column count: empty tracks collapse, so
+          the cards always stretch to fill the row whether there are 5 of them
+          or 4 (the wheel-off case, which left a gap under `lg:grid-cols-5`). */}
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard label="Tickets Earned" value={`🎟️ ${totalTicketsEarned}`} href="/tickets" linkLabel="View history" />
-        <StatCard
-          label="Current Turn"
-          value={formatTurn(profile?.wheel_turn ?? 'spin')}
-          href="/wheel"
-        />
+        {wheelEnabled && (
+          <StatCard
+            label="Current Turn"
+            value={formatTurn(profile?.wheel_turn ?? 'spin')}
+            href="/wheel"
+          />
+        )}
         <StatCard label="Games" value={String(allGames?.length ?? 0)} href="/games" linkLabel="View list" />
         <StatCard label="Total Hours" value={`${totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}h`} />
         <StatCard
@@ -188,9 +198,9 @@ export default async function DashboardPage() {
         <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">
           Quick Actions
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
           <QuickAction href="/games/new" label="Add a Game" icon="+" />
-          <QuickAction href="/wheel" label="Spin the Wheel" icon="🎡" />
+          {wheelEnabled && <QuickAction href="/wheel" label="Spin the Wheel" icon="🎡" />}
           <QuickAction href="/tickets" label="Ticket History" icon="🎟️" />
         </div>
       </div>

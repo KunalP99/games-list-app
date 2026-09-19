@@ -307,6 +307,8 @@ CREATE TABLE public.profiles (
     pending_wheel_game_id uuid,
     pending_wheel_turn text,
     tickets_earned_total integer DEFAULT 0 NOT NULL,
+    wheel_session jsonb,
+    wheel_enabled boolean DEFAULT true NOT NULL,
     CONSTRAINT profiles_pending_wheel_turn_check CHECK ((pending_wheel_turn = ANY (ARRAY['spin'::text, 'spin_reroll'::text, 'choose'::text]))),
     CONSTRAINT profiles_theme_preference_check CHECK ((theme_preference = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text]))),
     CONSTRAINT profiles_wheel_turn_check CHECK ((wheel_turn = ANY (ARRAY['spin'::text, 'spin_reroll'::text, 'choose'::text])))

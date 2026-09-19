@@ -97,12 +97,20 @@ export async function clearWheelSession() {
   return { success: true as const }
 }
 
+// Every wheel action routes through here, which makes it the one place to
+// enforce the Settings opt-out: a user with wheel turns switched off reads as
+// "no profile", and each caller already refuses on that (six guard `!profile`
+// explicitly, six via `profile?.`). The UI hides the wheel and /wheel redirects
+// when it's off, so reaching an action at all means a stale or hand-made
+// request — the refusal is defence in depth, not a path anyone sees.
 async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data } = await supabase
     .from('profiles')
-    .select('wheel_turn, ticket_balance')
+    .select('wheel_turn, ticket_balance, wheel_enabled')
     .eq('id', userId)
-    .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number } | null }
+    .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number; wheel_enabled: boolean | null } | null }
+  // Accounts predating the column read as opted in.
+  if (data && !(data.wheel_enabled ?? true)) return null
   return data
 }
 

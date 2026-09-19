@@ -27,6 +27,12 @@ const historyItems = [
 
 export default function Nav({ profile, notifications = [], unreadCount = 0, totalCount = 0 }: { profile: Profile; notifications?: NotificationWithGame[]; unreadCount?: number; totalCount?: number }) {
   const pathname = usePathname()
+  // Opting out of wheel turns in Settings takes the Wheel tab out of the nav.
+  // Wheel History stays — it's shared history, and still worth looking back on.
+  // Accounts predating the column read as opted in.
+  const primaryNavItems = (profile.wheel_enabled ?? true)
+    ? navItemsBefore
+    : navItemsBefore.filter(item => item.href !== '/wheel')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [ticketAnimating, setTicketAnimating] = useState(false)
@@ -102,7 +108,7 @@ export default function Nav({ profile, notifications = [], unreadCount = 0, tota
 
           {/* Center: desktop nav links */}
           <nav className="hidden lg:flex items-center gap-0.5">
-            {navItemsBefore.map((item) => {
+            {primaryNavItems.map((item) => {
               const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
               return (
                 <Link
@@ -233,7 +239,7 @@ export default function Nav({ profile, notifications = [], unreadCount = 0, tota
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
-          {[...navItemsBefore, ...navItemsAfter].map((item) => {
+          {[...primaryNavItems, ...navItemsAfter].map((item) => {
             const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
             return (
               <Link
