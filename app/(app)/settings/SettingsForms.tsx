@@ -290,6 +290,11 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
             </p>
           </div>
 
+          {/* No border in either state — a border on the "off" track only
+              would shrink the content box and nudge the knob sideways on
+              toggle. The off track is a solid mid-grey rather than
+              surface-active (zinc-100), which left the white knob all but
+              invisible against it in light mode. */}
           <button
             type="button"
             role="switch"
@@ -298,11 +303,15 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
             disabled={wheelLoading}
             onClick={() => handleWheelToggle(!wheelEnabled)}
             className={`relative shrink-0 w-11 h-6 rounded-full transition-colors disabled:opacity-50 ${
-              wheelEnabled ? 'bg-brand-600' : 'bg-surface-active border border-edge-base'
+              wheelEnabled ? 'bg-brand-600' : 'bg-zinc-300 dark:bg-zinc-600'
             }`}
           >
+            {/* left-0 is load-bearing: a <button> centres its inline content,
+                so without it the knob's static position resolves to the middle
+                of the track (22px) and both translate values land 22px too far
+                right — the "on" knob ends up entirely outside the track. */}
             <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+              className={`absolute left-0 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
                 wheelEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'
               }`}
             />

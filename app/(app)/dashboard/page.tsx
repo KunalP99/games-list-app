@@ -172,7 +172,10 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* auto-fit rather than a fixed column count: empty tracks collapse, so
+          the cards always stretch to fill the row whether there are 5 of them
+          or 4 (the wheel-off case, which left a gap under `lg:grid-cols-5`). */}
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
         <StatCard label="Tickets Earned" value={`🎟️ ${totalTicketsEarned}`} href="/tickets" linkLabel="View history" />
         {wheelEnabled && (
           <StatCard
@@ -195,7 +198,7 @@ export default async function DashboardPage() {
         <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">
           Quick Actions
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
           <QuickAction href="/games/new" label="Add a Game" icon="+" />
           {wheelEnabled && <QuickAction href="/wheel" label="Spin the Wheel" icon="🎡" />}
           <QuickAction href="/tickets" label="Ticket History" icon="🎟️" />
