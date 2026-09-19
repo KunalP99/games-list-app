@@ -355,6 +355,7 @@ export async function markAsCompleted(
     achievementProgress: number | null
     completionDate: string
     review: string | null
+    isFavourite: boolean
   },
 ) {
   const supabase = createClient()
@@ -373,6 +374,7 @@ export async function markAsCompleted(
     update.rating = details.rating
     update.achievement_progress = achievementProgress
     update.completion_date = details.completionDate
+    update.is_favourite = details.isFavourite
     if (details.review !== null) update.review = details.review
   } else {
     // Card quick-complete — read existing values for ticket calculation only

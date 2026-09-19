@@ -72,7 +72,7 @@ export default function CoverCard({ game, isOwner = true, showReleaseDate = fals
               <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
             )}
           </div>
-          {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} />}
+          {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} initialFavourite={game.is_favourite} />}
         </div>
       </div>
     </Link>

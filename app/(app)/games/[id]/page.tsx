@@ -247,7 +247,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         // Overlay actions (on the banner) — glass styling.
         const overlayActions = isOwner ? (
           <>
-            {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" />}
+            {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" initialFavourite={game.is_favourite} />}
             {game.status === 'playing' && <MarkDnfButton gameId={game.id} />}
             <Link
               href={`/games/${game.id}/edit`}
@@ -267,7 +267,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         // Off-image actions (no banner) — normal styling.
         const inlineActions = isOwner ? (
           <>
-            {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" />}
+            {game.status === 'playing' && <MarkCompletedButton gameId={game.id} variant="detail" initialFavourite={game.is_favourite} />}
             {game.status === 'playing' && <MarkDnfButton gameId={game.id} />}
             <Link
               href={`/games/${game.id}/edit`}

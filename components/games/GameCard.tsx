@@ -69,7 +69,7 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
                   : <span>{Math.round(game.achievement_progress)}%</span>
               )}
             </div>
-            {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} />}
+            {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} initialFavourite={game.is_favourite} />}
           </div>
         </div>
       </Link>
@@ -133,7 +133,7 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
               : <span>{Math.round(game.achievement_progress)}% achievements</span>
           )}
         </div>
-        {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} />}
+        {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} initialFavourite={game.is_favourite} />}
       </div>
     </Link>
   )

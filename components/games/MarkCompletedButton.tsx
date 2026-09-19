@@ -71,9 +71,14 @@ const inputClass = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm
 export default function MarkCompletedButton({
   gameId,
   variant = 'card',
+  initialFavourite = false,
 }: {
   gameId: string
   variant?: 'card' | 'detail'
+  /** The game's current is_favourite, so the toggle reflects reality rather
+   *  than always starting unchecked — a "playing" game can already be
+   *  favourited from the edit form before it's ever completed. */
+  initialFavourite?: boolean
 }) {
   const [pending, startTransition] = useTransition()
   const [showModal, setShowModal] = useState(false)
@@ -83,6 +88,7 @@ export default function MarkCompletedButton({
   const [achievementProgress, setAchievementProgress] = useState('')
   const [completionDate, setCompletionDate] = useState(() => new Date().toISOString().split('T')[0])
   const [review, setReview] = useState('')
+  const [isFavourite, setIsFavourite] = useState(initialFavourite)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -101,6 +107,7 @@ export default function MarkCompletedButton({
         achievementProgress: achievementProgress ? Number(achievementProgress) : null,
         completionDate,
         review: review.trim() || null,
+        isFavourite,
       })
     })
   }
@@ -128,6 +135,19 @@ export default function MarkCompletedButton({
                 <h2 className="text-lg font-semibold text-fg-base">Mark as Completed</h2>
                 <p className="text-sm text-fg-muted mt-0.5">All fields are optional — fill in what you know.</p>
               </div>
+
+              {/* Favourite */}
+              <button
+                type="button"
+                onClick={() => setIsFavourite(f => !f)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                  isFavourite
+                    ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
+                    : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
+                }`}
+              >
+                <span>★</span> Favourite
+              </button>
 
               {/* Rating */}
               <div>
@@ -238,6 +258,19 @@ export default function MarkCompletedButton({
               <h2 className="text-lg font-semibold text-fg-base">Mark as Completed</h2>
               <p className="text-sm text-fg-muted mt-0.5">All fields are optional — fill in what you know.</p>
             </div>
+
+            {/* Favourite */}
+            <button
+              type="button"
+              onClick={() => setIsFavourite(f => !f)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                isFavourite
+                  ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
+                  : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
+              }`}
+            >
+              <span>★</span> Favourite
+            </button>
 
             <div>
               <label className="block text-sm font-medium text-fg-secondary mb-2">Rating</label>
