@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { buildActivityItems, groupActivityItems, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
 
 // How many members of a day's batch get named before the rest collapse into a
 // "+N" chip. Three fits one line at the narrowest layout the row has.
@@ -100,8 +101,6 @@ export default async function ActivityPage() {
               // hidden behind +N.
               const batch = item.batch ?? []
               const isBatch = batch.length > 1
-              const shown = batch.slice(0, BATCH_SHOWN)
-              const hidden = batch.length - shown.length
               const batchNoun = item.type === 'backlog' ? 'games' : 'achievements'
 
               return (
@@ -150,28 +149,7 @@ export default async function ActivityPage() {
                     )}
                   </p>
 
-                  {isBatch && (
-                    <div className="flex items-center gap-1.5 mt-1.5 overflow-hidden">
-                      {shown.map(entry => (
-                        <span
-                          key={entry.id}
-                          title={entry.label}
-                          className="inline-flex items-center gap-1 max-w-[11rem] px-1.5 py-0.5 rounded-md bg-surface-active text-xs text-fg-secondary"
-                        >
-                          {entry.icon && <span aria-hidden="true">{entry.icon}</span>}
-                          <span className="truncate">{entry.label}</span>
-                        </span>
-                      ))}
-                      {hidden > 0 && (
-                        <span
-                          title={batch.slice(BATCH_SHOWN).map(e => e.label).join(', ')}
-                          className="shrink-0 px-1.5 py-0.5 rounded-md text-xs font-medium text-fg-muted"
-                        >
-                          +{hidden} more
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {isBatch && <ActivityBatchChips entries={batch} shown={BATCH_SHOWN} />}
 
                   <p className="text-xs text-fg-subtle mt-0.5">{formatActivityDate(item.date)}</p>
                 </div>
