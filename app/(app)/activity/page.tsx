@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
-import { buildActivityItems, groupAchievementUnlocks, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, groupActivityItems, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
 
-// How many achievements from a day's batch get named before the rest collapse
-// into a "+N" chip. Three fits one line at the narrowest layout the row has.
-const ACHIEVEMENTS_SHOWN = 3
+// How many members of a day's batch get named before the rest collapse into a
+// "+N" chip. Three fits one line at the narrowest layout the row has.
+const BATCH_SHOWN = 3
 
 export default async function ActivityPage() {
   const supabase = createClient()
@@ -78,7 +78,7 @@ export default async function ActivityPage() {
 
   // Group before slicing, so a day of unlocks costs one row of the 40 rather
   // than crowding everything else out.
-  const items = groupAchievementUnlocks(
+  const items = groupActivityItems(
     buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks),
   ).slice(0, 40)
 
@@ -95,12 +95,14 @@ export default async function ActivityPage() {
         <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden">
           <div className="divide-y divide-edge-subtle">
             {items.map((item, i) => {
-              // A day's worth of unlocks renders as one row: a count in the
-              // headline, then named chips with the remainder hidden behind +N.
-              const batch = item.achievements ?? []
+              // A day's worth of unlocks (or backlog adds) renders as one row:
+              // a count in the headline, then named chips with the remainder
+              // hidden behind +N.
+              const batch = item.batch ?? []
               const isBatch = batch.length > 1
-              const shown = batch.slice(0, ACHIEVEMENTS_SHOWN)
+              const shown = batch.slice(0, BATCH_SHOWN)
               const hidden = batch.length - shown.length
+              const batchNoun = item.type === 'backlog' ? 'games' : 'achievements'
 
               return (
               <div key={i} className="flex items-center gap-3 px-4 py-3.5">
@@ -128,32 +130,41 @@ export default async function ActivityPage() {
                       {item.isSelf ? 'You' : item.displayName}
                     </span>
                     {' '}
-                    <span className="text-fg-muted">{activityVerb(item)}</span>
-                    {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
+                    {/* "added to backlog" reads wrong with a count after it,
+                        so a backlog batch splits the verb around the number:
+                        "added 4 games to backlog". */}
+                    <span className="text-fg-muted">
+                      {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
+                    </span>
+                    {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
                       <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                     )}
-                    {isBatch
-                      ? <>{' '}<span className="font-medium">{batch.length} achievements</span></>
-                      : item.achievementName && (
-                          <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
-                        )}
+                    {isBatch && (
+                      <>
+                        {' '}<span className="font-medium">{batch.length} {batchNoun}</span>
+                        {item.type === 'backlog' && <span className="text-fg-muted"> to backlog</span>}
+                      </>
+                    )}
+                    {!isBatch && item.achievementName && (
+                      <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
+                    )}
                   </p>
 
                   {isBatch && (
                     <div className="flex items-center gap-1.5 mt-1.5 overflow-hidden">
-                      {shown.map(a => (
+                      {shown.map(entry => (
                         <span
-                          key={a.id}
-                          title={a.name}
+                          key={entry.id}
+                          title={entry.label}
                           className="inline-flex items-center gap-1 max-w-[11rem] px-1.5 py-0.5 rounded-md bg-surface-active text-xs text-fg-secondary"
                         >
-                          <span aria-hidden="true">{a.icon}</span>
-                          <span className="truncate">{a.name}</span>
+                          {entry.icon && <span aria-hidden="true">{entry.icon}</span>}
+                          <span className="truncate">{entry.label}</span>
                         </span>
                       ))}
                       {hidden > 0 && (
                         <span
-                          title={batch.slice(ACHIEVEMENTS_SHOWN).map(a => a.name).join(', ')}
+                          title={batch.slice(BATCH_SHOWN).map(e => e.label).join(', ')}
                           className="shrink-0 px-1.5 py-0.5 rounded-md text-xs font-medium text-fg-muted"
                         >
                           +{hidden} more

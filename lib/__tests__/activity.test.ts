@@ -4,7 +4,7 @@ import {
   activityVerb,
   formatActivityDate,
   getInitials,
-  groupAchievementUnlocks,
+  groupActivityItems,
   type ActivityItem,
   type RawAchievementUnlock,
 } from '../activity'
@@ -347,7 +347,7 @@ describe('completion XP calculation', () => {
   })
 })
 
-// ─── groupAchievementUnlocks ─────────────────────────────────────────────────
+// ─── groupActivityItems ─────────────────────────────────────────────────
 
 const unlock = (over: Partial<ActivityItem> = {}): ActivityItem => ({
   type: 'achievement_unlock',
@@ -364,19 +364,19 @@ const unlock = (over: Partial<ActivityItem> = {}): ActivityItem => ({
   ...over,
 })
 
-describe('groupAchievementUnlocks', () => {
+describe('groupActivityItems', () => {
   it('collapses one user\'s unlocks from the same day into a single item', () => {
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       unlock({ achievementId: 'a1', date: '2024-03-15T18:00:00Z' }),
       unlock({ achievementId: 'a2', date: '2024-03-15T12:00:00Z' }),
       unlock({ achievementId: 'a3', date: '2024-03-15T09:00:00Z' }),
     ])
     expect(out).toHaveLength(1)
-    expect(out[0].achievements?.map(a => a.id)).toEqual(['a1', 'a2', 'a3'])
+    expect(out[0].batch?.map(e => e.id)).toEqual(['a1', 'a2', 'a3'])
   })
 
   it('keeps the most recent timestamp for the group', () => {
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       unlock({ achievementId: 'a1', date: '2024-03-15T18:00:00Z' }),
       unlock({ achievementId: 'a2', date: '2024-03-15T09:00:00Z' }),
     ])
@@ -384,7 +384,7 @@ describe('groupAchievementUnlocks', () => {
   })
 
   it('totals the XP across the batch', () => {
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       unlock({ achievementId: 'a1', xpEarned: 10 }),
       unlock({ achievementId: 'a2', xpEarned: 25 }),
       unlock({ achievementId: 'a3', xpEarned: 5 }),
@@ -393,7 +393,7 @@ describe('groupAchievementUnlocks', () => {
   })
 
   it('does not merge across days', () => {
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       unlock({ achievementId: 'a1', date: '2024-03-15T10:00:00Z' }),
       unlock({ achievementId: 'a2', date: '2024-03-14T10:00:00Z' }),
     ])
@@ -401,7 +401,7 @@ describe('groupAchievementUnlocks', () => {
   })
 
   it('does not merge different users on the same day', () => {
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       unlock({ userId: 'user-1', achievementId: 'a1' }),
       unlock({ userId: 'user-2', achievementId: 'a2' }),
     ])
@@ -411,19 +411,19 @@ describe('groupAchievementUnlocks', () => {
   it('groups a user\'s unlocks even when another user\'s interleave', () => {
     // The feed is sorted by time, so two people unlocking on the same day
     // arrive interleaved — grouping must not depend on adjacency.
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       unlock({ userId: 'user-1', achievementId: 'a1', date: '2024-03-15T18:00:00Z' }),
       unlock({ userId: 'user-2', achievementId: 'b1', date: '2024-03-15T17:00:00Z' }),
       unlock({ userId: 'user-1', achievementId: 'a2', date: '2024-03-15T16:00:00Z' }),
     ])
     expect(out).toHaveLength(2)
-    expect(out[0].achievements?.map(a => a.id)).toEqual(['a1', 'a2'])
-    expect(out[1].achievements?.map(a => a.id)).toEqual(['b1'])
+    expect(out[0].batch?.map(e => e.id)).toEqual(['a1', 'a2'])
+    expect(out[1].batch?.map(e => e.id)).toEqual(['b1'])
   })
 
   it('gives a lone unlock a one-entry list, so the UI has one shape to read', () => {
-    const out = groupAchievementUnlocks([unlock()])
-    expect(out[0].achievements).toEqual([{ id: 'a1', name: 'First Steps', icon: '🥇' }])
+    const out = groupActivityItems([unlock()])
+    expect(out[0].batch).toEqual([{ id: 'a1', label: 'First Steps', icon: '🥇' }])
   })
 
   it('passes other activity types through untouched and in order', () => {
@@ -431,25 +431,96 @@ describe('groupAchievementUnlocks', () => {
       type: 'completed', userId: 'user-1', displayName: 'Alice Smith', username: 'alice',
       accentColour: '#e11d48', gameTitle: 'Elden Ring', date: '2024-03-15T20:00:00Z', isSelf: false,
     }
-    const out = groupAchievementUnlocks([
+    const out = groupActivityItems([
       completed,
       unlock({ achievementId: 'a1' }),
       unlock({ achievementId: 'a2' }),
     ])
     expect(out).toHaveLength(2)
     expect(out[0]).toBe(completed)
-    expect(out[0].achievements).toBeUndefined()
+    expect(out[0].batch).toBeUndefined()
   })
 
   it('does not mutate the items it was given', () => {
     const a = unlock({ achievementId: 'a1' })
     const b = unlock({ achievementId: 'a2' })
-    groupAchievementUnlocks([a, b])
-    expect(a.achievements).toBeUndefined()
+    groupActivityItems([a, b])
+    expect(a.batch).toBeUndefined()
     expect(a.xpEarned).toBe(10)
   })
 
   it('returns an empty list unchanged', () => {
-    expect(groupAchievementUnlocks([])).toEqual([])
+    expect(groupActivityItems([])).toEqual([])
+  })
+})
+
+// ─── groupActivityItems: backlog adds ────────────────────────────────────────
+
+const backlogAdd = (over: Partial<ActivityItem> = {}): ActivityItem => ({
+  type: 'backlog',
+  userId: 'user-1',
+  displayName: 'Alice Smith',
+  username: 'alice',
+  accentColour: '#e11d48',
+  gameId: 'g1',
+  gameTitle: 'Hades',
+  date: '2024-03-15T10:00:00Z',
+  isSelf: false,
+  ...over,
+})
+
+describe('groupActivityItems: backlog adds', () => {
+  it('stacks a day\'s backlog adds into one item', () => {
+    const out = groupActivityItems([
+      backlogAdd({ gameId: 'g1', gameTitle: 'Hades', date: '2024-03-15T18:00:00Z' }),
+      backlogAdd({ gameId: 'g2', gameTitle: 'Celeste', date: '2024-03-15T17:00:00Z' }),
+      backlogAdd({ gameId: 'g3', gameTitle: 'Hollow Knight', date: '2024-03-15T16:00:00Z' }),
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0].batch?.map(e => e.label)).toEqual(['Hades', 'Celeste', 'Hollow Knight'])
+    expect(out[0].date).toBe('2024-03-15T18:00:00Z')
+  })
+
+  it('carries no icon for games, unlike achievements', () => {
+    const out = groupActivityItems([backlogAdd()])
+    expect(out[0].batch).toEqual([{ id: 'g1', label: 'Hades', icon: undefined }])
+  })
+
+  it('keeps backlog adds and achievement unlocks in separate groups', () => {
+    // Same user, same day, different kinds of event — stacking them together
+    // would read as nonsense ("added 4 games" including an achievement).
+    const out = groupActivityItems([
+      backlogAdd({ gameId: 'g1', date: '2024-03-15T18:00:00Z' }),
+      unlock({ achievementId: 'a1', date: '2024-03-15T17:00:00Z' }),
+      backlogAdd({ gameId: 'g2', date: '2024-03-15T16:00:00Z' }),
+      unlock({ achievementId: 'a2', date: '2024-03-15T15:00:00Z' }),
+    ])
+    expect(out).toHaveLength(2)
+    expect(out[0].type).toBe('backlog')
+    expect(out[0].batch?.map(e => e.id)).toEqual(['g1', 'g2'])
+    expect(out[1].type).toBe('achievement_unlock')
+    expect(out[1].batch?.map(e => e.id)).toEqual(['a1', 'a2'])
+  })
+
+  it('does not merge backlog adds across days or users', () => {
+    expect(groupActivityItems([
+      backlogAdd({ gameId: 'g1', date: '2024-03-15T10:00:00Z' }),
+      backlogAdd({ gameId: 'g2', date: '2024-03-14T10:00:00Z' }),
+    ])).toHaveLength(2)
+    expect(groupActivityItems([
+      backlogAdd({ userId: 'user-1', gameId: 'g1' }),
+      backlogAdd({ userId: 'user-2', gameId: 'g2' }),
+    ])).toHaveLength(2)
+  })
+
+  it('leaves completions ungrouped — those are worth a row each', () => {
+    const completed = (id: string, title: string): ActivityItem => ({
+      type: 'completed', userId: 'user-1', displayName: 'Alice Smith', username: 'alice',
+      accentColour: '#e11d48', gameId: id, gameTitle: title,
+      date: '2024-03-15T10:00:00Z', isSelf: false,
+    })
+    const out = groupActivityItems([completed('g1', 'Hades'), completed('g2', 'Celeste')])
+    expect(out).toHaveLength(2)
+    expect(out[0].batch).toBeUndefined()
   })
 })
