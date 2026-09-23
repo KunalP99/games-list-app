@@ -4,6 +4,7 @@ import {
   activityVerb,
   formatActivityDate,
   getInitials,
+  groupAchievementUnlocks,
   type ActivityItem,
   type RawAchievementUnlock,
 } from '../activity'
@@ -343,5 +344,112 @@ describe('completion XP calculation', () => {
   it('does not add achievement bonus for 99%', () => {
     const [item] = buildActivityItems([completedGame(10, 99)], [], profiles, {}, 'user-2')
     expect(item.xpEarned).toBe(50)
+  })
+})
+
+// ─── groupAchievementUnlocks ─────────────────────────────────────────────────
+
+const unlock = (over: Partial<ActivityItem> = {}): ActivityItem => ({
+  type: 'achievement_unlock',
+  userId: 'user-1',
+  displayName: 'Alice Smith',
+  username: 'alice',
+  accentColour: '#e11d48',
+  achievementId: 'a1',
+  achievementName: 'First Steps',
+  achievementIcon: '🥇',
+  xpEarned: 10,
+  date: '2024-03-15T10:00:00Z',
+  isSelf: false,
+  ...over,
+})
+
+describe('groupAchievementUnlocks', () => {
+  it('collapses one user\'s unlocks from the same day into a single item', () => {
+    const out = groupAchievementUnlocks([
+      unlock({ achievementId: 'a1', date: '2024-03-15T18:00:00Z' }),
+      unlock({ achievementId: 'a2', date: '2024-03-15T12:00:00Z' }),
+      unlock({ achievementId: 'a3', date: '2024-03-15T09:00:00Z' }),
+    ])
+    expect(out).toHaveLength(1)
+    expect(out[0].achievements?.map(a => a.id)).toEqual(['a1', 'a2', 'a3'])
+  })
+
+  it('keeps the most recent timestamp for the group', () => {
+    const out = groupAchievementUnlocks([
+      unlock({ achievementId: 'a1', date: '2024-03-15T18:00:00Z' }),
+      unlock({ achievementId: 'a2', date: '2024-03-15T09:00:00Z' }),
+    ])
+    expect(out[0].date).toBe('2024-03-15T18:00:00Z')
+  })
+
+  it('totals the XP across the batch', () => {
+    const out = groupAchievementUnlocks([
+      unlock({ achievementId: 'a1', xpEarned: 10 }),
+      unlock({ achievementId: 'a2', xpEarned: 25 }),
+      unlock({ achievementId: 'a3', xpEarned: 5 }),
+    ])
+    expect(out[0].xpEarned).toBe(40)
+  })
+
+  it('does not merge across days', () => {
+    const out = groupAchievementUnlocks([
+      unlock({ achievementId: 'a1', date: '2024-03-15T10:00:00Z' }),
+      unlock({ achievementId: 'a2', date: '2024-03-14T10:00:00Z' }),
+    ])
+    expect(out).toHaveLength(2)
+  })
+
+  it('does not merge different users on the same day', () => {
+    const out = groupAchievementUnlocks([
+      unlock({ userId: 'user-1', achievementId: 'a1' }),
+      unlock({ userId: 'user-2', achievementId: 'a2' }),
+    ])
+    expect(out).toHaveLength(2)
+  })
+
+  it('groups a user\'s unlocks even when another user\'s interleave', () => {
+    // The feed is sorted by time, so two people unlocking on the same day
+    // arrive interleaved — grouping must not depend on adjacency.
+    const out = groupAchievementUnlocks([
+      unlock({ userId: 'user-1', achievementId: 'a1', date: '2024-03-15T18:00:00Z' }),
+      unlock({ userId: 'user-2', achievementId: 'b1', date: '2024-03-15T17:00:00Z' }),
+      unlock({ userId: 'user-1', achievementId: 'a2', date: '2024-03-15T16:00:00Z' }),
+    ])
+    expect(out).toHaveLength(2)
+    expect(out[0].achievements?.map(a => a.id)).toEqual(['a1', 'a2'])
+    expect(out[1].achievements?.map(a => a.id)).toEqual(['b1'])
+  })
+
+  it('gives a lone unlock a one-entry list, so the UI has one shape to read', () => {
+    const out = groupAchievementUnlocks([unlock()])
+    expect(out[0].achievements).toEqual([{ id: 'a1', name: 'First Steps', icon: '🥇' }])
+  })
+
+  it('passes other activity types through untouched and in order', () => {
+    const completed: ActivityItem = {
+      type: 'completed', userId: 'user-1', displayName: 'Alice Smith', username: 'alice',
+      accentColour: '#e11d48', gameTitle: 'Elden Ring', date: '2024-03-15T20:00:00Z', isSelf: false,
+    }
+    const out = groupAchievementUnlocks([
+      completed,
+      unlock({ achievementId: 'a1' }),
+      unlock({ achievementId: 'a2' }),
+    ])
+    expect(out).toHaveLength(2)
+    expect(out[0]).toBe(completed)
+    expect(out[0].achievements).toBeUndefined()
+  })
+
+  it('does not mutate the items it was given', () => {
+    const a = unlock({ achievementId: 'a1' })
+    const b = unlock({ achievementId: 'a2' })
+    groupAchievementUnlocks([a, b])
+    expect(a.achievements).toBeUndefined()
+    expect(a.xpEarned).toBe(10)
+  })
+
+  it('returns an empty list unchanged', () => {
+    expect(groupAchievementUnlocks([])).toEqual([])
   })
 })

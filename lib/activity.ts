@@ -1,3 +1,5 @@
+export type ActivityAchievement = { id: string; name: string; icon: string }
+
 export type ActivityItem = {
   type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'game_chosen' | 'choose_skip' | 'achievement_unlock'
   userId: string
@@ -14,6 +16,12 @@ export type ActivityItem = {
   achievementId?: string
   achievementName?: string
   achievementIcon?: string
+  /**
+   * Every achievement in a day's batch, set by groupAchievementUnlocks. Always
+   * present on a grouped unlock (length 1 for a lone one), absent on every
+   * other activity type.
+   */
+  achievements?: ActivityAchievement[]
   date: string
   isSelf: boolean
 }
@@ -150,6 +158,54 @@ export function buildActivityItems(
   }
 
   return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+}
+
+/**
+ * Collapse each user's achievement unlocks from the same day into one item.
+ *
+ * Unlocks arrive in bursts — finishing one game can trip five achievements at
+ * once — which otherwise buries every other kind of activity under a wall of
+ * near-identical rows. Everything else passes through untouched, and the
+ * original order is preserved: a group sits where its most recent unlock was.
+ *
+ * Grouping is by UTC day rather than the viewer's local day. Both the feed and
+ * Vercel run in UTC, so this matches what the timestamps mean there; the only
+ * cost is that a user in another timezone could see a late-evening unlock
+ * grouped with the following day's.
+ */
+export function groupAchievementUnlocks(items: ActivityItem[]): ActivityItem[] {
+  const out: ActivityItem[] = []
+  const groupIndex = new Map<string, number>()
+
+  for (const item of items) {
+    if (item.type !== 'achievement_unlock') {
+      out.push(item)
+      continue
+    }
+    const entry: ActivityAchievement = {
+      id: item.achievementId ?? '',
+      name: item.achievementName ?? '',
+      icon: item.achievementIcon ?? '',
+    }
+    // Normalise through Date rather than slicing the string: a timestamp
+    // carrying a non-UTC offset would otherwise key on the wrong day.
+    const day = new Date(item.date)
+    const key = `${item.userId}|${isNaN(day.getTime()) ? item.date : day.toISOString().slice(0, 10)}`
+    const at = groupIndex.get(key)
+
+    if (at == null) {
+      groupIndex.set(key, out.length)
+      out.push({ ...item, achievements: [entry] })
+      continue
+    }
+    // Merge into the existing group: keep its (more recent) date and headline
+    // achievement, append this one, and total the XP.
+    const group = out[at]
+    group.achievements = [...(group.achievements ?? []), entry]
+    group.xpEarned = (group.xpEarned ?? 0) + (item.xpEarned ?? 0)
+  }
+
+  return out
 }
 
 export function activityVerb(item: ActivityItem): string {

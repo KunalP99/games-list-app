@@ -1,7 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
-import { buildActivityItems, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, groupAchievementUnlocks, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+
+// How many achievements from a day's batch get named before the rest collapse
+// into a "+N" chip. Three fits one line at the narrowest layout the row has.
+const ACHIEVEMENTS_SHOWN = 3
 
 export default async function ActivityPage() {
   const supabase = createClient()
@@ -72,7 +76,11 @@ export default async function ActivityPage() {
     { displayName: p.display_name ?? p.username, username: p.username, accentColour: p.accent_colour ?? null },
   ]))
 
-  const items = buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks).slice(0, 40)
+  // Group before slicing, so a day of unlocks costs one row of the 40 rather
+  // than crowding everything else out.
+  const items = groupAchievementUnlocks(
+    buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks),
+  ).slice(0, 40)
 
   return (
     <div className="space-y-6">
@@ -86,7 +94,15 @@ export default async function ActivityPage() {
       ) : (
         <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden">
           <div className="divide-y divide-edge-subtle">
-            {items.map((item, i) => (
+            {items.map((item, i) => {
+              // A day's worth of unlocks renders as one row: a count in the
+              // headline, then named chips with the remainder hidden behind +N.
+              const batch = item.achievements ?? []
+              const isBatch = batch.length > 1
+              const shown = batch.slice(0, ACHIEVEMENTS_SHOWN)
+              const hidden = batch.length - shown.length
+
+              return (
               <div key={i} className="flex items-center gap-3 px-4 py-3.5">
                 {/* Avatar */}
                 <div
@@ -116,10 +132,36 @@ export default async function ActivityPage() {
                     {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
                       <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                     )}
-                    {item.achievementName && (
-                      <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
-                    )}
+                    {isBatch
+                      ? <>{' '}<span className="font-medium">{batch.length} achievements</span></>
+                      : item.achievementName && (
+                          <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
+                        )}
                   </p>
+
+                  {isBatch && (
+                    <div className="flex items-center gap-1.5 mt-1.5 overflow-hidden">
+                      {shown.map(a => (
+                        <span
+                          key={a.id}
+                          title={a.name}
+                          className="inline-flex items-center gap-1 max-w-[11rem] px-1.5 py-0.5 rounded-md bg-surface-active text-xs text-fg-secondary"
+                        >
+                          <span aria-hidden="true">{a.icon}</span>
+                          <span className="truncate">{a.name}</span>
+                        </span>
+                      ))}
+                      {hidden > 0 && (
+                        <span
+                          title={batch.slice(ACHIEVEMENTS_SHOWN).map(a => a.name).join(', ')}
+                          className="shrink-0 px-1.5 py-0.5 rounded-md text-xs font-medium text-fg-muted"
+                        >
+                          +{hidden} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <p className="text-xs text-fg-subtle mt-0.5">{formatActivityDate(item.date)}</p>
                 </div>
 
@@ -135,7 +177,8 @@ export default async function ActivityPage() {
                   </div>
                 ) : null}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
