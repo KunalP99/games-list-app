@@ -299,9 +299,10 @@ export async function getGameExtras(id: number): Promise<GameExtras> {
     aggregated_rating_count?: number
     rating?: number
     rating_count?: number
+    external_games?: Array<{ uid?: string; external_game_source?: number }>
   }
   const rows = await igdbQuery<Row>('games',
-    `fields involved_companies.developer, involved_companies.publisher, involved_companies.porting, involved_companies.company.name, involved_companies.company.logo.image_id, game_modes.name, player_perspectives.name, themes.name, franchises.name, game_engines.name, aggregated_rating, aggregated_rating_count, rating, rating_count; where id = ${id}; limit 1;`)
+    `fields involved_companies.developer, involved_companies.publisher, involved_companies.porting, involved_companies.company.name, involved_companies.company.logo.image_id, game_modes.name, player_perspectives.name, themes.name, franchises.name, game_engines.name, aggregated_rating, aggregated_rating_count, rating, rating_count, external_games.uid, external_games.external_game_source; where id = ${id}; limit 1;`)
   const g = rows[0]
   if (!g) return EMPTY_GAME_EXTRAS
 
@@ -340,7 +341,24 @@ export async function getGameExtras(id: number): Promise<GameExtras> {
     criticRatingCount: g.aggregated_rating_count ?? null,
     userRating: g.rating != null ? Math.round(g.rating) : null,
     userRatingCount: g.rating_count ?? null,
+    // external_game_source 1 = Steam. A game can carry many external ids
+    // (GOG, Epic, PlayStation…) in arbitrary order, so filter rather than
+    // taking the first. uid is a string; the app id is numeric.
+    steamAppId: steamAppIdFrom(g.external_games),
   }
+}
+
+// Exported for its unit tests — the filtering is the part that can silently
+// regress into "first external id wins", which would point at the wrong store.
+export function steamAppIdFrom(
+  external: Array<{ uid?: string; external_game_source?: number }> | undefined,
+): number | null {
+  for (const e of external ?? []) {
+    if (e.external_game_source !== 1 || !e.uid) continue
+    const n = Number(e.uid)
+    if (Number.isInteger(n) && n > 0) return n
+  }
+  return null
 }
 
 // Mainline games by the game's developer. Excludes the game itself, plus DLC,

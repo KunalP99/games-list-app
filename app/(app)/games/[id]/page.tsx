@@ -6,6 +6,7 @@ import type { Game } from '@/lib/types'
 import { getRawgScreenshots, getRawgAchievements, getGameExtras, getDeveloperGames, providerIdOf, EMPTY_GAME_EXTRAS } from '@/lib/rawg'
 import type { RawgScreenshot, RawgAchievement, DeveloperGamesInfo } from '@/lib/rawg'
 import GameAbout from '@/components/games/GameAbout'
+import { getSteamReviewSummary, steamReviewBadge } from '@/lib/steam'
 import DeveloperGames from '@/components/games/DeveloperGames'
 import StatusBadge from '@/components/games/StatusBadge'
 import DeleteGameButton from '@/components/games/DeleteGameButton'
@@ -106,10 +107,15 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         ? (a.displayName ?? a.username).localeCompare(b.displayName ?? b.username)
         : a.status === 'playing' ? -1 : 1,
     )
+  // Steam's review verdict. Sequential rather than part of the Promise.all
+  // above because the app id it needs arrives with `extras` — but it's a
+  // keyless HTTP GET cached for a day, not another throttled IGDB call.
+  const steamReview = steamReviewBadge(await getSteamReviewSummary(extras.steamAppId))
+
   const hasAboutExtras =
     extras.companies.length > 0 || extras.gameModes.length > 0 || extras.playerPerspectives.length > 0 ||
     extras.themes.length > 0 || Boolean(extras.franchise) || extras.engines.length > 0 ||
-    extras.criticRating != null || extras.userRating != null
+    extras.criticRating != null || extras.userRating != null || steamReview != null
   const hasAbout = Boolean(game.description) || hasAboutExtras
   const hasSidebar = hasAbout || playedBy.length > 0
 
@@ -354,7 +360,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           sidebar copies take over at lg+ */}
       {hasAbout && (
         <div className="lg:hidden">
-          <GameAbout description={game.description} extras={extras} />
+          <GameAbout description={game.description} extras={extras} steamReview={steamReview} />
         </div>
       )}
       {playedBy.length > 0 && (
@@ -456,7 +462,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       {/* Sidebar (lg+ only) — About, then "also played by" beneath it */}
       {hasSidebar && (
         <aside className="hidden lg:block space-y-6 lg:sticky lg:top-24">
-          {hasAbout && <GameAbout description={game.description} extras={extras} />}
+          {hasAbout && <GameAbout description={game.description} extras={extras} steamReview={steamReview} />}
           {playedBy.length > 0 && <PlayedByCard players={playedBy} />}
         </aside>
       )}
