@@ -1,3 +1,6 @@
+/** One member of a stacked row — an achievement, or a game added to backlog. */
+export type ActivityBatchEntry = { id: string; label: string; icon?: string }
+
 export type ActivityItem = {
   type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'game_chosen' | 'choose_skip' | 'achievement_unlock'
   userId: string
@@ -14,6 +17,11 @@ export type ActivityItem = {
   achievementId?: string
   achievementName?: string
   achievementIcon?: string
+  /**
+   * Every member of a day's batch, set by groupActivityItems. Present on the
+   * groupable types (length 1 when there was only one), absent on the rest.
+   */
+  batch?: ActivityBatchEntry[]
   date: string
   isSelf: boolean
 }
@@ -150,6 +158,70 @@ export function buildActivityItems(
   }
 
   return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+}
+
+/**
+ * Activity types that arrive in bursts and are worth stacking: finishing one
+ * game can trip five achievements, and a session with the importer or the
+ * "+ Backlog" buttons adds a run of games. Left ungrouped, either buries every
+ * other kind of activity under a wall of near-identical rows.
+ *
+ * Completions and wheel spins are deliberately absent — those are the events
+ * people actually want to see listed individually.
+ */
+const GROUPABLE: Partial<Record<ActivityItem['type'], (item: ActivityItem) => ActivityBatchEntry>> = {
+  achievement_unlock: item => ({
+    id: item.achievementId ?? '',
+    label: item.achievementName ?? '',
+    icon: item.achievementIcon,
+  }),
+  backlog: item => ({ id: item.gameId ?? '', label: item.gameTitle ?? '' }),
+}
+
+/**
+ * Collapse each user's same-day items of a groupable type into one entry.
+ *
+ * Everything else passes through untouched, and the original order is
+ * preserved: a group sits where its most recent member was. Grouping does not
+ * depend on adjacency, because two people acting on the same day arrive
+ * interleaved by timestamp.
+ *
+ * Grouping is by UTC day rather than the viewer's local day. Both the feed and
+ * Vercel run in UTC, so this matches what the timestamps mean there; the only
+ * cost is that a user in another timezone could see a late-evening item
+ * grouped with the following day's.
+ */
+export function groupActivityItems(items: ActivityItem[]): ActivityItem[] {
+  const out: ActivityItem[] = []
+  const groupIndex = new Map<string, number>()
+
+  for (const item of items) {
+    const toEntry = GROUPABLE[item.type]
+    if (!toEntry) {
+      out.push(item)
+      continue
+    }
+    // Normalise through Date rather than slicing the string: a timestamp
+    // carrying a non-UTC offset would otherwise key on the wrong day.
+    const day = new Date(item.date)
+    const dayKey = isNaN(day.getTime()) ? item.date : day.toISOString().slice(0, 10)
+    // Type is part of the key so a day's unlocks and backlog adds stay apart.
+    const key = `${item.userId}|${item.type}|${dayKey}`
+    const at = groupIndex.get(key)
+
+    if (at == null) {
+      groupIndex.set(key, out.length)
+      out.push({ ...item, batch: [toEntry(item)] })
+      continue
+    }
+    // Merge into the existing group: keep its (more recent) date and headline,
+    // append this one, and total any XP.
+    const group = out[at]
+    group.batch = [...(group.batch ?? []), toEntry(item)]
+    if (item.xpEarned != null) group.xpEarned = (group.xpEarned ?? 0) + item.xpEarned
+  }
+
+  return out
 }
 
 export function activityVerb(item: ActivityItem): string {

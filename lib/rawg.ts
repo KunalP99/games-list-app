@@ -132,12 +132,17 @@ export type GameExtras = {
   criticRatingCount: number | null
   userRating: number | null       // IGDB community score (%)
   userRatingCount: number | null  // number of users who rated
+  // Steam app id, from IGDB's external_games. Carried here rather than fetched
+  // separately because the extras query already hits the games endpoint, so it
+  // costs no extra IGDB round-trip (and they're throttled to 4/sec). Null for
+  // games with no Steam release, and always null on the RAWG path.
+  steamAppId: number | null
 }
 
 export const EMPTY_GAME_EXTRAS: GameExtras = {
   companies: [], gameModes: [], playerPerspectives: [], themes: [],
   franchise: null, engines: [], criticRating: null, criticRatingCount: null,
-  userRating: null, userRatingCount: null,
+  userRating: null, userRatingCount: null, steamAppId: null,
 }
 
 // IGDB has involved-company roles + logos and the facts block; RAWG does not,

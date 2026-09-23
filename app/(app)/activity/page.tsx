@@ -1,7 +1,13 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
-import { buildActivityItems, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, groupActivityItems, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
+
+// How many members of a day's batch get named before the rest collapse into a
+// "+N" chip. Three fits one line at the narrowest layout the row has.
+const BATCH_SHOWN = 3
 
 export default async function ActivityPage() {
   const supabase = createClient()
@@ -72,7 +78,11 @@ export default async function ActivityPage() {
     { displayName: p.display_name ?? p.username, username: p.username, accentColour: p.accent_colour ?? null },
   ]))
 
-  const items = buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks).slice(0, 40)
+  // Group before slicing, so a day of unlocks costs one row of the 40 rather
+  // than crowding everything else out.
+  const items = groupActivityItems(
+    buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks),
+  ).slice(0, 40)
 
   return (
     <div className="space-y-6">
@@ -86,15 +96,29 @@ export default async function ActivityPage() {
       ) : (
         <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden">
           <div className="divide-y divide-edge-subtle">
-            {items.map((item, i) => (
+            {items.map((item, i) => {
+              // A day's worth of unlocks (or backlog adds) renders as one row:
+              // a count in the headline, then named chips with the remainder
+              // hidden behind +N.
+              const batch = item.batch ?? []
+              const isBatch = batch.length > 1
+              const batchNoun = item.type === 'backlog' ? 'games' : 'achievements'
+              // Your own name goes to My Games, which carries your profile
+              // banner and stats; a friend's goes to their profile page.
+              const profileHref = item.isSelf ? '/games' : `/users/${encodeURIComponent(item.username)}`
+
+              return (
               <div key={i} className="flex items-center gap-3 px-4 py-3.5">
-                {/* Avatar */}
-                <div
-                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                {/* Avatar — links to the same place as the name, since an
+                    unclickable avatar beside a clickable name is a papercut */}
+                <Link
+                  href={profileHref}
+                  aria-label={item.isSelf ? 'Your games' : `${item.displayName}'s profile`}
+                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white hover:opacity-90 transition-opacity"
                   style={{ backgroundColor: item.accentColour ?? '#7c3aed' }}
                 >
                   {getInitials(item.displayName)}
-                </div>
+                </Link>
 
                 {/* Game thumbnail — portrait box art (falls back to the banner) */}
                 {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
@@ -108,18 +132,32 @@ export default async function ActivityPage() {
                 {/* Text */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-fg-base leading-snug truncate">
-                    <span className="font-semibold">
+                    <Link href={profileHref} className="font-semibold hover:underline">
                       {item.isSelf ? 'You' : item.displayName}
-                    </span>
+                    </Link>
                     {' '}
-                    <span className="text-fg-muted">{activityVerb(item)}</span>
-                    {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
+                    {/* "added to backlog" reads wrong with a count after it,
+                        so a backlog batch splits the verb around the number:
+                        "added 4 games to backlog". */}
+                    <span className="text-fg-muted">
+                      {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
+                    </span>
+                    {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
                       <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                     )}
-                    {item.achievementName && (
+                    {isBatch && (
+                      <>
+                        {' '}<span className="font-medium">{batch.length} {batchNoun}</span>
+                        {item.type === 'backlog' && <span className="text-fg-muted"> to backlog</span>}
+                      </>
+                    )}
+                    {!isBatch && item.achievementName && (
                       <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
                     )}
                   </p>
+
+                  {isBatch && <ActivityBatchChips entries={batch} shown={BATCH_SHOWN} />}
+
                   <p className="text-xs text-fg-subtle mt-0.5">{formatActivityDate(item.date)}</p>
                 </div>
 
@@ -135,7 +173,8 @@ export default async function ActivityPage() {
                   </div>
                 ) : null}
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

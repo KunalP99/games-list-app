@@ -1,21 +1,39 @@
+import type { ReactNode } from 'react'
 import type { GameExtras } from '@/lib/rawg'
+import type { SteamReviewBadge } from '@/lib/steam'
+
+// Steam's own three buckets. Kept subtle — this sits in a list of plain facts,
+// so it reads as a coloured verdict rather than a call to action.
+const STEAM_TONE: Record<SteamReviewBadge['tone'], string> = {
+  positive: 'text-sky-600 dark:text-sky-400',
+  mixed: 'text-amber-600 dark:text-amber-400',
+  negative: 'text-red-600 dark:text-red-400',
+}
 
 // The game detail page's "About" card: the description plus (when available from
 // IGDB) the involved companies with their roles and a small facts block.
-export default function GameAbout({ description, extras }: { description: string | null; extras: GameExtras }) {
-  const { companies, gameModes, playerPerspectives, themes, franchise, engines, criticRating, criticRatingCount, userRating, userRatingCount } = extras
+export default function GameAbout({ description, extras, steamReview = null }: { description: string | null; extras: GameExtras; steamReview?: SteamReviewBadge | null }) {
+  const { companies, gameModes, playerPerspectives, themes, franchise, engines } = extras
 
-  const details: Array<{ label: string; value: string }> = []
+  const details: Array<{ label: string; value: ReactNode }> = []
   if (gameModes.length) details.push({ label: 'Modes', value: gameModes.join(', ') })
   if (playerPerspectives.length) details.push({ label: 'Perspective', value: playerPerspectives.join(', ') })
   if (themes.length) details.push({ label: 'Themes', value: themes.join(', ') })
   if (franchise) details.push({ label: 'Franchise', value: franchise })
   if (engines.length) details.push({ label: 'Engine', value: engines.join(', ') })
-  if (criticRating != null) {
-    details.push({ label: 'Critic score', value: `${criticRating}%${criticRatingCount ? ` · ${criticRatingCount} reviews` : ''}` })
-  }
-  if (userRating != null) {
-    details.push({ label: 'User score', value: `${userRating}%${userRatingCount ? ` · ${userRatingCount.toLocaleString()} users` : ''}` })
+  // IGDB's critic and user scores used to sit here; they were removed in favour
+  // of the Steam verdict alone. `extras` still carries them, so restoring the
+  // rows is a local change if they're ever wanted back.
+  if (steamReview) {
+    details.push({
+      label: 'Steam reviews',
+      value: (
+        <>
+          <span className={`font-medium ${STEAM_TONE[steamReview.tone]}`}>{steamReview.label}</span>
+          <span className="text-fg-muted"> · {steamReview.percent}% of {steamReview.totalReviews.toLocaleString()}</span>
+        </>
+      ),
+    })
   }
 
   // Group companies by role → one row per role, names comma-joined (so two
