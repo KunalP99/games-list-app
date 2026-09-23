@@ -13,7 +13,7 @@ const STEAM_TONE: Record<SteamReviewBadge['tone'], string> = {
 // The game detail page's "About" card: the description plus (when available from
 // IGDB) the involved companies with their roles and a small facts block.
 export default function GameAbout({ description, extras, steamReview = null }: { description: string | null; extras: GameExtras; steamReview?: SteamReviewBadge | null }) {
-  const { companies, gameModes, playerPerspectives, themes, franchise, engines, criticRating, criticRatingCount, userRating, userRatingCount } = extras
+  const { companies, gameModes, playerPerspectives, themes, franchise, engines } = extras
 
   const details: Array<{ label: string; value: ReactNode }> = []
   if (gameModes.length) details.push({ label: 'Modes', value: gameModes.join(', ') })
@@ -21,12 +21,9 @@ export default function GameAbout({ description, extras, steamReview = null }: {
   if (themes.length) details.push({ label: 'Themes', value: themes.join(', ') })
   if (franchise) details.push({ label: 'Franchise', value: franchise })
   if (engines.length) details.push({ label: 'Engine', value: engines.join(', ') })
-  if (criticRating != null) {
-    details.push({ label: 'Critic score', value: `${criticRating}%${criticRatingCount ? ` · ${criticRatingCount} reviews` : ''}` })
-  }
-  if (userRating != null) {
-    details.push({ label: 'User score', value: `${userRating}%${userRatingCount ? ` · ${userRatingCount.toLocaleString()} users` : ''}` })
-  }
+  // IGDB's critic and user scores used to sit here; they were removed in favour
+  // of the Steam verdict alone. `extras` still carries them, so restoring the
+  // rows is a local change if they're ever wanted back.
   if (steamReview) {
     details.push({
       label: 'Steam reviews',

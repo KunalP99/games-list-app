@@ -115,7 +115,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
   const hasAboutExtras =
     extras.companies.length > 0 || extras.gameModes.length > 0 || extras.playerPerspectives.length > 0 ||
     extras.themes.length > 0 || Boolean(extras.franchise) || extras.engines.length > 0 ||
-    extras.criticRating != null || extras.userRating != null || steamReview != null
+    steamReview != null
   const hasAbout = Boolean(game.description) || hasAboutExtras
   const hasSidebar = hasAbout || playedBy.length > 0
 
