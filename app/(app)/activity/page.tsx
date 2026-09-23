@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
@@ -102,16 +103,22 @@ export default async function ActivityPage() {
               const batch = item.batch ?? []
               const isBatch = batch.length > 1
               const batchNoun = item.type === 'backlog' ? 'games' : 'achievements'
+              // Your own name goes to My Games, which carries your profile
+              // banner and stats; a friend's goes to their profile page.
+              const profileHref = item.isSelf ? '/games' : `/users/${encodeURIComponent(item.username)}`
 
               return (
               <div key={i} className="flex items-center gap-3 px-4 py-3.5">
-                {/* Avatar */}
-                <div
-                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                {/* Avatar — links to the same place as the name, since an
+                    unclickable avatar beside a clickable name is a papercut */}
+                <Link
+                  href={profileHref}
+                  aria-label={item.isSelf ? 'Your games' : `${item.displayName}'s profile`}
+                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white hover:opacity-90 transition-opacity"
                   style={{ backgroundColor: item.accentColour ?? '#7c3aed' }}
                 >
                   {getInitials(item.displayName)}
-                </div>
+                </Link>
 
                 {/* Game thumbnail — portrait box art (falls back to the banner) */}
                 {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
@@ -125,9 +132,9 @@ export default async function ActivityPage() {
                 {/* Text */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-fg-base leading-snug truncate">
-                    <span className="font-semibold">
+                    <Link href={profileHref} className="font-semibold hover:underline">
                       {item.isSelf ? 'You' : item.displayName}
-                    </span>
+                    </Link>
                     {' '}
                     {/* "added to backlog" reads wrong with a count after it,
                         so a backlog batch splits the verb around the number:
