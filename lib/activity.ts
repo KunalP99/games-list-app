@@ -253,6 +253,21 @@ export function formatActivityDate(dateStr: string): string {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })
 }
 
+/**
+ * Initials for an avatar bubble.
+ *
+ * Only letters and digits can start an initial, so "Alex (test)" gives "AT"
+ * rather than "A(" — a naive split on spaces takes the bracket as the second
+ * word's first character. Splits on underscores and hyphens too, since display
+ * names are often derived from usernames. Mirrors the logic on the profile
+ * pages, which hit this first.
+ */
 export function getInitials(name: string): string {
-  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+  return name
+    .split(/[\s_-]+/)
+    .map(w => w.replace(/^[^0-9A-Za-zÀ-ɏ]+/, '').charAt(0))
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?'
 }

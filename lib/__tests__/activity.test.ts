@@ -43,6 +43,21 @@ describe('getInitials', () => {
     expect(getInitials('Alice Mary Smith')).toBe('AM')
   })
 
+  it('skips punctuation, so a bracketed name does not give "A("', () => {
+    expect(getInitials('Alex (test)')).toBe('AT')
+    expect(getInitials('Sam (test)')).toBe('ST')
+  })
+
+  it('splits on underscores and hyphens, as usernames often use them', () => {
+    expect(getInitials('test-alex')).toBe('TA')
+    expect(getInitials('jo_bloggs')).toBe('JB')
+  })
+
+  it('falls back to ? when a name has no usable characters', () => {
+    expect(getInitials('(((')).toBe('?')
+    expect(getInitials('')).toBe('?')
+  })
+
   it('returns uppercase initials', () => {
     expect(getInitials('john doe')).toBe('JD')
   })
