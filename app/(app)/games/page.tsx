@@ -66,9 +66,11 @@ export default async function GamesPage({
     games = [...games].sort((a, b) => (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3))
   }
 
-  // Depends on stats.heroGame, so it can't join the Promise.all above — see
-  // the identical pattern on the friend profile page.
-  const bannerImage = stats.heroGame ? await resolveBannerImage(stats.heroGame) : null
+  // The banner image needs a live IGDB screenshot lookup, and it depends on
+  // stats.heroGame so it can't join the Promise.all above. Awaiting it here
+  // held up the entire page — list included — for one decorative backdrop, so
+  // it now streams in behind Suspense (see HeroWithBanner at the foot of this
+  // file).
 
   // Same initials logic as the friend profile page (app/(app)/users/[username]/page.tsx) —
   // only letters/digits start an initial, so "Alex (test)" doesn't render as "A(".
@@ -84,7 +86,11 @@ export default async function GamesPage({
 
   return (
     <div className="space-y-6">
-      <ProfileHero stats={stats} bannerImage={bannerImage} initials={initials} accent={accent} wheelTurn={null} />
+      {/* Fallback is the same hero minus the backdrop, so nothing moves when
+          the image arrives — only the texture behind it changes. */}
+      <Suspense fallback={<ProfileHero stats={stats} bannerImage={null} initials={initials} accent={accent} wheelTurn={null} />}>
+        <HeroWithBanner stats={stats} initials={initials} accent={accent} />
+      </Suspense>
 
       <div className="flex items-center justify-between">
         <div>
@@ -139,4 +145,23 @@ export default async function GamesPage({
       )}
     </div>
   )
+}
+
+/**
+ * The hero with its backdrop resolved. Split out so the IGDB screenshot
+ * lookup happens inside a Suspense boundary rather than blocking the page:
+ * the list and everything else render immediately, and the backdrop fades in
+ * when it arrives.
+ */
+async function HeroWithBanner({
+  stats,
+  initials,
+  accent,
+}: {
+  stats: Awaited<ReturnType<typeof computeUserStats>>
+  initials: string
+  accent: string
+}) {
+  const bannerImage = stats.heroGame ? await resolveBannerImage(stats.heroGame) : null
+  return <ProfileHero stats={stats} bannerImage={bannerImage} initials={initials} accent={accent} wheelTurn={null} />
 }

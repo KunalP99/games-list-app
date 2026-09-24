@@ -20,8 +20,12 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
         href={`/games/${game.id}`}
         className="group relative block rounded-xl overflow-hidden h-[140px] hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
       >
+        {/* bg-surface-active sits behind the artwork so the card reads as a
+            skeleton block until the image paints. Without it the card is a
+            transparent box with white text over a gradient, which looks like
+            a half-loaded page for as long as the download takes. */}
         <div
-          className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+          className="absolute inset-0 bg-surface-active bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
           style={{ backgroundImage: `url(${banner})` }}
         />
         {/* Bottom-weighted gradient so most of the banner stays visible */}
