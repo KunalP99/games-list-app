@@ -5,9 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
-import type { NotificationWithGame } from '@/lib/notifications'
 import UserDropdown from '@/components/layout/UserDropdown'
-import NotificationBell from '@/components/layout/NotificationBell'
 
 const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -25,7 +23,10 @@ const historyItems = [
   { href: '/wheel/history', label: '🎰 Wheel History' },
 ]
 
-export default function Nav({ profile, notifications = [], unreadCount = 0, totalCount = 0 }: { profile: Profile; notifications?: NotificationWithGame[]; unreadCount?: number; totalCount?: number }) {
+// `notificationSlot` is a server-rendered node (the bell plus its data, behind
+// Suspense) rather than the data itself, so the nav no longer waits on those
+// queries before it can render.
+export default function Nav({ profile, notificationSlot }: { profile: Profile; notificationSlot?: React.ReactNode }) {
   const pathname = usePathname()
   // Opting out of wheel turns in Settings takes the Wheel tab out of the nav.
   // Wheel History stays — it's shared history, and still worth looking back on.
@@ -187,7 +188,7 @@ export default function Nav({ profile, notifications = [], unreadCount = 0, tota
             <span className={`hidden sm:flex items-center gap-1 text-xs font-medium text-brand-700 bg-brand-50 border border-brand-200 rounded-full px-2.5 py-0.5 dark:bg-brand-900/30 dark:border-brand-700 dark:text-brand-300 ${ticketAnimating ? 'animate-ticket-gain' : ''}`}>
               🎟️ {profile.ticket_balance}
             </span>
-            <NotificationBell notifications={notifications} unreadCount={unreadCount} totalCount={totalCount} accentColour={profile.accent_colour ?? '#7c3aed'} />
+            {notificationSlot}
             <UserDropdown profile={profile} />
           </div>
         </header>
