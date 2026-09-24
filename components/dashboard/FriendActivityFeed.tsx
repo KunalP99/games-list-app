@@ -1,5 +1,10 @@
 import Link from 'next/link'
 import { type ActivityItem, activityVerb, formatActivityDate, getInitials } from '@/lib/activity'
+import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
+
+// Two rather than the activity page's three: this card is half-width and a
+// denser type scale, so three chips would wrap on ordinary titles.
+const BATCH_SHOWN = 2
 
 export default function FriendActivityFeed({ items }: { items: ActivityItem[] }) {
   return (
@@ -14,7 +19,14 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
 
       {/* Activity list */}
       <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden divide-y divide-edge-subtle">
-        {items.map((item, i) => (
+        {items.map((item, i) => {
+          // A day's unlocks or backlog adds render as one row: a count in the
+          // headline, then chips with the remainder behind "+N more".
+          const batch = item.batch ?? []
+          const isBatch = batch.length > 1
+          const batchNoun = item.type === 'backlog' ? 'games' : 'achievements'
+
+          return (
           <div key={i} className="flex items-center gap-3 px-4 py-3">
             {/* Avatar */}
             <div
@@ -38,14 +50,27 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
               <p className="text-xs text-fg-base leading-snug truncate">
                 <span className="font-semibold">{item.displayName}</span>
                 {' '}
-                <span className="text-fg-muted">{activityVerb(item)}</span>
-                {item.gameTitle && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && (
+                {/* "added to backlog" reads wrong with a count after it, so a
+                    backlog batch splits the verb: "added 4 games to backlog". */}
+                <span className="text-fg-muted">
+                  {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
+                </span>
+                {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && (
                   <>{' '}<span className="font-medium">{item.gameTitle}</span></>
                 )}
-                {item.achievementName && (
+                {isBatch && (
+                  <>
+                    {' '}<span className="font-medium">{batch.length} {batchNoun}</span>
+                    {item.type === 'backlog' && <span className="text-fg-muted"> to backlog</span>}
+                  </>
+                )}
+                {!isBatch && item.achievementName && (
                   <>{' '}<span className="font-medium">{item.achievementIcon} {item.achievementName}</span></>
                 )}
               </p>
+
+              {isBatch && <ActivityBatchChips entries={batch} shown={BATCH_SHOWN} />}
+
               <p className="text-[11px] text-fg-subtle mt-0.5">{formatActivityDate(item.date)}</p>
             </div>
 
@@ -61,7 +86,8 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
               </div>
             ) : null}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

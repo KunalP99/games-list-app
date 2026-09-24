@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
 import FriendActivityFeed from '@/components/dashboard/FriendActivityFeed'
-import { buildActivityItems, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, groupActivityItems, type RawAchievementUnlock } from '@/lib/activity'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { providerIdOf } from '@/lib/rawg'
 
@@ -104,14 +104,16 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
     return [{ user_id: r.user_id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, xp: ach.xp, unlocked_at: r.unlocked_at }]
   })
 
-  const friendActivityItems = buildActivityItems(
+  // Grouped before the 6-item slice, so one friend's burst of unlocks or
+  // backlog adds costs a single row rather than filling the whole card.
+  const friendActivityItems = groupActivityItems(buildActivityItems(
     friendGames ?? [],
     friendSpins ?? [],
     friendProfileMap,
     friendTicketsByGame,
     userId,
     friendAchievementUnlocks,
-  )
+  ))
 
   if (recommendations.length === 0 && friendActivityItems.length === 0 && !eventsSlot) return null
 
