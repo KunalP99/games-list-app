@@ -85,7 +85,13 @@ export default function ProfileHero({
   ]
 
   return (
-    <div className="relative rounded-xl border border-edge-base overflow-hidden">
+    // The accent fills the card from the first paint, so the hero looks
+    // finished while the backdrop image is still downloading rather than
+    // showing white behind the overlay gradient.
+    <div
+      className="relative rounded-xl border border-edge-base overflow-hidden"
+      style={{ backgroundColor: accent }}
+    >
       {/* Backdrop: a live screenshot of this week's pick from their 5-star
           games where one could be found (screenshots, unlike key art or box
           art, don't usually carry a baked-in title/logo) — otherwise their
