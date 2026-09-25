@@ -24,7 +24,8 @@ export default function GameFilters() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const activeStatus = searchParams.get('status') ?? 'all'
+  // Matches the pages' default (they no longer redirect to add ?status=).
+  const activeStatus = searchParams.get('status') ?? 'completed'
   const defaultSort = activeStatus === 'backlog' ? 'created_at' : 'completion_date'
   const activeSort = searchParams.get('sort') ?? defaultSort
   const visibleSortOptions = activeStatus === 'backlog'

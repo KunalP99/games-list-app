@@ -1,4 +1,4 @@
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeUserStats } from '@/lib/user-stats'
@@ -20,7 +20,7 @@ export default async function UserProfilePage({
   params: { username: string }
   searchParams: { status?: string; sort?: string; view?: string; q?: string }
 }) {
-  if (!searchParams.status) redirect(`/users/${encodeURIComponent(params.username)}?status=completed`)
+
 
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -35,7 +35,10 @@ export default async function UserProfilePage({
 
   const isOwner = user?.id === profile.id
 
-  const status = searchParams.status === 'all' ? undefined : searchParams.status
+  // Defaults to Completed in place rather than redirecting — see the same
+  // change on app/(app)/games/page.tsx for why.
+  const selectedStatus = searchParams.status ?? 'completed'
+  const status = selectedStatus === 'all' ? undefined : selectedStatus
   const sort = searchParams.sort ?? (status === 'backlog' ? 'created_at' : 'completion_date')
   const sortAsc = sort === 'title'
 
@@ -173,7 +176,7 @@ export default async function UserProfilePage({
 
         <div className="mt-4">
           {games && games.length > 0 ? (
-            <GameListView games={games} status={searchParams.status} isOwner={isOwner} view={view} />
+            <GameListView games={games} status={selectedStatus} isOwner={isOwner} view={view} />
           ) : (
             <div className="text-center py-16 text-fg-subtle">
               <p className="text-4xl mb-3">🎮</p>
