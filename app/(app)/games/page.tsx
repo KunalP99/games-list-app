@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeUserStats } from '@/lib/user-stats'
@@ -16,12 +15,16 @@ export default async function GamesPage({
 }: {
   searchParams: { status?: string; sort?: string; q?: string; view?: string }
 }) {
-  if (!searchParams.status) redirect('/games?status=completed&sort=completion_date')
-
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const status = searchParams.status === 'all' ? undefined : searchParams.status
+  // Default to Completed in place rather than redirecting. /games used to bounce
+  // to /games?status=completed&sort=completion_date, which cost a second server
+  // round trip on the app's commonest navigation — and the loading skeleton
+  // behaved unpredictably across that bounce, leaving a blank gap instead of
+  // staying up until the list was ready.
+  const selectedStatus = searchParams.status ?? 'completed'
+  const status = selectedStatus === 'all' ? undefined : selectedStatus
   const sort = searchParams.sort ?? (status === 'backlog' ? 'created_at' : 'completion_date')
   const sortAsc = sort === 'title'
   const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
@@ -105,7 +108,7 @@ export default async function GamesPage({
             Import
           </Link>
           <Link
-            href={`/games/new${searchParams.status ? `?status=${searchParams.status}` : ''}`}
+            href={`/games/new?status=${selectedStatus}`}
             className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
           >
             + Add Game
@@ -133,7 +136,7 @@ export default async function GamesPage({
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={searchParams.status} isOwner={true} view={view} />
+        <GameListView games={games} status={selectedStatus} isOwner={true} view={view} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>
