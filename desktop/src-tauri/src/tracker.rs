@@ -469,7 +469,12 @@ async fn identify_steam_games(
             "added" => {
                 let title = response.title.unwrap_or_else(|| candidate.exe_name.clone());
                 log::info!("added {title} as an ambient game (steam {app_id})");
-                tracker.shared.lock().unwrap().identified.insert(app_id);
+                // Not inserted into `identified`: a game_executables link now
+                // exists, so the main matching loop finds it directly and
+                // identify is never reached again while that link holds. If
+                // the link is ever removed — the user deletes the game to
+                // retest, say — this must be free to try again, not stuck
+                // believing it already settled the question.
                 notify(
                     app,
                     "Now tracking",
@@ -478,13 +483,17 @@ async fn identify_steam_games(
                 return true;
             }
             "tracked" => {
-                tracker.shared.lock().unwrap().identified.insert(app_id);
+                // Same reasoning as "added": nothing to remember, the link
+                // already does the remembering.
                 return true;
             }
             "untracked" => {
                 // Owned, but completed, dropped or still in the backlog.
                 // Moving it is the user's call, so say nothing and do not ask
-                // about it again this run.
+                // about it again this run. Worth remembering here, unlike
+                // above: there is no link, and nothing about this will change
+                // without the user acting on the site, so asking again next
+                // poll would just be noise.
                 log::info!(
                     "steam app {app_id} is owned but {}; leaving it alone",
                     response.status.as_deref().unwrap_or("not trackable"),
@@ -555,15 +564,19 @@ async fn identify_other_launchers(
             "added" => {
                 let shown = response.title.unwrap_or(title);
                 log::info!("added {shown} as an ambient game (by name: \"{shown}\")");
-                tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
+                // See the Steam path's identical comment: the link this
+                // created is what keeps this from being re-asked, not this
+                // set — and it must stay retryable if that link ever goes
+                // away.
                 notify(app, "Now tracking", &format!("{shown} — added to your Ambient games."));
                 return true;
             }
             "tracked" => {
-                tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
                 return true;
             }
             "untracked" => {
+                // Worth remembering: no link exists, and nothing changes here
+                // without the user acting on the site.
                 log::info!(
                     "\"{title}\" is owned but {}; leaving it alone",
                     response.status.as_deref().unwrap_or("not trackable"),
