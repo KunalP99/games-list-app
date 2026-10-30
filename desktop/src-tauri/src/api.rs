@@ -176,11 +176,25 @@ pub enum IdentifyBy<'a> {
 }
 
 /// Ask what a running game is, and have it filed if it is new.
-pub async fn post_identify(base: &str, token: &str, by: IdentifyBy<'_>) -> Result<IdentifyResponse, String> {
-    let body = match by {
+///
+/// `exe_name` and `platform` ride along so the server can remember the
+/// executable → game link the same way a manual "Link a game" would. Without
+/// it, a non-Steam game recognised once has no way to be recognised again:
+/// there is no app id to match on next poll, so the executable would fall
+/// straight back to the "is this a game?" prompt on the very next tick.
+pub async fn post_identify(
+    base: &str,
+    token: &str,
+    by: IdentifyBy<'_>,
+    exe_name: &str,
+    platform: &str,
+) -> Result<IdentifyResponse, String> {
+    let mut body = match by {
         IdentifyBy::SteamAppId(id) => serde_json::json!({ "steamAppId": id }),
         IdentifyBy::Title(title) => serde_json::json!({ "titleGuess": title }),
     };
+    body["exeName"] = serde_json::json!(exe_name);
+    body["platform"] = serde_json::json!(platform);
     let res = client()
         .map_err(|e| e.to_string())?
         .post(format!("{base}/api/agent/identify"))

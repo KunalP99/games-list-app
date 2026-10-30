@@ -446,7 +446,9 @@ async fn identify_steam_games(
             continue;
         }
 
-        let response = match api::post_identify(base, token, api::IdentifyBy::SteamAppId(app_id)).await {
+        let response = match api::post_identify(
+            base, token, api::IdentifyBy::SteamAppId(app_id), &candidate.exe_name, "Steam",
+        ).await {
             Ok(r) => r,
             Err(err) => {
                 // Offline, or the site is down. Decide nothing and try again
@@ -539,7 +541,9 @@ async fn identify_other_launchers(
             continue;
         }
 
-        let response = match api::post_identify(base, token, api::IdentifyBy::Title(&title)).await {
+        let response = match api::post_identify(
+            base, token, api::IdentifyBy::Title(&title), &candidate.exe_name, "Epic Games",
+        ).await {
             Ok(r) => r,
             Err(err) => {
                 log::warn!("could not identify \"{title}\": {err}");

@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { resolveSteamApp } from '@/lib/steam-games'
 import { findGameByExactName } from '@/lib/name-games'
+import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 
 export const dynamic = 'force-dynamic'
@@ -40,11 +41,25 @@ export const dynamic = 'force-dynamic'
  * recognised so its hours count from the first minute rather than from
  * whenever someone next opens the site. The agent says so in a toast, and the
  * row can be removed from there.
+ *
+ * `exeName` matters for everything *after* this response. A Steam game stays
+ * recognisable on every future poll through its app id alone, but a
+ * name-identified one (Epic, say) has no such signal — there is no
+ * `RunningAppID` equivalent. Without saving an executable link here, the
+ * agent's own "don't re-identify the same exe twice in one run" bookkeeping
+ * would make a game unrecognisable again the very next tick: not trackable
+ * via an app id, and not trackable via a link, because none was ever made.
+ * So a `tracked`/`added` result upserts into `game_executables` exactly the
+ * way a manual "Link a game" would — the identical table, the identical
+ * shape, just written automatically instead of by a click.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const sb = createAdminClient()
   const identity = await authenticateDevice(sb as any, request.headers.get('authorization'))
   if (!identity) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  // Captured as its own const: TypeScript's narrowing of `identity` from the
+  // check above does not reach inside the linkExe closure defined below.
+  const userId = identity.userId
 
   let body: any
   try {
@@ -68,6 +83,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'titleGuess too long' }, { status: 400 })
   }
 
+  // Both optional, and both best-effort: an identify call with neither still
+  // answers the "what is this?" question, it just cannot keep the game
+  // recognisable afterwards or label its platform precisely.
+  const exeName = typeof body?.exeName === 'string' && body.exeName.trim() && body.exeName.length <= 260
+    ? normaliseExeName(body.exeName)
+    : null
+  const platform = typeof body?.platform === 'string' && body.platform.trim() ? body.platform.trim().slice(0, 100) : 'PC'
+
   // Both paths resolve to the same shape, so everything below is shared.
   let igdbId: number
   let resolvedName: string
@@ -84,13 +107,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     resolvedName = lookup.name
   }
 
+  // Links an executable to a game, the same upsert /api/agent/link uses.
+  // Best-effort: the primary job here is answering what the game is, so a
+  // link failure is logged, not surfaced as the whole request failing — the
+  // one visible cost is the toast coming back next poll, which is the
+  // pre-existing behaviour, not a new failure mode.
+  async function linkExe(gameId: string) {
+    if (!exeName) return
+    const { error } = await (sb.from('game_executables') as any).upsert({
+      user_id: userId,
+      game_id: gameId,
+      exe_name: exeName,
+    }, { onConflict: 'user_id,exe_name' })
+    if (error) console.error(`identify: could not link ${exeName} to ${gameId}: ${error.message}`)
+  }
+
   // Already theirs? Match on the Steam id first where we have one — it is
   // exact — then on the IGDB id, which catches a copy added before Steam ids
   // were being stored, or one found by name in the first place.
   const ownedQuery = hasAppId ? `steam_appid.eq.${appId},igdb_id.eq.${igdbId}` : `igdb_id.eq.${igdbId}`
   const { data: owned } = await (sb.from('games') as any)
     .select('id, title, status')
-    .eq('user_id', identity.userId)
+    .eq('user_id', userId)
     .or(ownedQuery)
     .order('updated_at', { ascending: false })
     .limit(1)
@@ -98,6 +136,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   if (existing) {
     const trackable = existing.status === 'playing' || existing.status === 'ambient'
+    // Not for `untracked`: the agent cannot write hours to a backlog or
+    // completed game anyway, so a link here would just be dead weight until
+    // the user moves it themselves — at which point linking it by hand, or
+    // simply launching it again once it is Playing, covers it.
+    if (trackable) await linkExe(existing.id)
     return NextResponse.json({
       result: trackable ? 'tracked' : 'untracked',
       gameId: existing.id,
@@ -114,11 +157,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: created, error } = await (sb.from('games') as any)
     .insert({
-      user_id: identity.userId,
+      user_id: userId,
       title: detail?.name ?? resolvedName,
       developer: detail?.developers?.[0]?.name ?? null,
       status: 'ambient',
-      platform: 'PC',
+      platform,
       start_date: new Date().toISOString().slice(0, 10),
       steam_appid: hasAppId ? appId : null,
       [PROVIDER_ID_COLUMN]: igdbId,
@@ -136,6 +179,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await linkExe(created.id)
 
   return NextResponse.json({
     result: 'added',
