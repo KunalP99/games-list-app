@@ -103,6 +103,13 @@ fn open_site(app: AppHandle, path: String) -> Result<(), String> {
             log::info!("site window navigating to {target}");
             true
         })
+        .on_page_load(|window, payload| {
+            // on_navigation fires when a request starts; this fires when the
+            // document is actually there. A window that navigates but never
+            // loads is the difference between "slow" and "broken".
+            log::info!("site window page load [{:?}] {}", payload.event(), payload.url());
+            let _ = window;
+        })
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
