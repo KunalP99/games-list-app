@@ -214,6 +214,9 @@ async function openLinkPanel(preselectExe = null) {
   }
 
   renderLinked(status)
+  // No program picked for us? Offer the one that looks like the game
+  // that is already selected.
+  if (!preselectExe) el('link-game').dispatchEvent(new Event('change'))
   showExeWarning()
   panel.hidden = false
 }
@@ -276,8 +279,30 @@ function renderLinked(status) {
   }
 }
 
-el('btn-link').addEventListener('click', openLinkPanel)
+// Wrapped, not passed directly: a listener is called with the click event, and
+// openLinkPanel would take that object as the program to preselect — putting
+// "[object PointerEvent]" at the top of the picker and skipping the suggestion.
+el('btn-link').addEventListener('click', () => openLinkPanel())
 el('link-exe').addEventListener('change', showExeWarning)
+
+/**
+ * Picking a game selects the program that looks like it.
+ *
+ * Rust does the matching, so the app and the "is this your game?" prompt agree
+ * on what counts as a match. Only applied when it is confident — a wrong
+ * preselection is worse than none, because the user has to notice it before
+ * correcting it.
+ */
+el('link-game').addEventListener('change', async () => {
+  const option = el('link-game').selectedOptions[0]
+  if (!option) return
+  const title = option.textContent.replace(' (already linked)', '')
+  const exe = await invoke('suggest_program', { title }).catch(() => null)
+  if (exe) {
+    el('link-exe').value = exe
+    showExeWarning()
+  }
+})
 el('link-cancel').addEventListener('click', () => { el('link-panel').hidden = true })
 
 el('link-save').addEventListener('click', async () => {

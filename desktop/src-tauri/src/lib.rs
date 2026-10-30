@@ -6,6 +6,7 @@
 mod api;
 mod config;
 mod detect;
+mod matching;
 mod pairing;
 mod tracker;
 
@@ -190,6 +191,27 @@ async fn unlink_executable(app: AppHandle, exe_name: String) -> Result<(), Strin
     Ok(())
 }
 
+/// The running program most likely to be this game.
+///
+/// So picking "Vampire Survivors" in the link panel selects
+/// vampiresurvivors.exe rather than leaving the user to find it among
+/// everything else that happens to be running.
+#[tauri::command]
+fn suggest_program(title: String) -> Option<String> {
+    let mut system = detect::new_system();
+    let running: Vec<String> = detect::candidates(&mut system)
+        .into_iter()
+        .filter(detect::pickable)
+        .map(|c| c.exe_name)
+        .collect();
+
+    matching::best_exe(&title, running.iter().map(|s| s.as_str()))
+        // Below this it is a guess, and a wrong preselection is worse than
+        // none: the user would have to notice it before correcting it.
+        .filter(|(_, points)| *points >= matching::CONFIDENT)
+        .map(|(exe, _)| exe.to_string())
+}
+
 /// Link an executable to a game, from inside the app.
 ///
 /// The website has a page for this too, but doing it here means no second
@@ -269,6 +291,7 @@ pub fn run() {
             refresh_state,
             running_programs,
             link_executable,
+            suggest_program,
             unlink_executable,
             sign_out,
             set_api_base,

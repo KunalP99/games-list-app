@@ -16,6 +16,7 @@ use tauri_plugin_notification::NotificationExt;
 use crate::api::{self, AgentState, PlayingGame};
 use crate::config::{self, AppConfig};
 use crate::detect;
+use crate::matching;
 
 /// A game currently being timed.
 #[derive(Debug, Clone)]
@@ -373,9 +374,9 @@ fn maybe_prompt(
     }
 
     // Nothing to link it to — say nothing at all.
-    let Some(unlinked) = playing.iter().find(|g| !g.linked) else {
+    if !playing.iter().any(|g| !g.linked) {
         return;
-    };
+    }
 
     let dir = tracker.data_dir.clone();
     let asked = config::load_asked(&dir);
@@ -388,11 +389,26 @@ fn maybe_prompt(
             continue;
         }
 
+        // Name the likeliest game rather than whichever happens to be first:
+        // "vampiresurvivors.exe" should ask about Vampire Survivors even if
+        // three other games are also unlinked.
+        let unlinked: Vec<&PlayingGame> = playing.iter().filter(|g| !g.linked).collect();
+        let suggestion = matching::best_title(
+            &candidate.exe_name,
+            unlinked.iter().map(|g| g.title.as_str()),
+        )
+        .and_then(|(title, _)| unlinked.iter().find(|g| g.title == title))
+        .copied()
+        // Nothing resembled it, but the user may still know what it is.
+        .or_else(|| unlinked.first().copied());
+
+        let Some(suggestion) = suggestion else { return };
+
         config::add_asked(&dir, &candidate.exe_name);
         tracker.shared.lock().unwrap().pending_prompt = Some(PendingPrompt {
             exe_name: candidate.exe_name.clone(),
-            suggested_game_id: unlinked.id.clone(),
-            suggested_title: unlinked.title.clone(),
+            suggested_game_id: suggestion.id.clone(),
+            suggested_title: suggestion.title.clone(),
         });
         notify(
             app,
