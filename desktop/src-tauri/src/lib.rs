@@ -166,6 +166,30 @@ fn running_programs() -> Vec<String> {
     names
 }
 
+/// Forget a link, from inside the app.
+///
+/// Without this, linking the wrong program — a browser, say — keeps logging
+/// it as play time with no way to stop short of editing the database. That is
+/// not a hypothetical: it happened during testing.
+#[tauri::command]
+async fn unlink_executable(app: AppHandle, exe_name: String) -> Result<(), String> {
+    let (base, token) = {
+        let config = app.state::<Tracker>().snapshot_config();
+        (config.base(), config.token.clone().unwrap_or_default())
+    };
+    api::post_unlink(&base, &token, &exe_name).await?;
+
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    shared.force_refresh = true;
+    // Stop timing it immediately; otherwise the session keeps running against
+    // a game the user has just said this program is not.
+    if shared.session.as_ref().and_then(|s| s.exe_name.clone()).as_deref() == Some(exe_name.as_str()) {
+        shared.session = None;
+    }
+    Ok(())
+}
+
 /// Link an executable to a game, from inside the app.
 ///
 /// The website has a page for this too, but doing it here means no second
@@ -245,6 +269,7 @@ pub fn run() {
             refresh_state,
             running_programs,
             link_executable,
+            unlink_executable,
             sign_out,
             set_api_base,
         ])

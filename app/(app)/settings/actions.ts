@@ -173,3 +173,20 @@ export async function approveDevicePairing(
   target.searchParams.set('token', issued.data.token)
   return { success: true, data: { redirectTo: target.toString() } }
 }
+
+/** Forget an executable → game link, from the website. */
+export async function unlinkExecutable(exeName: string): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('game_executables')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('exe_name', normaliseExeName(exeName))
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings/devices/link')
+  return { success: true, data: undefined }
+}

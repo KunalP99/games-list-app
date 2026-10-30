@@ -20,6 +20,14 @@ export default async function LinkExecutablePage({
 
   const exe = searchParams.exe ? normaliseExeName(searchParams.exe) : ''
 
+  // Existing links, so a wrong one can be removed rather than needing a
+  // database edit.
+  const { data: links } = await supabase
+    .from('game_executables')
+    .select('exe_name, game_id')
+    .eq('user_id', user.id)
+    .order('created_at') as { data: { exe_name: string; game_id: string }[] | null }
+
   const { data: games } = await supabase
     .from('games')
     .select('id, title, platform, hours_played, cover_image_url')
@@ -52,7 +60,7 @@ export default async function LinkExecutablePage({
           </Link>
         </div>
       ) : (
-        <LinkExecutableForm exe={exe} games={games ?? []} suggested={searchParams.suggest ?? null} />
+        <LinkExecutableForm exe={exe} games={games ?? []} suggested={searchParams.suggest ?? null} links={(links ?? []).map(l => ({ exeName: l.exe_name, gameId: l.game_id }))} />
       )}
     </div>
   )

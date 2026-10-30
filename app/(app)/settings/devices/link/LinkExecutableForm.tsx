@@ -1,11 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { linkExecutable } from '../../actions'
+import { linkExecutable, unlinkExecutable } from '../../actions'
+import { describeKnownSoftware } from '@/lib/known-software'
 
 type Game = { id: string; title: string; platform: string | null; hours_played: number | null; cover_image_url: string | null }
+type ExeLink = { exeName: string; gameId: string }
 
-export default function LinkExecutableForm({ exe, games, suggested = null }: { exe: string; games: Game[]; suggested?: string | null }) {
+export default function LinkExecutableForm({
+  exe,
+  games,
+  suggested = null,
+  links = [],
+}: {
+  exe: string
+  games: Game[]
+  suggested?: string | null
+  links?: ExeLink[]
+}) {
   // The agent's "Yes" button arrives with its guess pre-selected, so
   // confirming is a single click.
   const [selected, setSelected] = useState<string | null>(
@@ -14,6 +26,13 @@ export default function LinkExecutableForm({ exe, games, suggested = null }: { e
   const [exeName, setExeName] = useState(exe)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [current, setCurrent] = useState<ExeLink[]>(links)
+  const [removing, setRemoving] = useState<string | null>(null)
+
+  // Null for anything unrecognised — which includes every real game — so the
+  // absence of a warning means nothing either way. Never a block: an unusual
+  // launcher or a game sharing a name should still be linkable.
+  const warning = describeKnownSoftware(exeName)
 
   async function handleSave() {
     if (!selected) return
@@ -21,14 +40,61 @@ export default function LinkExecutableForm({ exe, games, suggested = null }: { e
     setMsg(null)
     const result = await linkExecutable(exeName, selected)
     const game = games.find(g => g.id === selected)
-    setMsg(result.success
-      ? { ok: true, text: `Linked. ${game?.title ?? 'That game'} will log its hours automatically from now on.` }
-      : { ok: false, text: result.error })
+    if (result.success) {
+      setMsg({ ok: true, text: `Linked. ${game?.title ?? 'That game'} will log its hours automatically from now on.` })
+      setCurrent(prev => [
+        ...prev.filter(l => l.exeName !== exeName.trim().toLowerCase()),
+        { exeName: exeName.trim().toLowerCase(), gameId: selected },
+      ])
+    } else {
+      setMsg({ ok: false, text: result.error })
+    }
     setLoading(false)
+  }
+
+  async function handleRemove(name: string) {
+    setRemoving(name)
+    setMsg(null)
+    const result = await unlinkExecutable(name)
+    if (result.success) setCurrent(prev => prev.filter(l => l.exeName !== name))
+    else setMsg({ ok: false, text: result.error })
+    setRemoving(null)
   }
 
   return (
     <div className="space-y-4">
+      {current.length > 0 && (
+        <div className="bg-surface-base border border-edge-base rounded-xl overflow-hidden">
+          <p className="px-4 pt-3 pb-2 text-xs font-semibold text-fg-muted uppercase tracking-wider">
+            Already linked
+          </p>
+          <ul className="divide-y divide-edge-subtle">
+            {current.map(link => {
+              const game = games.find(g => g.id === link.gameId)
+              return (
+                <li key={link.exeName} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <p className="text-sm text-fg-secondary min-w-0 truncate">
+                    <code className="text-xs bg-surface-sunken rounded px-1.5 py-0.5">{link.exeName}</code>
+                    <span className="text-fg-subtle"> → </span>
+                    {/* A link can outlive the game it points at — say it plainly
+                        rather than rendering a blank. */}
+                    {game?.title ?? <span className="text-fg-subtle">a game no longer listed as Playing</span>}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(link.exeName)}
+                    disabled={removing === link.exeName}
+                    className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-md border border-edge-base text-fg-muted hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50"
+                  >
+                    {removing === link.exeName ? 'Removing…' : 'Remove'}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       {!exe && (
         <div className="bg-surface-base border border-edge-base rounded-xl p-4 space-y-2">
           <label htmlFor="exe" className="block text-sm font-medium text-fg-secondary">Program</label>
@@ -40,6 +106,13 @@ export default function LinkExecutableForm({ exe, games, suggested = null }: { e
             className="w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input"
           />
         </div>
+      )}
+
+      {warning && (
+        <p className="text-sm rounded-lg px-3 py-2 text-amber-700 bg-amber-50 border border-amber-200 dark:text-amber-300 dark:bg-amber-900/20 dark:border-amber-800">
+          <span className="font-medium">{exeName.trim().toLowerCase()}</span> looks like a {warning}.
+          Linking it means every minute it is open counts as play time for the game you pick.
+        </p>
       )}
 
       <ul className="bg-surface-base border border-edge-base rounded-xl divide-y divide-edge-subtle overflow-hidden">
@@ -81,7 +154,7 @@ export default function LinkExecutableForm({ exe, games, suggested = null }: { e
           disabled={loading || !selected || exeName.trim().length === 0}
           className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
         >
-          {loading ? 'Linking…' : 'Link this game'}
+          {loading ? 'Linking…' : warning ? 'Link it anyway' : 'Link this game'}
         </button>
         {msg && (
           <p className={`text-sm rounded-lg px-3 py-2 ${msg.ok

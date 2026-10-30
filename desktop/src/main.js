@@ -9,6 +9,25 @@ const { listen } = window.__TAURI__.event
 
 const el = (id) => document.getElementById(id)
 
+/**
+ * Programs that are plainly not games, and what they are.
+ *
+ * The picker already leaves these out, so this only fires when someone goes
+ * looking for one — but linking a browser means every minute it is open counts
+ * as play time, which is worth one sentence of warning rather than silence.
+ * Mirrors lib/known-software.ts on the website.
+ */
+const KNOWN_SOFTWARE = {
+  'chrome.exe': 'web browser', 'msedge.exe': 'web browser', 'firefox.exe': 'web browser',
+  'brave.exe': 'web browser', 'opera.exe': 'web browser', 'discord.exe': 'chat app',
+  'slack.exe': 'chat app', 'teams.exe': 'chat app', 'spotify.exe': 'music player',
+  'vlc.exe': 'media player', 'steam.exe': 'game launcher, not a game',
+  'epicgameslauncher.exe': 'game launcher, not a game', 'battle.net.exe': 'game launcher, not a game',
+  'galaxyclient.exe': 'game launcher, not a game', 'obs64.exe': 'streaming software',
+  'code.exe': 'code editor', 'notepad.exe': 'text editor', 'excel.exe': 'spreadsheet app',
+  'winword.exe': 'word processor', 'outlook.exe': 'email client', 'zoom.exe': 'video calls',
+}
+
 /** Paint the app in the user's accent, from the palette the site computed. */
 function applyTheme(status) {
   const root = document.documentElement
@@ -185,10 +204,71 @@ async function openLinkPanel() {
     gameSelect.appendChild(opt)
   }
 
+  renderLinked(status)
+  showExeWarning()
   panel.hidden = false
 }
 
+function showExeWarning() {
+  const exe = el('link-exe').value
+  const what = KNOWN_SOFTWARE[exe]
+  const warn = el('link-warning')
+  if (!what) {
+    warn.hidden = true
+    el('link-save').textContent = 'Link them'
+    return
+  }
+  warn.textContent = `${exe} looks like a ${what}. Every minute it is open would count as play time.`
+  warn.hidden = false
+  // Not a block — an unusual launcher should still be linkable — but the
+  // button should say what it is about to do.
+  el('link-save').textContent = 'Link it anyway'
+}
+
+/** The links that already exist, each with a way to undo it. */
+function renderLinked(status) {
+  const wrap = el('linked-list-wrap')
+  const list = el('linked-list')
+  const entries = Object.entries(status?.executables ?? {})
+  list.innerHTML = ''
+  wrap.hidden = entries.length === 0
+
+  for (const [exe, gameId] of entries) {
+    const game = (status?.playing ?? []).find(g => g.id === gameId)
+    const li = document.createElement('li')
+
+    const label = document.createElement('span')
+    label.className = 'game-title'
+    label.textContent = `${exe} → ${game ? game.title : 'a game not currently Playing'}`
+
+    const remove = document.createElement('button')
+    remove.className = 'ghost unlink'
+    remove.textContent = 'Remove'
+    remove.addEventListener('click', async () => {
+      remove.disabled = true
+      remove.textContent = 'Removing…'
+      try {
+        await invoke('unlink_executable', { exeName: exe })
+        li.remove()
+        if (!list.children.length) wrap.hidden = true
+        refresh()
+      } catch (err) {
+        remove.disabled = false
+        remove.textContent = 'Remove'
+        const msg = el('link-msg')
+        msg.textContent = String(err)
+        msg.className = 'panel-msg bad'
+        msg.hidden = false
+      }
+    })
+
+    li.append(label, remove)
+    list.appendChild(li)
+  }
+}
+
 el('btn-link').addEventListener('click', openLinkPanel)
+el('link-exe').addEventListener('change', showExeWarning)
 el('link-cancel').addEventListener('click', () => { el('link-panel').hidden = true })
 
 el('link-save').addEventListener('click', async () => {

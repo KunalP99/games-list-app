@@ -132,3 +132,21 @@ pub async fn post_link(
         Err(format!("link request failed: {}", res.status()))
     }
 }
+
+/// Forget that an executable is a game.
+pub async fn post_unlink(base: &str, token: &str, exe_name: &str) -> Result<(), String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/unlink"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "exeName": exe_name }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("unlink request failed: {}", res.status()))
+    }
+}

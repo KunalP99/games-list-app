@@ -72,11 +72,20 @@
         <label class="field-label" for="link-game">Game</label>
         <select id="link-game" class="field"></select>
 
+        <p class="panel-warning" id="link-warning" hidden></p>
+
         <div class="panel-actions">
           <button class="primary" id="link-save">Link them</button>
           <button class="ghost" id="link-cancel">Cancel</button>
         </div>
         <p class="panel-msg" id="link-msg" hidden></p>
+
+        <!-- Existing links, so a wrong one can be undone here rather than
+             needing someone to edit the database. -->
+        <div id="linked-list-wrap" hidden>
+          <p class="field-label">Already linked</p>
+          <ul class="list" id="linked-list"></ul>
+        </div>
       </section>
 
       <section class="section">
