@@ -32,6 +32,13 @@ const IGNORED: &[&str] = &[
     "onedrive.exe", "shellexperiencehost.exe", "applicationframehost.exe", "systemsettings.exe",
     "photoshop.exe", "illustrator.exe", "figma.exe", "outlook.exe", "excel.exe", "winword.exe",
     "powerpnt.exe", "acrobat.exe", "zoom.exe", "vlc.exe", "textinputhost.exe",
+    // More launchers. These matter more now the question comes seconds after a
+    // launch rather than minutes: starting a game often puts its launcher on
+    // screen first, and that is the wrong thing to be asked about — worse, say
+    // yes and every minute the launcher is open counts as play time.
+    "rockstarlauncher.exe", "riotclientservices.exe", "riotclientux.exe", "leagueclient.exe",
+    "bethesdanetlauncher.exe", "amazongameslauncher.exe", "minecraftlauncher.exe",
+    "itch.exe", "playnite.desktopapp.exe", "heroic.exe", "legendary.exe", "gameoverlayui.exe",
 ];
 
 /// Folders games actually install into.
@@ -45,9 +52,31 @@ const GRAPHICS_MODULES: &[&str] = &[
     "d3d11.dll", "d3d12.dll", "d3d9.dll", "dxgi.dll", "vulkan-1.dll", "opengl32.dll",
 ];
 
-/// A program must be up this long before we will ask about it — installers,
-/// updaters and one-off tools rarely stay open.
-const MIN_RUN_TIME_SECS: u64 = 180;
+/// A program must be up this long before we will ask about it.
+///
+/// Short enough to read as "when the game opened" — with a ten-second poll the
+/// question lands twenty to thirty seconds in, while a game is still on its
+/// loading screen. Long enough that the splash screens and redistributable
+/// installers which flash past during a launch are gone before anything is
+/// asked.
+const MIN_RUN_TIME_SECS: u64 = 20;
+
+/// After this long, a program we still cannot vouch for is written off.
+///
+/// A game loads its graphics runtime while it starts, so "no 3D modules yet"
+/// a few seconds in means nothing. Re-checking gives it time to get going;
+/// this bounds how long we keep paying for that on something that never will.
+const SETTLES_AFTER_SECS: u64 = 120;
+
+/// Names that are part of installing or repairing a game rather than playing
+/// one. They sit in the same folders games do and load the same graphics
+/// runtimes, so nothing else here separates them — and now that the question
+/// comes seconds after launch rather than minutes, they are what would be in
+/// front of the user instead of the game.
+const NOT_THE_GAME: &[&str] = &[
+    "setup", "install", "unins", "redist", "vcredist", "directx", "dxsetup", "dotnet",
+    "crashhandler", "crashreport", "launcher_installer", "updater", "patcher", "repair",
+];
 
 pub fn new_system() -> System {
     System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()))
@@ -96,12 +125,28 @@ pub fn pickable(c: &Candidate) -> bool {
     }
 }
 
+/// What we make of a process, and whether that can still change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    Game,
+    NotAGame,
+    /// Too soon to say — ask again on the next poll.
+    NotYet,
+}
+
 /// Remembers which processes have already been judged.
 ///
 /// The last gate walks a process's loaded modules, which means opening a
 /// Toolhelp32 snapshot. That is fine once, but the loop polls every ten
 /// seconds and would otherwise re-walk the same long-running programs forever.
-/// A verdict for a given process cannot change, so it is kept.
+///
+/// Only *settled* verdicts are kept. Caching every answer looked right — a
+/// program is a game or it is not — but two of the gates are about time, not
+/// identity: a process younger than `MIN_RUN_TIME_SECS`, and one that has not
+/// loaded its graphics runtime yet. Keeping those answers meant a game was
+/// written off at first sight, seconds after launching, and never looked at
+/// again. The three-minute settle therefore never elapsed for anything; it
+/// just silenced the prompt.
 #[derive(Default)]
 pub struct GameJudge {
     /// pid -> (exe name, verdict). The exe name guards against the OS reusing
@@ -120,9 +165,16 @@ impl GameJudge {
                 return *verdict;
             }
         }
-        let verdict = looks_like_game_with(candidate, modules);
-        self.verdicts.insert(candidate.pid, (candidate.exe_name.clone(), verdict));
-        verdict
+        match looks_like_game_with(candidate, modules) {
+            // Still starting up: decide next time round rather than writing it
+            // off for the life of the process.
+            Verdict::NotYet => false,
+            settled => {
+                let verdict = settled == Verdict::Game;
+                self.verdicts.insert(candidate.pid, (candidate.exe_name.clone(), verdict));
+                verdict
+            }
+        }
     }
 
     /// Drop processes that have exited, so the map cannot grow without bound.
@@ -138,37 +190,53 @@ impl GameJudge {
 /// Every gate here earned its place; the Windows-directory one in particular,
 /// because `TextInputHost` loads `dxgi.dll` and was the single false positive
 /// when this was tested against every windowed app on a real desktop.
-fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> bool {
+fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> Verdict {
     if !c.has_window {
-        return false;
+        return Verdict::NotAGame;
     }
     if IGNORED.contains(&c.exe_name.as_str()) {
-        return false;
+        return Verdict::NotAGame;
     }
-    if c.run_time_secs < MIN_RUN_TIME_SECS {
-        return false;
+    // An installer sits in the game's own folder and loads the same graphics
+    // runtime, so no later gate would tell them apart.
+    if NOT_THE_GAME.iter().any(|part| c.exe_name.contains(part)) {
+        return Verdict::NotAGame;
     }
 
     // No readable path means we cannot vouch for it, so we stay quiet.
     let Some(path) = c.path.as_deref() else {
-        return false;
+        return Verdict::NotAGame;
     };
 
     if let Some(windows_dir) = std::env::var_os("SystemRoot") {
         let windows_dir = windows_dir.to_string_lossy().to_lowercase();
         if path.starts_with(&windows_dir) {
-            return false;
+            return Verdict::NotAGame;
         }
     }
 
+    // Everything above is about what a program *is*, and settles immediately.
+    // Everything below is about how far into starting up it has got.
+    if c.run_time_secs < MIN_RUN_TIME_SECS {
+        return Verdict::NotYet;
+    }
+
     if GAME_FOLDER_HINTS.iter().any(|hint| path.contains(hint)) {
-        return true;
+        return Verdict::Game;
     }
 
     // Only reached once everything above has passed, so the cost of walking a
-    // process's modules is paid rarely — and GameJudge then remembers the
-    // answer, so a long-running program is never walked twice.
-    modules(c.pid)
+    // process's modules is paid rarely — and a settled verdict is remembered,
+    // so a long-running program is not walked forever.
+    if modules(c.pid) {
+        return Verdict::Game;
+    }
+    if c.run_time_secs < SETTLES_AFTER_SECS {
+        // It may still be loading its graphics runtime.
+        Verdict::NotYet
+    } else {
+        Verdict::NotAGame
+    }
 }
 
 // ── Windows specifics ───────────────────────────────────────────────────────
@@ -310,8 +378,75 @@ mod tests {
     }
 
     #[test]
+    fn a_game_is_asked_about_once_it_has_settled_not_minutes_later() {
+        // Twenty seconds, so with a ten-second poll the question arrives while
+        // the game is still loading rather than three minutes into play.
+        let path = "d:\\steamlibrary\\steamapps\\common\\hades\\hades.exe";
+        let mut judge = GameJudge::default();
+        assert!(!judge.judge_with(&candidate("hades.exe", Some(path), 5, true), |_| false));
+        assert!(judge.judge_with(&candidate("hades.exe", Some(path), 25, true), |_| false));
+    }
+
+    #[test]
+    fn a_process_judged_too_early_is_judged_again() {
+        // The bug this guards: caching "no" from the age gate meant a game was
+        // written off seconds after launching and never looked at again, so
+        // the settle period never actually elapsed for anything.
+        let path = "d:\\steamlibrary\\steamapps\\common\\hades\\hades.exe";
+        let mut judge = GameJudge::default();
+        judge.judge_with(&candidate("hades.exe", Some(path), 1, true), |_| false);
+        assert!(
+            judge.verdicts.is_empty(),
+            "nothing should be remembered about a process still starting up",
+        );
+        assert!(judge.judge_with(&candidate("hades.exe", Some(path), 600, true), |_| false));
+    }
+
+    #[test]
+    fn a_game_that_has_not_loaded_its_graphics_runtime_yet_gets_another_look() {
+        // Outside a known games folder, so the modules are the only evidence —
+        // and a game loads them while it starts.
+        let c = candidate("mygame.exe", Some("d:\\games\\mygame\\mygame.exe"), 30, true);
+        let mut judge = GameJudge::default();
+        assert!(!judge.judge_with(&c, |_| false));
+        assert!(judge.verdicts.is_empty(), "still young, so not written off");
+        assert!(judge.judge_with(&c, |_| true), "the runtime has loaded by now");
+    }
+
+    #[test]
+    fn a_program_that_never_loads_one_is_eventually_left_alone() {
+        let c = candidate("someapp.exe", Some("d:\\apps\\someapp\\someapp.exe"), 600, true);
+        let mut judge = GameJudge::default();
+        let mut walks = 0;
+        assert!(!judge.judge_with(&c, |_| {
+            walks += 1;
+            false
+        }));
+        assert!(!judge.verdicts.is_empty(), "old enough to be a settled no");
+        judge.judge_with(&c, |_| {
+            walks += 1;
+            false
+        });
+        assert_eq!(walks, 1, "and not walked again once settled");
+    }
+
+    #[test]
+    fn an_installer_in_a_game_folder_is_not_the_game() {
+        // Sits in steamapps and loads the same runtimes, so only the name
+        // separates it — and with a short settle it is what would be on
+        // screen instead of the game.
+        for name in ["easyanticheat_setup.exe", "vcredist_x64.exe", "unins000.exe"] {
+            let path = format!("d:\\steamlibrary\\steamapps\\common\\game\\{name}");
+            let c = candidate(name, Some(&path), 600, true);
+            assert!(!GameJudge::default().judge_with(&c, |_| true), "{name}");
+        }
+    }
+
+    #[test]
     fn something_just_launched_is_given_time_to_settle() {
-        let c = candidate("setup.exe", Some("d:\\steamapps\\common\\x\\setup.exe"), 10, true);
+        // A plain name, so this tests the age gate rather than passing
+        // because NOT_THE_GAME caught "setup" on the way past.
+        let c = candidate("thing.exe", Some("d:\\steamapps\\common\\x\\thing.exe"), 10, true);
         assert!(!GameJudge::default().judge_with(&c, |_| false));
     }
 
