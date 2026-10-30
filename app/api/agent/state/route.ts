@@ -41,6 +41,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', identity.deviceId)
 
+  // Don't swallow query failures. An empty executables map looks exactly like
+  // "nothing linked yet", so a broken query here is invisible from the agent's
+  // side — which cost real debugging time once already.
+  const failure = [profileRes, gamesRes, linksRes].find(r => r.error)
+  if (failure) {
+    return NextResponse.json({ error: failure.error.message }, { status: 500 })
+  }
+
   const profile = profileRes.data as { display_name: string | null; username: string; theme_preference: string | null; accent_colour: string | null } | null
   const games = (gamesRes.data ?? []) as { id: string; title: string; steam_appid: number | null; hours_played: number | null }[]
   const links = (linksRes.data ?? []) as { exe_name: string; game_id: string }[]
@@ -66,7 +74,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     palette: Object.fromEntries((accentPalette(accent) ?? []).map(([stop, rgb]) => [stop, rgb])),
     // The agent reads its cadence from here, so it can be tuned without
     // shipping a new build to everyone.
-    pollSeconds: 30,
+    // 10s rather than 30: a process scan costs ~8ms, so this is still
+    // roughly 0.1% of one core, and 30 seconds of a game being open with
+    // the app saying nothing reads as broken.
+    pollSeconds: 10,
     checkpointMinutes: 15,
   })
 }
