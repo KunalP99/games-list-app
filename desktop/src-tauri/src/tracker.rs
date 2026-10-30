@@ -16,6 +16,7 @@ use tauri_plugin_notification::NotificationExt;
 use crate::api::{self, AgentState, PlayingGame};
 use crate::config::{self, AppConfig};
 use crate::detect;
+use crate::launchers;
 use crate::matching;
 use crate::steam;
 use crate::toast;
@@ -91,6 +92,9 @@ pub struct Shared {
     /// running but owned-and-not-trackable (completed, say) is not asked about
     /// on every single poll.
     pub identified: HashSet<u32>,
+    /// The same, for executables identified by a launcher-reported title
+    /// rather than a Steam app id — keyed by exe name, since there is no id.
+    pub identified_titles: HashSet<String>,
     /// Set when something happened off-app that the cached state cannot
     /// know about — linking a game on the website, for instance. The loop
     /// re-reads on its next tick instead of waiting out the cache.
@@ -240,9 +244,13 @@ pub async fn run_loop(app: AppHandle) {
             }
             (None, None) => {
                 // A Steam game can be identified exactly, so try that first:
-                // it needs no executable link and no question. Only when that
-                // comes to nothing is the user asked anything.
-                if identify_steam_games(&app, &base, &token, &candidates, &mut judge).await {
+                // it needs no executable link and no question. Epic's own
+                // manifests are the next best thing, for anything Steam
+                // didn't catch. Only when both come to nothing is the user
+                // asked anything.
+                let identified = identify_steam_games(&app, &base, &token, &candidates, &mut judge).await
+                    || identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
+                if identified {
                     // Something was filed; re-read so the next tick can track
                     // it rather than waiting out the state cache.
                     tracker.shared.lock().unwrap().force_refresh = true;
@@ -438,7 +446,7 @@ async fn identify_steam_games(
             continue;
         }
 
-        let response = match api::post_identify(base, token, app_id).await {
+        let response = match api::post_identify(base, token, api::IdentifyBy::SteamAppId(app_id)).await {
             Ok(r) => r,
             Err(err) => {
                 // Offline, or the site is down. Decide nothing and try again
@@ -483,6 +491,84 @@ async fn identify_steam_games(
             }
             // "unknown", or anything a newer site version returns: decide
             // nothing, and leave it to be retried.
+            _ => {}
+        }
+    }
+    false
+}
+
+/// The same idea as [`identify_steam_games`], for launchers that are not
+/// Steam — currently Epic. Only reached once the Steam path has already come
+/// up empty for a candidate, since a game can only ever be one or the other.
+///
+/// Unlike Steam's app id, a launcher's display name is not a key into
+/// anything IGDB keeps — identifying by it is a search, not a lookup, so the
+/// server never answers `notAGame` here. A miss just means "inconclusive":
+/// nothing is remembered, and the executable falls through to the ordinary
+/// heuristic prompt exactly as if this function did not exist.
+async fn identify_other_launchers(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    candidates: &[detect::Candidate],
+    judge: &mut detect::GameJudge,
+) -> bool {
+    let tracker = app.state::<Tracker>();
+    let dir = tracker.data_dir.clone();
+    let asked = config::load_asked(&dir);
+    let epic_games = launchers::epic_games();
+    if epic_games.is_empty() {
+        return false;
+    }
+
+    for candidate in candidates {
+        if asked.contains(&candidate.exe_name) {
+            continue;
+        }
+        let Some(path) = candidate.path.as_deref() else { continue };
+        let Some(title) = launchers::display_name_for_exe(path, &epic_games) else { continue };
+
+        {
+            let shared = tracker.shared.lock().unwrap();
+            if shared.identified_titles.contains(&candidate.exe_name) {
+                continue;
+            }
+        }
+
+        if !judge.judge(candidate) {
+            continue;
+        }
+
+        let response = match api::post_identify(base, token, api::IdentifyBy::Title(&title)).await {
+            Ok(r) => r,
+            Err(err) => {
+                log::warn!("could not identify \"{title}\": {err}");
+                continue;
+            }
+        };
+
+        match response.result.as_str() {
+            "added" => {
+                let shown = response.title.unwrap_or(title);
+                log::info!("added {shown} as an ambient game (by name: \"{shown}\")");
+                tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
+                notify(app, "Now tracking", &format!("{shown} — added to your Ambient games."));
+                return true;
+            }
+            "tracked" => {
+                tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
+                return true;
+            }
+            "untracked" => {
+                log::info!(
+                    "\"{title}\" is owned but {}; leaving it alone",
+                    response.status.as_deref().unwrap_or("not trackable"),
+                );
+                tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
+            }
+            // "unknown" (no exact IGDB match, or the request failed): decide
+            // nothing — not even remembered — and let the heuristic prompt
+            // offer the usual "is this a game?" toast instead.
             _ => {}
         }
     }

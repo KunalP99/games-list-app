@@ -166,17 +166,26 @@ pub struct IdentifyResponse {
     pub status: Option<String>,
 }
 
-/// Ask what a running Steam game is, and have it filed if it is new.
-pub async fn post_identify(
-    base: &str,
-    token: &str,
-    steam_app_id: u32,
-) -> Result<IdentifyResponse, String> {
+/// What to identify a running game by — however the agent came to recognise it.
+pub enum IdentifyBy<'a> {
+    /// Exact: the registry's app id maps to an exact IGDB game, or nothing.
+    SteamAppId(u32),
+    /// A search, not a lookup — a launcher's own manifest names the game
+    /// authoritatively, but IGDB keeps no cross-reference for these stores.
+    Title(&'a str),
+}
+
+/// Ask what a running game is, and have it filed if it is new.
+pub async fn post_identify(base: &str, token: &str, by: IdentifyBy<'_>) -> Result<IdentifyResponse, String> {
+    let body = match by {
+        IdentifyBy::SteamAppId(id) => serde_json::json!({ "steamAppId": id }),
+        IdentifyBy::Title(title) => serde_json::json!({ "titleGuess": title }),
+    };
     let res = client()
         .map_err(|e| e.to_string())?
         .post(format!("{base}/api/agent/identify"))
         .bearer_auth(token)
-        .json(&serde_json::json!({ "steamAppId": steam_app_id }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| e.to_string())?;

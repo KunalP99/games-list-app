@@ -2,22 +2,33 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { resolveSteamApp } from '@/lib/steam-games'
+import { findGameByExactName } from '@/lib/name-games'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * "What is this Steam app, and can I track it?"
+ * "What is this running game, and can I track it?"
  *
- * The agent calls this once per app id it has never seen. The answer decides
- * everything that follows, so it covers all four outcomes rather than just
- * saying yes or no:
+ * Two ways to ask, and the agent uses whichever it actually has:
  *
- *   notAGame   — IGDB has no such game. Never ask again, never track it. This
- *                is what keeps Blender and Wallpaper Engine quiet without
- *                anyone maintaining a list of non-games by hand.
- *   unknown    — the lookup did not get through. Try again later; decide
- *                nothing.
+ *   steamAppId — launched through Steam. Exact: the registry's app id maps to
+ *                an exact IGDB game via `external_games`, or to nothing.
+ *   titleGuess — launched through another launcher (Epic, GOG, …) whose own
+ *                manifest names the game authoritatively. Still a search, not
+ *                a lookup — IGDB keeps no cross-reference for these stores —
+ *                so it is only trusted on an exact match once both names are
+ *                reduced to bare lowercase letters and digits.
+ *
+ * The answer decides everything that follows:
+ *
+ *   notAGame   — (steamAppId only) IGDB has no such game. Never ask again,
+ *                never track it. This is what keeps Blender and Wallpaper
+ *                Engine quiet without anyone maintaining a list by hand.
+ *   unknown    — inconclusive: the lookup failed, or (titleGuess) nothing
+ *                matched exactly. Decide nothing and leave it to the agent's
+ *                ordinary heuristic prompt — never cached, never remembered,
+ *                because a search miss is not proof of anything.
  *   tracked    — already in the library as Playing or Ambient. Just track it.
  *   untracked  — in the library, but completed, dropped or still in the
  *                backlog. Left alone: moving it is the user's call, not a
@@ -43,20 +54,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const appId = body?.steamAppId
-  if (typeof appId !== 'number' || !Number.isInteger(appId) || appId <= 0) {
+  const titleGuess = typeof body?.titleGuess === 'string' ? body.titleGuess.trim() : null
+  const hasAppId = appId != null
+  const hasTitle = !!titleGuess
+
+  if (hasAppId === hasTitle) {
+    return NextResponse.json({ error: 'exactly one of steamAppId or titleGuess is required' }, { status: 400 })
+  }
+  if (hasAppId && (typeof appId !== 'number' || !Number.isInteger(appId) || appId <= 0)) {
     return NextResponse.json({ error: 'steamAppId must be a positive integer' }, { status: 400 })
   }
+  if (hasTitle && titleGuess!.length > 200) {
+    return NextResponse.json({ error: 'titleGuess too long' }, { status: 400 })
+  }
 
-  const lookup = await resolveSteamApp(sb as any, appId)
-  if (lookup.kind === 'unknown') return NextResponse.json({ result: 'unknown' })
-  if (lookup.kind === 'notAGame') return NextResponse.json({ result: 'notAGame' })
+  // Both paths resolve to the same shape, so everything below is shared.
+  let igdbId: number
+  let resolvedName: string
+  if (hasAppId) {
+    const lookup = await resolveSteamApp(sb as any, appId)
+    if (lookup.kind === 'unknown') return NextResponse.json({ result: 'unknown' })
+    if (lookup.kind === 'notAGame') return NextResponse.json({ result: 'notAGame' })
+    igdbId = lookup.igdbId
+    resolvedName = lookup.name
+  } else {
+    const lookup = await findGameByExactName(titleGuess!)
+    if (lookup.kind === 'noMatch') return NextResponse.json({ result: 'unknown' })
+    igdbId = lookup.igdbId
+    resolvedName = lookup.name
+  }
 
-  // Already theirs? Match on the Steam id first — it is exact — then on the
-  // IGDB id, which catches a copy added before Steam ids were being stored.
+  // Already theirs? Match on the Steam id first where we have one — it is
+  // exact — then on the IGDB id, which catches a copy added before Steam ids
+  // were being stored, or one found by name in the first place.
+  const ownedQuery = hasAppId ? `steam_appid.eq.${appId},igdb_id.eq.${igdbId}` : `igdb_id.eq.${igdbId}`
   const { data: owned } = await (sb.from('games') as any)
     .select('id, title, status')
     .eq('user_id', identity.userId)
-    .or(`steam_appid.eq.${appId},igdb_id.eq.${lookup.igdbId}`)
+    .or(ownedQuery)
     .order('updated_at', { ascending: false })
     .limit(1)
   const existing = (owned ?? [])[0] as { id: string; title: string; status: string } | undefined
@@ -68,25 +103,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       gameId: existing.id,
       title: existing.title,
       status: existing.status,
-      igdbId: lookup.igdbId,
+      igdbId,
     })
   }
 
   // New to them: file it as Ambient, with the same metadata any other add
   // would get, so it does not sit in the library as a bare title.
   const { getRawgGameDetail } = await import('@/lib/rawg')
-  const detail = await getRawgGameDetail(lookup.igdbId)
+  const detail = await getRawgGameDetail(igdbId)
 
   const { data: created, error } = await (sb.from('games') as any)
     .insert({
       user_id: identity.userId,
-      title: detail?.name ?? lookup.name,
+      title: detail?.name ?? resolvedName,
       developer: detail?.developers?.[0]?.name ?? null,
       status: 'ambient',
       platform: 'PC',
       start_date: new Date().toISOString().slice(0, 10),
-      steam_appid: appId,
-      [PROVIDER_ID_COLUMN]: lookup.igdbId,
+      steam_appid: hasAppId ? appId : null,
+      [PROVIDER_ID_COLUMN]: igdbId,
       image_url: detail?.background_image ?? null,
       cover_image_url: detail?.cover_image ?? null,
       artwork_url: detail?.artwork_image ?? null,
@@ -107,6 +142,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     gameId: created.id,
     title: created.title,
     status: 'ambient',
-    igdbId: lookup.igdbId,
+    igdbId,
   })
 }

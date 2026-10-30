@@ -173,6 +173,15 @@ async function openLinkPanel(preselectExe = null) {
   ])
 
   exeSelect.innerHTML = ''
+  // No program detected for us — e.g. opened from the plain "Link a game"
+  // button — so start on a blank choice rather than whichever program the
+  // browser's <select> would otherwise default to showing as "selected".
+  if (!preselectExe) {
+    const placeholder = document.createElement('option')
+    placeholder.value = ''
+    placeholder.textContent = '— Select a program —'
+    exeSelect.appendChild(placeholder)
+  }
   for (const exe of programs) {
     const opt = document.createElement('option')
     opt.value = exe
@@ -197,6 +206,17 @@ async function openLinkPanel(preselectExe = null) {
 
   const gameSelect = el('link-game')
   gameSelect.innerHTML = ''
+  // Always starts blank. Nothing here is ever a confident suggestion — the
+  // confident case is handled entirely by the toast's Yes button, which never
+  // opens this panel — so defaulting to whichever game the <select> happened
+  // to list first was never actually a suggestion, just an accident of
+  // ordering. That accident is what made an unrelated game (say, Baldur's
+  // Gate 3) look like the app's answer to "is this your game?" when the real
+  // answer was "I don't know."
+  const blank = document.createElement('option')
+  blank.value = ''
+  blank.textContent = '— Select a game —'
+  gameSelect.appendChild(blank)
   for (const game of status?.playing ?? []) {
     const opt = document.createElement('option')
     opt.value = game.id
@@ -205,9 +225,6 @@ async function openLinkPanel(preselectExe = null) {
   }
 
   renderLinked(status)
-  // No program picked for us? Offer the one that looks like the game
-  // that is already selected.
-  if (!preselectExe) el('link-game').dispatchEvent(new Event('change'))
   showExeWarning()
   panel.hidden = false
 }
@@ -286,7 +303,7 @@ el('link-exe').addEventListener('change', showExeWarning)
  */
 el('link-game').addEventListener('change', async () => {
   const option = el('link-game').selectedOptions[0]
-  if (!option) return
+  if (!option || !option.value) return // the "— Select a game —" placeholder
   const title = option.textContent.replace(' (already linked)', '')
   const exe = await invoke('suggest_program', { title }).catch(() => null)
   if (exe) {
