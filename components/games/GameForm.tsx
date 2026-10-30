@@ -19,10 +19,10 @@ const STATUS_OPTIONS = [
   { value: 'ambient', label: 'Ambient (ongoing)' },
 ]
 
-export default function GameForm({ game, defaultStatus }: { game?: Game; defaultStatus?: string }) {
+export default function GameForm({ game, defaultStatus, defaultTitle }: { game?: Game; defaultStatus?: string; defaultTitle?: string }) {
   const isEdit = !!game
   const router = useRouter()
-  const [title, setTitle] = useState(game?.title ?? '')
+  const [title, setTitle] = useState(game?.title ?? defaultTitle ?? '')
   const [developer, setDeveloper] = useState(game?.developer ?? '')
   const [releaseDatePrecision, setReleaseDatePrecision] = useState<'full' | 'year'>(game?.release_date_precision ?? 'full')
   const [releaseDate, setReleaseDate] = useState(

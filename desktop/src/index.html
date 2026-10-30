@@ -72,6 +72,13 @@
         <label class="field-label" for="link-game">Game</label>
         <select id="link-game" class="field"></select>
 
+        <!-- The only way out when the real game isn't in the dropdown at all
+             — nothing already in the library resembles it, which is the
+             normal case for a game from a launcher other than Steam. -->
+        <p class="field-hint">
+          Can't find it? <button type="button" class="link" id="link-add-new">Add it as a new game</button>
+        </p>
+
         <p class="panel-warning" id="link-warning" hidden></p>
 
         <div class="panel-actions">

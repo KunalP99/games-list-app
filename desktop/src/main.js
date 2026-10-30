@@ -294,6 +294,34 @@ el('link-game').addEventListener('change', async () => {
     showExeWarning()
   }
 })
+/**
+ * A rough title from an executable name, for the add-game search box to start
+ * from — not a claim about what the game actually is, just something closer
+ * to typing than a blank field. "split_fiction-Win64-Shipping.exe" becomes
+ * "Split Fiction".
+ */
+function guessTitleFromExe(exe) {
+  const base = (exe || '').replace(/\.exe$/i, '')
+  const noise = /^(win64|win32|x64|x86|shipping|retail|launcher)$/i
+  const words = base
+    .split(/[\s_.\-]+/)
+    // Noise is filtered as a whole separator-delimited part — "Win64" as one
+    // chunk — before any further splitting, or the later digit/case split
+    // would break it into "Win" + "64" and neither matches the noise list.
+    .filter(part => part && !noise.test(part))
+    .flatMap(part => part.split(/(?=[A-Z][a-z])|(?<=[a-z0-9])(?=[A-Z])|(?<=[a-zA-Z])(?=\d)/))
+    .filter(Boolean)
+  if (words.length === 0) return ''
+  return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
+el('link-add-new').addEventListener('click', async () => {
+  const title = guessTitleFromExe(el('link-exe').value)
+  const params = new URLSearchParams({ status: 'ambient' })
+  if (title) params.set('title', title)
+  await invoke('open_site', { path: `/games/new?${params.toString()}` })
+})
+
 el('link-cancel').addEventListener('click', () => { el('link-panel').hidden = true })
 
 el('link-save').addEventListener('click', async () => {
