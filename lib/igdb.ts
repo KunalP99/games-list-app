@@ -83,11 +83,19 @@ async function throttle() {
   lastRequest = Date.now()
 }
 
-// Run an apicalypse query. Returns [] on any failure (mirrors lib/rawg fallback).
-async function igdbQuery<T = unknown>(endpoint: string, body: string, retry = true): Promise<T[]> {
+// Run an apicalypse query, reporting whether the request itself succeeded.
+//
+// Most callers only want the rows and treat any failure as "nothing found"
+// (igdbQuery below). One does not: deciding that a Steam app is not a game is
+// an answer worth caching, and a failed request must never be mistaken for it.
+async function igdbTry<T = unknown>(
+  endpoint: string,
+  body: string,
+  retry = true,
+): Promise<{ ok: boolean; rows: T[] }> {
   const id = process.env.IGDB_CLIENT_ID
   const token = await getToken()
-  if (!id || !token) return []
+  if (!id || !token) return { ok: false, rows: [] }
   try {
     await throttle()
     const res = await fetch(`https://api.igdb.com/v4/${endpoint}`, {
@@ -96,12 +104,17 @@ async function igdbQuery<T = unknown>(endpoint: string, body: string, retry = tr
       body,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
-    if (res.status === 401 && retry) { cached = null; return igdbQuery<T>(endpoint, body, false) }
-    if (!res.ok) return []
-    return await res.json() as T[]
+    if (res.status === 401 && retry) { cached = null; return igdbTry<T>(endpoint, body, false) }
+    if (!res.ok) return { ok: false, rows: [] }
+    return { ok: true, rows: await res.json() as T[] }
   } catch {
-    return []
+    return { ok: false, rows: [] }
   }
+}
+
+// Run an apicalypse query. Returns [] on any failure (mirrors lib/rawg fallback).
+async function igdbQuery<T = unknown>(endpoint: string, body: string): Promise<T[]> {
+  return (await igdbTry<T>(endpoint, body)).rows
 }
 
 const DETAIL_FIELDS = 'name, summary, first_release_date, cover.image_id, artworks.image_id, artworks.width, artworks.height, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer'
@@ -413,4 +426,38 @@ export async function getGameAdditions(id: number): Promise<RawgAddition[]> {
     background_image: coverUrl(r.cover?.image_id),
     released: releasedFrom(r.first_release_date),
   }))
+}
+
+/**
+ * Which game is this Steam app?
+ *
+ * The inverse of `steamAppIdFrom`, and the one lookup that needs no name
+ * matching at all: the agent knows the app id of what is running, and this
+ * turns it into the IGDB game exactly.
+ *
+ * Queries the `external_games` endpoint rather than filtering `games` on a
+ * nested field, because external ids are what that endpoint is keyed on.
+ *
+ * `ok` separates the two ways this can come back empty. A Steam app with no
+ * IGDB entry is how Blender, Wallpaper Engine and the Steamworks
+ * redistributables are told apart from games, so that answer is worth caching
+ * forever — whereas a request that simply did not get through must not be,
+ * or one bad minute would mark a real game as not-a-game permanently.
+ */
+export async function gameFromSteamAppId(
+  appId: number,
+): Promise<{ ok: boolean; game: { id: number; name: string } | null }> {
+  if (!Number.isInteger(appId) || appId <= 0) return { ok: true, game: null }
+  if (!process.env.IGDB_CLIENT_ID || !process.env.IGDB_CLIENT_SECRET) {
+    return { ok: false, game: null }
+  }
+
+  const { ok, rows } = await igdbTry<{ game?: { id?: number; name?: string } }>(
+    'external_games',
+    `fields game.id, game.name; where external_game_source = 1 & uid = "${appId}"; limit 5;`)
+  if (!ok) return { ok: false, game: null }
+
+  const hit = rows.find(r => r.game?.id && r.game?.name)
+  if (!hit?.game?.id || !hit.game.name) return { ok: true, game: null }
+  return { ok: true, game: { id: hit.game.id, name: hit.game.name } }
 }

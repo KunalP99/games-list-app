@@ -7,6 +7,8 @@ import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameCard from '@/components/games/GameCard'
 import GameFilters from '@/components/games/GameFilters'
+import RecentlyPlayed from '@/components/games/RecentlyPlayed'
+import { getRecentlyPlayed } from '@/lib/recently-played'
 import ProfileHero from '@/components/profile/ProfileHero'
 import { Suspense } from 'react'
 
@@ -53,7 +55,7 @@ export default async function GamesPage({
   // Playing games always fetched separately for the Now Playing strip — run
   // alongside the main games query and the profile-banner stats (computeUserStats
   // is the same helper the friend profile page uses — see lib/user-stats.ts).
-  const [playingGamesRes, gamesRes, stats] = await Promise.all([
+  const [playingGamesRes, gamesRes, stats, recentlyPlayed] = await Promise.all([
     supabase
       .from('games')
       .select(GAME_LIST_COLS)
@@ -62,6 +64,7 @@ export default async function GamesPage({
       .order('created_at', { ascending: false }),
     gamesQuery,
     computeUserStats(supabase, user!.id),
+    getRecentlyPlayed(supabase, user!.id),
   ])
 
   const playingGames = playingGamesRes.data as Game[] | null
@@ -132,6 +135,10 @@ export default async function GamesPage({
           </div>
         </div>
       )}
+
+      {/* Ambient games, newest session first — what has actually been running,
+          as opposed to what was deliberately picked up above. */}
+      <RecentlyPlayed games={recentlyPlayed} isOwner={true} />
 
       <Suspense>
         <GameFilters />

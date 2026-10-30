@@ -11,6 +11,8 @@ import GameFilters from '@/components/games/GameFilters'
 import ProfileHero from '@/components/profile/ProfileHero'
 import ProfileStatCards from '@/components/profile/ProfileStatCards'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
+import RecentlyPlayed from '@/components/games/RecentlyPlayed'
+import { getRecentlyPlayed } from '@/lib/recently-played'
 import { Suspense } from 'react'
 
 export default async function UserProfilePage({
@@ -55,7 +57,7 @@ export default async function UserProfilePage({
   if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
-  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats] = await Promise.all([
+  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats, recentlyPlayed] = await Promise.all([
     gamesQuery,
     supabase
       .from('games')
@@ -88,6 +90,7 @@ export default async function UserProfilePage({
       .order('unlocked_at', { ascending: false })
       .limit(10),
     computeUserStats(supabase, profile.id),
+    getRecentlyPlayed(supabase, profile.id),
   ])
 
   const games = gamesRes.data as Game[] | null
@@ -170,6 +173,8 @@ export default async function UserProfilePage({
           as the rail, leaving a large gap above the games list whenever the
           content beside it was shorter. */}
       <NowPlayingGrid games={playingGames} isOwner={isOwner} />
+
+      <RecentlyPlayed games={recentlyPlayed} isOwner={isOwner} />
 
       <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 
