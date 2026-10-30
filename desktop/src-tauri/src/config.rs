@@ -107,6 +107,27 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_hand_written_config_file() {
+        // The shape documented for pointing the app at the local stack. A
+        // silent parse failure here would fall back to production, which is a
+        // confusing bug to chase, so pin the exact JSON.
+        let raw = r#"{
+            "token":  null,
+            "api_base":  "http://localhost:3000"
+        }"#;
+        let config: AppConfig = serde_json::from_str(raw).expect("should parse");
+        assert!(!config.is_paired());
+        assert_eq!(config.base(), "http://localhost:3000");
+    }
+
+    #[test]
+    fn reads_a_paired_config() {
+        let raw = r#"{"token":"glk_abc","api_base":"http://localhost:3000"}"#;
+        let config: AppConfig = serde_json::from_str(raw).expect("should parse");
+        assert!(config.is_paired());
+    }
+
+    #[test]
     fn trailing_slashes_are_trimmed_so_urls_do_not_double_up() {
         let c = AppConfig { api_base: "http://localhost:3000/".into(), ..Default::default() };
         assert_eq!(c.base(), "http://localhost:3000");
