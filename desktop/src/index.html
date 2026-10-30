@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GamesList</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Status screen. Native rather than a webview of the site, because this is
+       the one thing worth seeing when the site is unreachable. -->
+  <header class="topbar">
+    <div class="wordmark">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
+          <polygon points="1.5,3.5 1.5,12.5 8.5,8" />
+          <rect x="10.5" y="3.5" width="4.5" height="2" rx="0.6" />
+          <rect x="10.5" y="7" width="4.5" height="2" rx="0.6" />
+          <rect x="10.5" y="10.5" width="4.5" height="2" rx="0.6" />
+        </svg>
+      </span>
+      <span class="wordmark-text">Games<span class="wordmark-accent">List</span></span>
+    </div>
+    <div class="who" id="who">Connecting…</div>
+  </header>
+
+  <main>
+    <!-- Not paired yet -->
+    <section class="card center" id="signed-out" hidden>
+      <p class="big-emoji">🎮</p>
+      <h1 class="title">Connect your account</h1>
+      <p class="muted">
+        Sign in once and this PC will log your hours automatically while you play.
+      </p>
+      <button class="primary" id="btn-connect">Connect</button>
+    </section>
+
+    <!-- Paired: the live status -->
+    <section id="signed-in" hidden>
+      <section class="card status" id="status-card">
+        <div class="status-head">
+          <span class="dot" id="status-dot" aria-hidden="true"></span>
+          <span class="status-label" id="status-label">Not tracking</span>
+        </div>
+        <p class="status-game" id="status-game">Start a game you’ve set to Playing.</p>
+        <p class="status-elapsed" id="status-elapsed" hidden>0m</p>
+      </section>
+
+      <!-- Only appears when something that looks like a game is running and
+           has not been linked yet. Asked once per program, ever. -->
+      <section class="card prompt" id="prompt-card" hidden>
+        <p class="prompt-question">
+          Is <code id="prompt-exe"></code> your game
+          <strong id="prompt-title"></strong>?
+        </p>
+        <div class="prompt-actions">
+          <button class="primary" id="prompt-yes">Yes</button>
+          <button class="ghost" id="prompt-no">No, pick another</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>Playing</h2>
+          <button class="link" id="btn-games">My games →</button>
+        </div>
+        <ul class="list" id="playing-list">
+          <li class="empty" id="playing-empty">Nothing set to Playing yet.</li>
+        </ul>
+      </section>
+
+      <footer class="footer">
+        <div class="sync" id="sync-line">—</div>
+        <div class="actions">
+          <button class="ghost" id="btn-link">Link a game</button>
+          <button class="ghost" id="btn-settings">Settings</button>
+        </div>
+      </footer>
+    </section>
+  </main>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>

@@ -38,3 +38,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Desktop app (Tauri) — Rust build output is ignored by desktop/src-tauri/.gitignore
+/desktop/node_modules

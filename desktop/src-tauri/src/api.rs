@@ -1,0 +1,134 @@
+//! Talking to the website's agent API.
+//!
+//! The server is the authority on everything that matters: which games may be
+//! written to, and how many hours a checkpoint is actually worth. This client
+//! deliberately holds no rules of its own beyond "ask, and report what came
+//! back".
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::time::Duration;
+
+const TIMEOUT: Duration = Duration::from_secs(15);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlayingGame {
+    pub id: String,
+    pub title: String,
+    #[serde(rename = "steamAppId")]
+    pub steam_app_id: Option<u32>,
+    #[serde(default)]
+    pub hours: f64,
+    #[serde(default)]
+    pub linked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentState {
+    #[serde(default)]
+    pub playing: Vec<PlayingGame>,
+    /// exe name -> game id
+    #[serde(default)]
+    pub executables: HashMap<String, String>,
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(rename = "accentColour")]
+    pub accent_colour: Option<String>,
+    /// Brand stops computed by the site, so the app is in the user's colour.
+    #[serde(default)]
+    pub palette: HashMap<String, [u8; 3]>,
+    #[serde(rename = "checkpointMinutes", default = "default_checkpoint")]
+    pub checkpoint_minutes: u64,
+    #[serde(rename = "pollSeconds", default = "default_poll")]
+    pub poll_seconds: u64,
+}
+
+fn default_theme() -> String { "system".into() }
+fn default_checkpoint() -> u64 { 15 }
+fn default_poll() -> u64 { 30 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SessionResponse {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub ignored: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    pub title: Option<String>,
+    #[serde(rename = "addedHours")]
+    pub added_hours: Option<f64>,
+    #[serde(rename = "totalHours")]
+    pub total_hours: Option<f64>,
+}
+
+fn client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder().timeout(TIMEOUT).build()
+}
+
+pub async fn fetch_state(base: &str, token: &str) -> Result<AgentState, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .get(format!("{base}/api/agent/state"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED {
+        // The device was revoked from Settings, or the token is stale.
+        return Err("unauthorized".into());
+    }
+    if !res.status().is_success() {
+        return Err(format!("state request failed: {}", res.status()));
+    }
+    res.json::<AgentState>().await.map_err(|e| e.to_string())
+}
+
+pub async fn post_session(
+    base: &str,
+    token: &str,
+    payload: &serde_json::Value,
+) -> Result<SessionResponse, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/session"))
+        .bearer_auth(token)
+        .json(payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("unauthorized".into());
+    }
+    if !res.status().is_success() {
+        return Err(format!("session request failed: {}", res.status()));
+    }
+    res.json::<SessionResponse>().await.map_err(|e| e.to_string())
+}
+
+/// Remember that an executable is a particular game.
+pub async fn post_link(
+    base: &str,
+    token: &str,
+    exe_name: &str,
+    game_id: &str,
+) -> Result<(), String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/link"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "exeName": exe_name, "gameId": game_id }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("link request failed: {}", res.status()))
+    }
+}
