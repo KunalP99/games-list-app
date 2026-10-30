@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { applyAccentPalette } from '@/lib/accent'
+import { applyAccentPalette, accentPalette } from '@/lib/accent'
 
 const SHADES = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950']
 
@@ -83,6 +83,39 @@ describe('applyAccentPalette', () => {
         expect(channel).toBeLessThanOrEqual(255)
         expect(Number.isInteger(channel)).toBe(true)
       }
+    }
+  })
+})
+
+// ─── accentPalette (pure) ────────────────────────────────────────────────────
+// Split out of applyAccentPalette so the desktop app can use the same shades
+// without a second copy of the maths. These tests pin that the two halves stay
+// in agreement.
+
+describe('accentPalette', () => {
+  it('returns all 11 shades in order', () => {
+    const palette = accentPalette('#0087db')
+    expect(palette).not.toBeNull()
+    expect(palette!.map(([stop]) => stop)).toEqual(SHADES)
+  })
+
+  it('returns null for anything that is not a hex colour', () => {
+    expect(accentPalette('nonsense')).toBeNull()
+    expect(accentPalette('')).toBeNull()
+    expect(accentPalette('#12345')).toBeNull()
+  })
+
+  it('keeps shade-600 as the exact colour the user chose', () => {
+    const palette = accentPalette('#e84410')!
+    const six = palette.find(([stop]) => stop === '600')!
+    expect(six[1]).toEqual([232, 68, 16])
+  })
+
+  it('agrees exactly with what applyAccentPalette writes to the DOM', () => {
+    // If these ever diverge, the app and the site would show different colours.
+    applyAccentPalette('#689df3')
+    for (const [stop, [r, g, b]] of accentPalette('#689df3')!) {
+      expect(getCssVar(`--brand-${stop}`)).toBe(`${r} ${g} ${b}`)
     }
   })
 })

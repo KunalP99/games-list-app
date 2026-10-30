@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bearerFrom, hashToken, generateDeviceToken, TOKEN_PREFIX, authenticateDevice } from '../agent-auth'
+import { bearerFrom, hashToken, generateDeviceToken, TOKEN_PREFIX, authenticateDevice, isLoopbackCallback } from '../agent-auth'
 
 describe('bearerFrom', () => {
   it('reads a bearer token, case-insensitively', () => {
@@ -78,5 +78,38 @@ describe('authenticateDevice', () => {
     await expect(authenticateDevice(stub(null), 'Bearer glk_nope')).resolves.toBeNull()
     await expect(authenticateDevice(stub(null, { message: 'boom' }), 'Bearer x')).resolves.toBeNull()
     await expect(authenticateDevice(stub({ id: 'd', user_id: 'u' }), null)).resolves.toBeNull()
+  })
+})
+
+describe('isLoopbackCallback', () => {
+  it('accepts a loopback listener on a high port', () => {
+    expect(isLoopbackCallback('http://127.0.0.1:49721/cb')).toBe(true)
+    expect(isLoopbackCallback('http://localhost:8731/callback')).toBe(true)
+    expect(isLoopbackCallback('http://[::1]:49721/cb')).toBe(true)
+  })
+
+  it('refuses anywhere that is not this machine', () => {
+    // Each of these would hand a live device token to someone else.
+    expect(isLoopbackCallback('http://evil.example.com:8080/cb')).toBe(false)
+    expect(isLoopbackCallback('http://192.168.1.50:8080/cb')).toBe(false)
+    expect(isLoopbackCallback('http://127.0.0.1.evil.com:8080/cb')).toBe(false)
+    expect(isLoopbackCallback('//evil.example.com/cb')).toBe(false)
+  })
+
+  it('refuses anything that is not plain http on a real port', () => {
+    expect(isLoopbackCallback('https://127.0.0.1:443/cb')).toBe(false)
+    expect(isLoopbackCallback('file:///C:/tmp/cb')).toBe(false)
+    expect(isLoopbackCallback('javascript:alert(1)')).toBe(false)
+    expect(isLoopbackCallback('http://127.0.0.1/cb')).toBe(false)
+    expect(isLoopbackCallback('http://127.0.0.1:80/cb')).toBe(false)
+  })
+
+  it('refuses credentials embedded in the URL', () => {
+    expect(isLoopbackCallback('http://user:pw@127.0.0.1:49721/cb')).toBe(false)
+  })
+
+  it('refuses junk', () => {
+    expect(isLoopbackCallback('')).toBe(false)
+    expect(isLoopbackCallback('not a url')).toBe(false)
   })
 })

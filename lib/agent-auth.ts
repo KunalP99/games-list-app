@@ -60,3 +60,38 @@ export async function authenticateDevice(
   if (error || !data) return null
   return { userId: data.user_id as string, deviceId: data.id as string }
 }
+
+/**
+ * Is this callback URL safe to hand a freshly minted device token to?
+ *
+ * The desktop app receives its token by being redirected to a listener it
+ * started on localhost — the standard flow for native apps (RFC 8252). The
+ * danger is that the callback arrives in a query string, so without this check
+ * the pairing page becomes an open redirect that would hand a live credential
+ * to any address an attacker put in a link.
+ *
+ * Loopback only, plain http only (TLS to yourself is pointless and no app can
+ * present a valid certificate for 127.0.0.1), and a real port — a token must
+ * never leave the machine.
+ */
+export function isLoopbackCallback(raw: string): boolean {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return false
+  }
+
+  if (url.protocol !== 'http:') return false
+  // Credentials in the URL would be sent on to somewhere we haven't checked.
+  if (url.username || url.password) return false
+
+  const host = url.hostname.toLowerCase()
+  const isLoopbackHost = host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1'
+  if (!isLoopbackHost) return false
+
+  const port = Number(url.port)
+  // A listener the app opened will always be on an ephemeral high port; an
+  // absent port would mean 80, which it cannot have bound without privileges.
+  return Number.isInteger(port) && port >= 1024 && port <= 65535
+}

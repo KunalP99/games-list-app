@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types'
-import { generateDeviceToken, hashToken } from '@/lib/agent-auth'
+import { generateDeviceToken, hashToken, isLoopbackCallback } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
@@ -149,4 +149,27 @@ export async function linkExecutable(exeName: string, gameId: string): Promise<A
 
   revalidatePath('/settings')
   return { success: true, data: undefined }
+}
+
+/**
+ * Approve a desktop app's pairing request and hand it a token.
+ *
+ * The callback is re-validated here, not only on the page that rendered the
+ * button: a server action is callable directly, so a check that lives only in
+ * the UI is not a check at all.
+ */
+export async function approveDevicePairing(
+  label: string,
+  callback: string,
+): Promise<ActionResult<{ redirectTo: string }>> {
+  if (!isLoopbackCallback(callback)) {
+    return { success: false, error: 'That pairing link does not point at this computer.' }
+  }
+
+  const issued = await createDeviceToken(label)
+  if (!issued.success) return issued
+
+  const target = new URL(callback)
+  target.searchParams.set('token', issued.data.token)
+  return { success: true, data: { redirectTo: target.toString() } }
 }

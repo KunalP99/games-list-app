@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
+import { accentPalette } from '@/lib/accent'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // rows — it must never be dropped.
   const [profileRes, gamesRes, linksRes] = await Promise.all([
     (sb.from('profiles') as any)
-      .select('theme_preference, accent_colour')
+      .select('display_name, username, theme_preference, accent_colour')
       .eq('id', identity.userId)
       .maybeSingle(),
     (sb.from('games') as any)
@@ -40,9 +41,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', identity.deviceId)
 
-  const profile = profileRes.data as { theme_preference: string | null; accent_colour: string | null } | null
+  const profile = profileRes.data as { display_name: string | null; username: string; theme_preference: string | null; accent_colour: string | null } | null
   const games = (gamesRes.data ?? []) as { id: string; title: string; steam_appid: number | null; hours_played: number | null }[]
   const links = (linksRes.data ?? []) as { exe_name: string; game_id: string }[]
+
+  // Same default the rest of the app uses for an unset accent.
+  const accent = profile?.accent_colour ?? '#ff5722'
 
   return NextResponse.json({
     playing: games.map(g => ({
@@ -53,8 +57,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       linked: links.some(l => l.game_id === g.id) || g.steam_appid != null,
     })),
     executables: Object.fromEntries(links.map(l => [l.exe_name, l.game_id])),
+    displayName: profile?.display_name ?? profile?.username ?? null,
     theme: profile?.theme_preference ?? 'system',
-    accentColour: profile?.accent_colour ?? null,
+    accentColour: accent,
+    // The eleven brand stops, computed by the same function the website uses
+    // (lib/accent.ts), so the desktop app's own screens are in exactly the
+    // user's colour rather than an approximation of it.
+    palette: Object.fromEntries((accentPalette(accent) ?? []).map(([stop, rgb]) => [stop, rgb])),
     // The agent reads its cadence from here, so it can be tuned without
     // shipping a new build to everyone.
     pollSeconds: 30,
