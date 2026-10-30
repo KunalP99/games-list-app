@@ -171,7 +171,7 @@ el('btn-settings').addEventListener('click', () => invoke('open_site', { path: '
  * explanation. Everything needed is already here: the running programs come
  * from the watcher, the games from the status it already holds.
  */
-async function openLinkPanel() {
+async function openLinkPanel(preselectExe = null) {
   const panel = el('link-panel')
   const exeSelect = el('link-exe')
   el('link-msg').hidden = true
@@ -188,12 +188,21 @@ async function openLinkPanel() {
     opt.textContent = exe
     exeSelect.appendChild(opt)
   }
-  if (programs.length === 0) {
+  // The program we were asked about might not be in the picker's list — it is
+  // still running, so offer it explicitly rather than making the user hunt.
+  if (preselectExe && !programs.includes(preselectExe)) {
+    const opt = document.createElement('option')
+    opt.value = preselectExe
+    opt.textContent = preselectExe
+    exeSelect.insertBefore(opt, exeSelect.firstChild)
+  }
+  if (exeSelect.options.length === 0) {
     const opt = document.createElement('option')
     opt.value = ''
     opt.textContent = 'No programs found — start the game first'
     exeSelect.appendChild(opt)
   }
+  if (preselectExe) exeSelect.value = preselectExe
 
   const gameSelect = el('link-game')
   gameSelect.innerHTML = ''
@@ -303,9 +312,11 @@ el('prompt-yes').addEventListener('click', async () => {
   refresh()
 })
 el('prompt-no').addEventListener('click', async () => {
+  // Stay in this window: opening the website's link page in a second window
+  // was the one part of this flow that could show up blank.
   const exe = el('prompt-card').dataset.exe ?? ''
   await invoke('dismiss_prompt')
-  await invoke('open_site', { path: `/settings/devices/link?exe=${encodeURIComponent(exe)}` })
+  await openLinkPanel(exe || null)
   refresh()
 })
 
