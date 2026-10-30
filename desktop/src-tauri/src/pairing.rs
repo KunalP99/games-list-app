@@ -49,6 +49,42 @@ pub fn start(app: AppHandle) -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
 
+    // Bring the window back to the approve screen once the user has signed in.
+    //
+    // Signing in redirects to /dashboard, and Next does that as a client-side
+    // router navigation — so `on_navigation` never fires and the window simply
+    // sits there on the games list while the app waits forever. Polling the
+    // window's URL is the only thing that reliably notices.
+    {
+        let app = app.clone();
+        let pair_url = url.clone();
+        std::thread::spawn(move || {
+            let deadline = Instant::now() + PAIRING_TIMEOUT;
+            while Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(700));
+                let Some(window) = app.get_webview_window("pair") else {
+                    return; // closed, or pairing finished
+                };
+                let Ok(current) = window.url() else { continue };
+                // about:blank while the first page loads — not a real location.
+                if current.scheme() != "http" && current.scheme() != "https" {
+                    continue;
+                }
+                let path = current.path();
+
+                // Mid-flow pages: leave them alone.
+                if path.starts_with("/settings/devices/pair") || path.starts_with("/login") || path.starts_with("/auth") {
+                    continue;
+                }
+
+                log::info!("pairing: signed in and landed on {path}, returning to the approve screen");
+                if let Ok(target) = pair_url.parse() {
+                    let _ = window.navigate(target);
+                }
+            }
+        });
+    }
+
     std::thread::spawn(move || {
         let deadline = Instant::now() + PAIRING_TIMEOUT;
         loop {
