@@ -204,6 +204,13 @@ pub fn run() {
                 }
             }
 
+            // Debug aid: start pairing straight away, so the flow can be
+            // exercised without a human clicking Connect.
+            if std::env::args().any(|a| a == "--pair") {
+                let handle = app.handle().clone();
+                let _ = pairing::start(handle);
+            }
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tracker::run_loop(handle).await;

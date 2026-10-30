@@ -34,11 +34,18 @@ pub fn start(app: AppHandle) -> Result<(), String> {
         urlencode(&label)
     );
 
+    log::info!("pairing: opening {url}");
     let parsed = url.parse().map_err(|_| "could not build the pairing URL".to_string())?;
     WebviewWindowBuilder::new(&app, "pair", WebviewUrl::External(parsed))
         .title("Connect GamesList")
         .inner_size(520.0, 760.0)
         .center()
+        .on_navigation(|target| {
+            // A blank window is otherwise impossible to diagnose: this says
+            // whether the webview ever tried to go anywhere.
+            log::info!("pairing window navigating to {target}");
+            true
+        })
         .build()
         .map_err(|e| e.to_string())?;
 

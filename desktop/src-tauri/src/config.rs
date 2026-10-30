@@ -37,7 +37,18 @@ fn path_in(dir: &Path, name: &str) -> PathBuf {
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Option<T> {
     let raw = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&raw).ok()
+    // Strip a UTF-8 byte order mark. PowerShell's `Set-Content -Encoding utf8`
+    // writes one, and so does Notepad; serde rejects it. Without this the app
+    // falls back to its defaults and quietly talks to the wrong site, which
+    // reads as "my config was ignored" rather than as a parse error.
+    let raw = raw.trim_start_matches('\u{feff}');
+    match serde_json::from_str(raw) {
+        Ok(value) => Some(value),
+        Err(err) => {
+            log::warn!("ignoring {}: {err}", path.display());
+            None
+        }
+    }
 }
 
 fn write_json<T: Serialize>(path: &Path, value: &T) {
@@ -117,6 +128,21 @@ mod tests {
         }"#;
         let config: AppConfig = serde_json::from_str(raw).expect("should parse");
         assert!(!config.is_paired());
+        assert_eq!(config.base(), "http://localhost:3000");
+    }
+
+    #[test]
+    fn reads_a_config_written_with_a_byte_order_mark() {
+        // This is not hypothetical: PowerShell's Set-Content -Encoding utf8
+        // writes a BOM, which made a hand-written config silently ignored and
+        // sent the app to production instead of the local stack.
+        let with_bom = "\u{feff}{\"token\":null,\"api_base\":\"http://localhost:3000\"}";
+        assert!(
+            serde_json::from_str::<AppConfig>(with_bom).is_err(),
+            "serde should still reject a raw BOM — this test guards the strip below",
+        );
+        let config: AppConfig =
+            serde_json::from_str(with_bom.trim_start_matches('\u{feff}')).expect("should parse");
         assert_eq!(config.base(), "http://localhost:3000");
     }
 
