@@ -143,8 +143,11 @@ async function refresh() {
 el('btn-connect').addEventListener('click', () => invoke('start_pairing'))
 el('btn-games').addEventListener('click', () => invoke('open_site', { path: '/games' }))
 el('btn-settings').addEventListener('click', () => invoke('open_site', { path: '/settings' }))
-el('btn-link').addEventListener('click', () =>
-  invoke('open_site', { path: '/settings/devices/link' }))
+el('btn-link').addEventListener('click', async () => {
+  await invoke('open_site', { path: '/settings/devices/link' })
+  // Whatever they do over there, this window should reflect it on return.
+  window.addEventListener('focus', refreshFromServer, { once: true })
+})
 
 el('prompt-yes').addEventListener('click', async () => {
   await invoke('confirm_prompt')
@@ -162,13 +165,20 @@ el('prompt-no').addEventListener('click', async () => {
 // the elapsed time ticks over while a game is running.
 listen('status-changed', refresh)
 
-// Belt and braces for the moment pairing completes: the pairing window closes
-// and this one is brought forward, so re-read on focus as well. Missing that
-// event would leave "Connect your account" on screen for an already-connected
-// account, which reads as the connection having failed.
-window.addEventListener('focus', refresh)
+/**
+ * Coming back to this window usually means something was just done elsewhere:
+ * pairing finished, or a game was linked on the website. Neither is something
+ * the app can observe, so ask the watcher to re-read the server, then show the
+ * result when it lands.
+ */
+async function refreshFromServer() {
+  try { await invoke('refresh_state') } catch { /* not paired yet */ }
+  refresh()
+}
+
+window.addEventListener('focus', refreshFromServer)
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) refresh()
+  if (!document.hidden) refreshFromServer()
 })
 // The clock ticks locally every second; the full status re-read stays slow,
 // since Rust emits an event whenever something actually changes.

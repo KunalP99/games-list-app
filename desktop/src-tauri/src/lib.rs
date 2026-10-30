@@ -131,9 +131,19 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
     let tracker = app.state::<Tracker>();
     let mut shared = tracker.shared.lock().unwrap();
     shared.pending_prompt = None;
-    // Force the next loop to re-read the state so the new link is picked up.
-    shared.state = None;
+    // Re-read so the new link is picked up on the next tick.
+    shared.force_refresh = true;
     Ok(())
+}
+
+/// Ask the watcher to re-read the server on its next tick.
+///
+/// Linking a game happens on the website, in a different window, so the app
+/// has no way to know it happened. The UI calls this whenever it comes back
+/// into focus.
+#[tauri::command]
+fn refresh_state(app: AppHandle) {
+    app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;
 }
 
 #[tauri::command]
@@ -192,6 +202,7 @@ pub fn run() {
             open_site,
             confirm_prompt,
             dismiss_prompt,
+            refresh_state,
             sign_out,
             set_api_base,
         ])

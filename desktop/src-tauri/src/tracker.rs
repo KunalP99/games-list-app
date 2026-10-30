@@ -71,6 +71,10 @@ pub struct Shared {
     pub queued: usize,
     pub last_error: Option<String>,
     pub pending_prompt: Option<PendingPrompt>,
+    /// Set when something happened off-app that the cached state cannot
+    /// know about — linking a game on the website, for instance. The loop
+    /// re-reads on its next tick instead of waiting out the cache.
+    pub force_refresh: bool,
 }
 
 pub struct Tracker {
@@ -122,8 +126,15 @@ pub async fn run_loop(app: AppHandle) {
         let base = config.base();
 
         // ── Refresh what we are watching for ────────────────────────────────
-        let stale = state_fetched.is_none_or(|t| t.elapsed().as_secs() > 300);
-        if stale {
+        let forced = {
+            let mut shared = tracker.shared.lock().unwrap();
+            std::mem::replace(&mut shared.force_refresh, false)
+        };
+        // A minute, not five: linking a game on the website is invisible to
+        // the app until it re-reads, and five minutes of the status screen
+        // still saying "Not linked" reads as the link having failed.
+        let stale = state_fetched.is_none_or(|t| t.elapsed().as_secs() > 60);
+        if stale || forced {
             match api::fetch_state(&base, &token).await {
                 Ok(state) => {
                     state_fetched = Some(Instant::now());
