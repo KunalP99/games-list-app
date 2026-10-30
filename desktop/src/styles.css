@@ -312,3 +312,53 @@ button { font: inherit; cursor: pointer; border-radius: 8px; transition: backgro
   padding: 3px 7px;
 }
 .unlink:hover { color: #f87171; border-color: rgb(248 113 113 / 0.5); }
+
+/* ── The "is this your game?" toast ──────────────────────────────────────────
+ * Its own window, bottom-right, so the page is only this card. The window is
+ * transparent, which is what lets the card have the same rounded corners and
+ * drop shadow as a card on the website; the body therefore must NOT paint the
+ * page background the status screen uses.
+ */
+.toast-body {
+  background: transparent;
+  overflow: hidden;
+  padding: 6px;
+  display: flex;
+}
+
+.toast {
+  flex: 1;
+  background: var(--surface-base);
+  border: 1px solid rgb(var(--brand-600) / 0.45);
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.toast-heading {
+  margin: 0 0 7px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.toast .prompt-question { font-size: 13px; }
+.toast-arrow { color: var(--fg-subtle); margin: 0 2px; }
+
+.toast-help {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.toast-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #f87171;
+}

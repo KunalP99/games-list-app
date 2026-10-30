@@ -17,6 +17,7 @@ use crate::api::{self, AgentState, PlayingGame};
 use crate::config::{self, AppConfig};
 use crate::detect;
 use crate::matching;
+use crate::toast;
 
 /// A game currently being timed.
 #[derive(Debug, Clone)]
@@ -59,9 +60,14 @@ impl Session {
 #[derive(Debug, Clone, Serialize)]
 pub struct PendingPrompt {
     pub exe_name: String,
-    /// The game we think it might be — the first Playing game with no link.
+    /// The game the name actually resembles, where one does; otherwise the
+    /// first Playing game with no link, as somewhere for a picker to start.
     pub suggested_game_id: String,
     pub suggested_title: String,
+    /// Whether `suggested_title` is worth putting in the question. False means
+    /// nothing resembled the name, so the toast asks *which* game it is rather
+    /// than naming one it would usually get wrong.
+    pub confident: bool,
 }
 
 #[derive(Default)]
@@ -393,28 +399,33 @@ fn maybe_prompt(
         // "vampiresurvivors.exe" should ask about Vampire Survivors even if
         // three other games are also unlinked.
         let unlinked: Vec<&PlayingGame> = playing.iter().filter(|g| !g.linked).collect();
-        let suggestion = matching::best_title(
+        let matched = matching::best_title(
             &candidate.exe_name,
             unlinked.iter().map(|g| g.title.as_str()),
         )
+        .filter(|(_, points)| *points >= matching::CONFIDENT)
         .and_then(|(title, _)| unlinked.iter().find(|g| g.title == title))
-        .copied()
-        // Nothing resembled it, but the user may still know what it is.
-        .or_else(|| unlinked.first().copied());
+        .copied();
 
-        let Some(suggestion) = suggestion else { return };
+        // Nothing resembled it, but the gates have already said it looks like a
+        // game, so it is still worth one question — just not one that names a
+        // game at random.
+        let confident = matched.is_some();
+        let Some(suggestion) = matched.or_else(|| unlinked.first().copied()) else {
+            return;
+        };
 
         config::add_asked(&dir, &candidate.exe_name);
-        tracker.shared.lock().unwrap().pending_prompt = Some(PendingPrompt {
+        let prompt = PendingPrompt {
             exe_name: candidate.exe_name.clone(),
             suggested_game_id: suggestion.id.clone(),
             suggested_title: suggestion.title.clone(),
-        });
-        notify(
-            app,
-            "Is this a game?",
-            &format!("{} looks like a game. Open GamesList to link it.", candidate.exe_name),
-        );
+            confident,
+        };
+        tracker.shared.lock().unwrap().pending_prompt = Some(prompt.clone());
+        // Asked in the corner of the screen, with the buttons on it. The
+        // status screen keeps the same question, for anyone who misses it.
+        toast::show(app, &prompt);
         ping_ui(app);
         return;
     }

@@ -4,6 +4,8 @@
 // (watching, timing, sending) happens in Rust. The window can be closed at any
 // point without stopping anything.
 
+import { applyTheme } from './theme.js'
+
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
 
@@ -29,17 +31,6 @@ const KNOWN_SOFTWARE = {
 }
 
 /** Paint the app in the user's accent, from the palette the site computed. */
-function applyTheme(status) {
-  const root = document.documentElement
-  for (const [stop, rgb] of Object.entries(status.palette ?? {})) {
-    root.style.setProperty(`--brand-${stop}`, rgb.join(' '))
-  }
-
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-  const theme = status.theme === 'system' ? (prefersDark ? 'dark' : 'light') : status.theme
-  root.setAttribute('data-theme', theme)
-}
-
 /**
  * Elapsed time, counted from the session's real start.
  *
@@ -349,6 +340,10 @@ el('prompt-no').addEventListener('click', async () => {
 // Rust emits this whenever something actually changes; the interval is only so
 // the elapsed time ticks over while a game is running.
 listen('status-changed', refresh)
+
+// The toast's "Pick it": it knows the program but not the game, so it sends
+// the user here with that program already chosen.
+listen('open-link-panel', event => openLinkPanel(event.payload || null))
 
 /**
  * Coming back to this window usually means something was just done elsewhere:

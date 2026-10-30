@@ -8,12 +8,13 @@ mod config;
 mod detect;
 mod matching;
 mod pairing;
+mod toast;
 mod tracker;
 
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tracker::{PendingPrompt, Tracker};
 
 #[derive(Serialize)]
@@ -134,13 +135,25 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
     };
     let Some(prompt) = prompt else { return Ok(()) };
 
-    api::post_link(&base, &token, &prompt.exe_name, &prompt.suggested_game_id).await?;
+    if let Err(err) = api::post_link(&base, &token, &prompt.exe_name, &prompt.suggested_game_id).await
+    {
+        // Worth a line of its own: the prompt stays pending, so without this
+        // the only trace of a failed link is the user saying it did nothing.
+        log::warn!("could not link {}: {err}", prompt.exe_name);
+        return Err(err);
+    }
+    log::info!("linked {} to {}", prompt.exe_name, prompt.suggested_title);
 
-    let tracker = app.state::<Tracker>();
-    let mut shared = tracker.shared.lock().unwrap();
-    shared.pending_prompt = None;
-    // Re-read so the new link is picked up on the next tick.
-    shared.force_refresh = true;
+    {
+        let tracker = app.state::<Tracker>();
+        let mut shared = tracker.shared.lock().unwrap();
+        shared.pending_prompt = None;
+        // Re-read so the new link is picked up on the next tick.
+        shared.force_refresh = true;
+    }
+    // The same question is on the status screen, and it may not be the window
+    // that just answered it — the toast is usually the one in front.
+    let _ = app.emit("status-changed", ());
     Ok(())
 }
 
@@ -235,6 +248,38 @@ fn refresh_state(app: AppHandle) {
 #[tauri::command]
 fn dismiss_prompt(app: AppHandle) {
     app.state::<Tracker>().shared.lock().unwrap().pending_prompt = None;
+    // As in `confirm_prompt`: whichever window answered, the other one is
+    // still showing the question.
+    let _ = app.emit("status-changed", ());
+}
+
+/// The toast has painted: show the window it was built hidden in.
+///
+/// Built hidden and revealed from here so a half-loaded page can never appear
+/// as a white box in the corner of someone's game.
+#[tauri::command]
+fn toast_ready(app: AppHandle) {
+    if let Some(window) = app.get_webview_window(toast::LABEL) {
+        let _ = window.show();
+    }
+}
+
+/// Take the toast down. Called by the toast itself once it is answered.
+#[tauri::command]
+fn close_toast(app: AppHandle) {
+    toast::close(&app);
+}
+
+/// Bring the app's own window up, optionally straight onto the link panel.
+///
+/// `link_exe` is for the toast's "Pick it": it has a program and no idea which
+/// game it is, which is exactly what the link panel is for.
+#[tauri::command]
+fn open_app(app: AppHandle, link_exe: Option<String>) {
+    show_main(&app);
+    if let Some(exe) = link_exe {
+        let _ = app.emit("open-link-panel", exe);
+    }
 }
 
 #[tauri::command]
@@ -288,6 +333,9 @@ pub fn run() {
             open_site,
             confirm_prompt,
             dismiss_prompt,
+            toast_ready,
+            close_toast,
+            open_app,
             refresh_state,
             running_programs,
             link_executable,
@@ -335,6 +383,26 @@ pub fn run() {
             }
 
             // Debug aids: drive the flows without a human clicking.
+            //
+            // `--toast[=unsure]` stands in for a real detection: reaching one
+            // of those otherwise means pairing, a Playing game, and waiting
+            // out the three-minute settle period, which is no way to check
+            // where a window lands or what colour it is.
+            if let Some(arg) = std::env::args().find(|a| a.starts_with("--toast")) {
+                let prompt = PendingPrompt {
+                    exe_name: "vampiresurvivors.exe".into(),
+                    suggested_game_id: "debug".into(),
+                    suggested_title: "Vampire Survivors".into(),
+                    confident: !arg.ends_with("=unsure"),
+                };
+                let handle = app.handle().clone();
+                handle.state::<Tracker>().shared.lock().unwrap().pending_prompt =
+                    Some(prompt.clone());
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    toast::show(&handle, &prompt);
+                });
+            }
             if std::env::args().any(|a| a == "--pair") {
                 let handle = app.handle().clone();
                 let _ = pairing::start(handle);
