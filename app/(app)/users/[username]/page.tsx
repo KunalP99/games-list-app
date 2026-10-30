@@ -13,6 +13,7 @@ import ProfileStatCards from '@/components/profile/ProfileStatCards'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
+import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
 
 export default async function UserProfilePage({
@@ -57,7 +58,7 @@ export default async function UserProfilePage({
   if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
-  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats, recentlyPlayed] = await Promise.all([
+  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
     gamesQuery,
     supabase
       .from('games')
@@ -91,6 +92,7 @@ export default async function UserProfilePage({
       .limit(10),
     computeUserStats(supabase, profile.id),
     getRecentlyPlayed(supabase, profile.id),
+    getLiveSessions(supabase, [profile.id]),
   ])
 
   const games = gamesRes.data as Game[] | null
@@ -172,9 +174,9 @@ export default async function UserProfilePage({
           the stat cards in a right-hand rail, but the grid row was then as tall
           as the rail, leaving a large gap above the games list whenever the
           content beside it was shorter. */}
-      <NowPlayingGrid games={playingGames} isOwner={isOwner} />
+      <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />
 
-      <RecentlyPlayed games={recentlyPlayed} isOwner={isOwner} />
+      <RecentlyPlayed games={recentlyPlayed} isOwner={isOwner} liveSessions={liveSessions} />
 
       <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 
@@ -185,7 +187,7 @@ export default async function UserProfilePage({
 
         <div className="mt-4">
           {games && games.length > 0 ? (
-            <GameListView games={games} status={selectedStatus} isOwner={isOwner} view={view} />
+            <GameListView games={games} status={selectedStatus} isOwner={isOwner} view={view} liveSessions={liveSessions} />
           ) : (
             <div className="text-center py-16 text-fg-subtle">
               <p className="text-4xl mb-3">🎮</p>

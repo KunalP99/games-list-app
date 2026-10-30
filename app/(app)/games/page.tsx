@@ -9,6 +9,7 @@ import GameCard from '@/components/games/GameCard'
 import GameFilters from '@/components/games/GameFilters'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
+import { getLiveSessions } from '@/lib/presence'
 import ProfileHero from '@/components/profile/ProfileHero'
 import { Suspense } from 'react'
 
@@ -55,7 +56,7 @@ export default async function GamesPage({
   // Playing games always fetched separately for the Now Playing strip — run
   // alongside the main games query and the profile-banner stats (computeUserStats
   // is the same helper the friend profile page uses — see lib/user-stats.ts).
-  const [playingGamesRes, gamesRes, stats, recentlyPlayed] = await Promise.all([
+  const [playingGamesRes, gamesRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
     supabase
       .from('games')
       .select(GAME_LIST_COLS)
@@ -65,6 +66,7 @@ export default async function GamesPage({
     gamesQuery,
     computeUserStats(supabase, user!.id),
     getRecentlyPlayed(supabase, user!.id),
+    getLiveSessions(supabase, [user!.id]),
   ])
 
   const playingGames = playingGamesRes.data as Game[] | null
@@ -130,7 +132,7 @@ export default async function GamesPage({
           {/* Now Playing always uses the capsule card, regardless of the list view */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {playingGames.map(game => (
-              <GameCard key={game.id} game={game} isOwner={true} />
+              <GameCard key={game.id} game={game} isOwner={true} liveSince={liveSessions.get(game.id) ?? null} />
             ))}
           </div>
         </div>
@@ -138,14 +140,14 @@ export default async function GamesPage({
 
       {/* Ambient games, newest session first — what has actually been running,
           as opposed to what was deliberately picked up above. */}
-      <RecentlyPlayed games={recentlyPlayed} isOwner={true} />
+      <RecentlyPlayed games={recentlyPlayed} isOwner={true} liveSessions={liveSessions} />
 
       <Suspense>
         <GameFilters />
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={selectedStatus} isOwner={true} view={view} />
+        <GameListView games={games} status={selectedStatus} isOwner={true} view={view} liveSessions={liveSessions} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>

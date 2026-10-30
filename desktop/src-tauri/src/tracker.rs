@@ -228,6 +228,11 @@ pub async fn run_loop(app: AppHandle) {
                 tracker.shared.lock().unwrap().session = Some(session);
                 log::info!("started tracking {} (steam {:?}, exe {:?})", game.title, app_id, exe);
                 notify(&app, "Now tracking", &format!("{} — your hours are being logged.", game.title));
+                // Without this, play_sessions gets no row — and the site no
+                // sign anyone is playing — until the first periodic checkpoint,
+                // up to checkpoint_minutes later. Sent immediately so a "now
+                // playing" badge means something close to the moment it starts.
+                checkpoint(&app, &base, &token).await;
                 ping_ui(&app);
             }
             (None, Some(_)) => {
