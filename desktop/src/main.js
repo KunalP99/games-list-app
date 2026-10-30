@@ -161,6 +161,15 @@ el('prompt-no').addEventListener('click', async () => {
 // Rust emits this whenever something actually changes; the interval is only so
 // the elapsed time ticks over while a game is running.
 listen('status-changed', refresh)
+
+// Belt and braces for the moment pairing completes: the pairing window closes
+// and this one is brought forward, so re-read on focus as well. Missing that
+// event would leave "Connect your account" on screen for an already-connected
+// account, which reads as the connection having failed.
+window.addEventListener('focus', refresh)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refresh()
+})
 // The clock ticks locally every second; the full status re-read stays slow,
 // since Rust emits an event whenever something actually changes.
 setInterval(tickElapsed, 1000)

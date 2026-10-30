@@ -43,6 +43,12 @@
 
 * { box-sizing: border-box; }
 
+/* An explicit `display` beats the browser's built-in [hidden] rule, so a
+ * section styled `display: flex` stays on screen however many times the
+ * code sets .hidden = true. That is exactly what left "Connect your
+ * account" showing after pairing had already succeeded. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;

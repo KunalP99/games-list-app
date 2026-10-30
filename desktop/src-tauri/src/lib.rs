@@ -46,6 +46,7 @@ fn get_status(app: AppHandle) -> StatusView {
     let tracker = app.state::<Tracker>();
     let config = tracker.snapshot_config();
     let shared = tracker.shared.lock().unwrap();
+    log::debug!("get_status: paired={} tracking={}", config.is_paired(), shared.session.is_some());
 
     StatusView {
         paired: config.is_paired(),
