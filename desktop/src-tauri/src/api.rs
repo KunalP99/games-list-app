@@ -150,3 +150,39 @@ pub async fn post_unlink(base: &str, token: &str, exe_name: &str) -> Result<(), 
         Err(format!("unlink request failed: {}", res.status()))
     }
 }
+
+/// What the site makes of a Steam app id.
+///
+/// `result` is one of: `notAGame` (IGDB has no such game — never ask again),
+/// `unknown` (the lookup did not get through — try later), `added` (a new
+/// Ambient game was created), `tracked` (already trackable) or `untracked`
+/// (owned, but completed/backlog, so left alone).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct IdentifyResponse {
+    pub result: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+/// Ask what a running Steam game is, and have it filed if it is new.
+pub async fn post_identify(
+    base: &str,
+    token: &str,
+    steam_app_id: u32,
+) -> Result<IdentifyResponse, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/identify"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "steamAppId": steam_app_id }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("identify failed: {}", res.status()));
+    }
+    res.json::<IdentifyResponse>().await.map_err(|e| e.to_string())
+}

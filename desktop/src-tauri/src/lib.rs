@@ -8,6 +8,7 @@ mod config;
 mod detect;
 mod matching;
 mod pairing;
+mod steam;
 mod toast;
 mod tracker;
 
@@ -265,11 +266,11 @@ fn dismiss_prompt(app: AppHandle, remember: Option<bool>) {
         prompt
     };
 
-    if remember.unwrap_or(false) {
-        if let Some(prompt) = &prompt {
-            log::info!("{} is not a game; not asking again", prompt.exe_name);
-            config::add_asked(&dir, &prompt.exe_name);
-        }
+    if let Some(prompt) = &prompt
+        && remember.unwrap_or(false)
+    {
+        log::info!("{} is not a game; not asking again", prompt.exe_name);
+        config::add_asked(&dir, &prompt.exe_name);
     }
     // As in `confirm_prompt`: whichever window answered, the other one is
     // still showing the question.
