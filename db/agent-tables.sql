@@ -9,7 +9,7 @@
 -- Safe to re-run: every statement is IF NOT EXISTS.
 
 CREATE TABLE IF NOT EXISTS public.device_tokens (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
   label TEXT NOT NULL,
@@ -21,7 +21,7 @@ CREATE POLICY "Users manage own devices" ON public.device_tokens
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE TABLE IF NOT EXISTS public.play_sessions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   game_id UUID REFERENCES public.games(id) ON DELETE SET NULL,
   device_id UUID REFERENCES public.device_tokens(id) ON DELETE SET NULL,
@@ -40,7 +40,7 @@ CREATE POLICY "Users read own sessions" ON public.play_sessions
 CREATE INDEX IF NOT EXISTS play_sessions_user_idx ON public.play_sessions (user_id, started_at DESC);
 
 CREATE TABLE IF NOT EXISTS public.game_executables (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
   exe_name TEXT NOT NULL,

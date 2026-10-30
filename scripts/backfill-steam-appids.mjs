@@ -31,7 +31,9 @@ const tokenRes = await fetch(
   { method: 'POST' },
 )
 const { access_token: token } = await tokenRes.json()
-if (!token) { console.error('Could not get an IGDB token — check IGDB_CLIENT_ID/SECRET'); process.exit(1) }
+// Note: never process.exit() here — exiting while Supabase's sockets are
+// still open trips a libuv assertion on Windows. Throwing unwinds cleanly.
+if (!token) throw new Error('Could not get an IGDB token — check IGDB_CLIENT_ID/SECRET')
 
 async function igdb(body) {
   await new Promise(r => setTimeout(r, 300)) // IGDB allows 4 req/sec
@@ -62,10 +64,12 @@ const { data: games, error } = await db
   .select('id, title, igdb_id, steam_appid')
   .not('igdb_id', 'is', null)
   .is('steam_appid', null)
-if (error) { console.error(error.message); process.exit(1) }
+if (error) throw new Error(error.message)
 
 console.log(`${games.length} games need a Steam app id.`)
-if (games.length === 0) process.exit(0)
+if (games.length === 0) {
+  console.log('Nothing to do.')
+} else {
 
 const byIgdb = new Map()
 for (const g of games) {
@@ -101,3 +105,4 @@ for (const [igdbId, rows] of byIgdb) {
 
 console.log(`\n${WRITE ? 'Updated' : 'Would update'}: ${written}`)
 console.log(`No Steam release on IGDB:   ${noSteam}`)
+}
