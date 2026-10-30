@@ -19,6 +19,10 @@ use tracker::{PendingPrompt, Tracker};
 pub struct TrackingView {
     title: String,
     minutes: u64,
+    /// When the session began, so the window can tick its own clock
+    /// rather than waiting for the next status read — and so reopening
+    /// the window shows the real elapsed time instead of restarting.
+    started_at: String,
 }
 
 #[derive(Serialize)]
@@ -51,7 +55,11 @@ fn get_status(app: AppHandle) -> StatusView {
         tracking: shared
             .session
             .as_ref()
-            .map(|s| TrackingView { title: s.title.clone(), minutes: s.minutes() }),
+            .map(|s| TrackingView {
+                title: s.title.clone(),
+                minutes: s.minutes(),
+                started_at: s.started_at.to_rfc3339(),
+            }),
         playing: shared.state.as_ref().map(|s| s.playing.clone()).unwrap_or_default(),
         last_sync: shared.last_sync.map(|t| t.to_rfc3339()),
         queued: shared.queued,
@@ -74,13 +82,26 @@ fn open_site(app: AppHandle, path: String) -> Result<(), String> {
     let url = format!("{base}{path}");
     let parsed = url.parse().map_err(|_| "bad url".to_string())?;
 
+    log::info!("opening site window at {url}");
+
+    // Reuse the window if it is already open: closing and immediately
+    // rebuilding with the same label races, and a label collision fails the
+    // build outright.
     if let Some(existing) = app.get_webview_window("site") {
-        let _ = existing.close();
+        existing.navigate(parsed).map_err(|e| e.to_string())?;
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return Ok(());
     }
+
     WebviewWindowBuilder::new(&app, "site", WebviewUrl::External(parsed))
         .title("GamesList")
         .inner_size(1000.0, 760.0)
         .center()
+        .on_navigation(|target| {
+            log::info!("site window navigating to {target}");
+            true
+        })
         .build()
         .map_err(|e| e.to_string())?;
     Ok(())
@@ -204,11 +225,21 @@ pub fn run() {
                 }
             }
 
-            // Debug aid: start pairing straight away, so the flow can be
-            // exercised without a human clicking Connect.
+            // Debug aids: drive the flows without a human clicking.
             if std::env::args().any(|a| a == "--pair") {
                 let handle = app.handle().clone();
                 let _ = pairing::start(handle);
+            }
+            if let Some(arg) = std::env::args().find(|a| a.starts_with("--site=")) {
+                let path = arg.trim_start_matches("--site=").to_string();
+                let handle = app.handle().clone();
+                // After setup, so the window manager is ready.
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    if let Err(err) = open_site(handle, path) {
+                        log::error!("open_site failed: {err}");
+                    }
+                });
             }
 
             let handle = app.handle().clone();

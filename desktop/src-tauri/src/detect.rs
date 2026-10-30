@@ -6,7 +6,7 @@
 //! a program that asks "is this a game?" every time anything opens is worse
 //! than useless.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
 /// A running program we might care about.
@@ -77,6 +77,41 @@ pub fn candidates(sys: &mut System) -> Vec<Candidate> {
         .collect()
 }
 
+/// Remembers which processes have already been judged.
+///
+/// The last gate walks a process's loaded modules, which means opening a
+/// Toolhelp32 snapshot. That is fine once, but the loop polls every ten
+/// seconds and would otherwise re-walk the same long-running programs forever.
+/// A verdict for a given process cannot change, so it is kept.
+#[derive(Default)]
+pub struct GameJudge {
+    /// pid -> (exe name, verdict). The exe name guards against the OS reusing
+    /// a pid for a different program.
+    verdicts: HashMap<u32, (String, bool)>,
+}
+
+impl GameJudge {
+    pub fn judge(&mut self, candidate: &Candidate) -> bool {
+        self.judge_with(candidate, loads_graphics_runtime)
+    }
+
+    fn judge_with(&mut self, candidate: &Candidate, modules: impl FnMut(u32) -> bool) -> bool {
+        if let Some((exe, verdict)) = self.verdicts.get(&candidate.pid) {
+            if exe == &candidate.exe_name {
+                return *verdict;
+            }
+        }
+        let verdict = looks_like_game_with(candidate, modules);
+        self.verdicts.insert(candidate.pid, (candidate.exe_name.clone(), verdict));
+        verdict
+    }
+
+    /// Drop processes that have exited, so the map cannot grow without bound.
+    pub fn retain_running(&mut self, alive: &HashSet<u32>) {
+        self.verdicts.retain(|pid, _| alive.contains(pid));
+    }
+}
+
 /// Is this worth interrupting the user about?
 ///
 /// Deliberately conservative: it would rather miss a game — which the user can
@@ -84,7 +119,7 @@ pub fn candidates(sys: &mut System) -> Vec<Candidate> {
 /// Every gate here earned its place; the Windows-directory one in particular,
 /// because `TextInputHost` loads `dxgi.dll` and was the single false positive
 /// when this was tested against every windowed app on a real desktop.
-pub fn looks_like_game(c: &Candidate) -> bool {
+fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> bool {
     if !c.has_window {
         return false;
     }
@@ -112,8 +147,9 @@ pub fn looks_like_game(c: &Candidate) -> bool {
     }
 
     // Only reached once everything above has passed, so the cost of walking a
-    // process's modules is paid rarely.
-    loads_graphics_runtime(c.pid)
+    // process's modules is paid rarely — and GameJudge then remembers the
+    // answer, so a long-running program is never walked twice.
+    modules(c.pid)
 }
 
 // ── Windows specifics ───────────────────────────────────────────────────────
@@ -239,30 +275,73 @@ mod tests {
     #[test]
     fn a_game_in_a_steam_folder_is_recognised() {
         let c = candidate("hades.exe", Some("d:\\steamlibrary\\steamapps\\common\\hades\\hades.exe"), 600, true);
-        assert!(looks_like_game(&c));
+        assert!(GameJudge::default().judge_with(&c, |_| false));
     }
 
     #[test]
     fn known_software_is_never_asked_about() {
         let c = candidate("chrome.exe", Some("c:\\program files\\google\\chrome\\chrome.exe"), 9000, true);
-        assert!(!looks_like_game(&c));
+        assert!(!GameJudge::default().judge_with(&c, |_| false));
     }
 
     #[test]
     fn a_background_process_with_no_window_is_ignored() {
         let c = candidate("someservice.exe", Some("c:\\tools\\someservice.exe"), 9000, false);
-        assert!(!looks_like_game(&c));
+        assert!(!GameJudge::default().judge_with(&c, |_| false));
     }
 
     #[test]
     fn something_just_launched_is_given_time_to_settle() {
         let c = candidate("setup.exe", Some("d:\\steamapps\\common\\x\\setup.exe"), 10, true);
-        assert!(!looks_like_game(&c));
+        assert!(!GameJudge::default().judge_with(&c, |_| false));
+    }
+
+    #[test]
+    fn a_process_is_only_examined_once() {
+        // The module walk opens a Toolhelp32 snapshot; at one poll every ten
+        // seconds, re-walking the same long-running game would be pure waste.
+        let c = candidate("mygame.exe", Some("d:/games/mygame/mygame.exe"), 600, true);
+        let mut judge = GameJudge::default();
+        let mut walks = 0;
+
+        for _ in 0..5 {
+            judge.judge_with(&c, |_| {
+                walks += 1;
+                true
+            });
+        }
+        assert_eq!(walks, 1, "should have consulted the modules once, not once per poll");
+    }
+
+    #[test]
+    fn a_reused_pid_running_something_else_is_judged_again() {
+        // Windows reuses pids, so the verdict is keyed on the executable too.
+        let mut judge = GameJudge::default();
+        let game = candidate("mygame.exe", Some("d:/games/mygame/mygame.exe"), 600, true);
+        let other = Candidate { exe_name: "other.exe".into(), ..game.clone() };
+
+        let mut walks = 0;
+        judge.judge_with(&game, |_| { walks += 1; true });
+        judge.judge_with(&other, |_| { walks += 1; true });
+        assert_eq!(walks, 2);
+    }
+
+    #[test]
+    fn processes_that_have_exited_are_forgotten() {
+        let c = candidate("mygame.exe", Some("d:/games/mygame/mygame.exe"), 600, true);
+        let mut judge = GameJudge::default();
+        judge.judge_with(&c, |_| true);
+
+        judge.retain_running(&HashSet::from([c.pid]));
+        assert_eq!(judge.verdicts.len(), 1, "still running, so still remembered");
+
+        judge.retain_running(&HashSet::new());
+        assert!(judge.verdicts.is_empty(), "gone, so the entry should be dropped");
     }
 
     #[test]
     fn a_process_with_no_path_is_left_alone() {
         let c = candidate("mystery.exe", None, 9000, true);
-        assert!(!looks_like_game(&c));
+        assert!(!GameJudge::default().judge_with(&c, |_| false));
     }
 }

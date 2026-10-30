@@ -21,11 +21,22 @@ function applyTheme(status) {
   root.setAttribute('data-theme', theme)
 }
 
-function formatElapsed(minutes) {
-  if (minutes < 60) return `${minutes}m`
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`
+/**
+ * Elapsed time, counted from the session's real start.
+ *
+ * Shows seconds under an hour: a timer reading "0m" for a whole minute after
+ * a game opens is the single thing that makes this look broken, when in fact
+ * it is already tracking.
+ */
+function formatElapsed(seconds) {
+  if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${String(secs).padStart(2, '0')}`
+  }
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`
 }
 
 function formatSync(iso, queued, error) {
@@ -84,6 +95,14 @@ function renderPrompt(prompt) {
   card.dataset.exe = prompt.exe_name
 }
 
+let startedAtMs = null
+
+function tickElapsed() {
+  if (startedAtMs == null || Number.isNaN(startedAtMs)) return
+  const seconds = Math.max(0, (Date.now() - startedAtMs) / 1000)
+  el('status-elapsed').textContent = formatElapsed(seconds)
+}
+
 async function refresh() {
   let status
   try {
@@ -109,7 +128,11 @@ async function refresh() {
     ? tracking.title
     : 'Start a game you’ve set to Playing.'
   el('status-elapsed').hidden = !tracking
-  if (tracking) el('status-elapsed').textContent = formatElapsed(tracking.minutes)
+
+  // Keep the server's start time, not a local counter: the window can be
+  // closed and reopened mid-session, and a local counter would restart at zero.
+  startedAtMs = tracking ? Date.parse(tracking.started_at) : null
+  tickElapsed()
 
   renderPlaying(status.playing ?? [])
   renderPrompt(status.pending_prompt)
@@ -138,5 +161,8 @@ el('prompt-no').addEventListener('click', async () => {
 // Rust emits this whenever something actually changes; the interval is only so
 // the elapsed time ticks over while a game is running.
 listen('status-changed', refresh)
+// The clock ticks locally every second; the full status re-read stays slow,
+// since Rust emits an event whenever something actually changes.
+setInterval(tickElapsed, 1000)
 setInterval(refresh, 30_000)
 refresh()

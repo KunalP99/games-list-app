@@ -104,22 +104,18 @@ pub async fn run_loop(app: AppHandle) {
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     let mut system = detect::new_system();
+    // Remembers which processes have been judged, so polling every ten
+    // seconds does not re-walk the same programs' modules forever.
+    let mut judge = detect::GameJudge::default();
     let mut state_fetched: Option<Instant> = None;
 
     loop {
         let tracker = app.state::<Tracker>();
         let config = tracker.snapshot_config();
-        let poll_seconds = tracker
-            .shared
-            .lock()
-            .unwrap()
-            .state
-            .as_ref()
-            .map(|s| s.poll_seconds)
-            .unwrap_or(30);
 
         if !config.is_paired() {
-            tokio::time::sleep(std::time::Duration::from_secs(poll_seconds)).await;
+            // Nothing to watch for until the user pairs.
+            tokio::time::sleep(std::time::Duration::from_secs(15)).await;
             continue;
         }
         let token = config.token.clone().unwrap_or_default();
@@ -150,6 +146,7 @@ pub async fn run_loop(app: AppHandle) {
 
         // ── What is running? ────────────────────────────────────────────────
         let candidates = detect::candidates(&mut system);
+        judge.retain_running(&candidates.iter().map(|c| c.pid).collect());
         let steam_app_id = detect::steam_running_app_id();
 
         let (playing, executables) = {
@@ -198,6 +195,7 @@ pub async fn run_loop(app: AppHandle) {
                     exe_name: exe.clone(),
                 };
                 tracker.shared.lock().unwrap().session = Some(session);
+                log::info!("started tracking {} (steam {:?}, exe {:?})", game.title, app_id, exe);
                 notify(&app, "Now tracking", &format!("{} — your hours are being logged.", game.title));
                 ping_ui(&app);
             }
@@ -205,7 +203,7 @@ pub async fn run_loop(app: AppHandle) {
                 stop_session(&app, &base, &token).await;
             }
             (None, None) => {
-                maybe_prompt(&app, &candidates, &playing);
+                maybe_prompt(&app, &candidates, &playing, &mut judge);
             }
         }
 
@@ -222,6 +220,18 @@ pub async fn run_loop(app: AppHandle) {
             checkpoint(&app, &base, &token).await;
         }
 
+        // Read the interval here rather than at the top of the loop: on the
+        // first pass the state has not been fetched yet, so taking it earlier
+        // meant the first sleep always used the fallback. That made the first
+        // detection take 26s when the configured interval was 10.
+        let poll_seconds = tracker
+            .shared
+            .lock()
+            .unwrap()
+            .state
+            .as_ref()
+            .map(|s| s.poll_seconds)
+            .unwrap_or(10);
         tokio::time::sleep(std::time::Duration::from_secs(poll_seconds)).await;
     }
 }
@@ -253,6 +263,7 @@ pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
         }
     };
 
+    log::info!("stopping tracking for {title}");
     let result = send_or_queue(app, base, token, payload).await;
     let (heading, body) = match result {
         Some(res) if res.ok => (
@@ -339,7 +350,12 @@ async fn flush_queue(app: &AppHandle, base: &str, token: &str) {
 }
 
 /// Offer to link an unrecognised game — at most once per executable, ever.
-fn maybe_prompt(app: &AppHandle, candidates: &[detect::Candidate], playing: &[PlayingGame]) {
+fn maybe_prompt(
+    app: &AppHandle,
+    candidates: &[detect::Candidate],
+    playing: &[PlayingGame],
+    judge: &mut detect::GameJudge,
+) {
     let tracker = app.state::<Tracker>();
     if tracker.shared.lock().unwrap().pending_prompt.is_some() {
         return;
@@ -357,7 +373,7 @@ fn maybe_prompt(app: &AppHandle, candidates: &[detect::Candidate], playing: &[Pl
         if asked.contains(&candidate.exe_name) {
             continue;
         }
-        if !detect::looks_like_game(candidate) {
+        if !judge.judge(candidate) {
             continue;
         }
 
