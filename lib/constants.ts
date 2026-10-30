@@ -1,10 +1,13 @@
-export const GAME_STATUSES = ['backlog', 'playing', 'completed', 'dnf'] as const
+export const GAME_STATUSES = ['backlog', 'playing', 'completed', 'dnf', 'ambient'] as const
 
 export const STATUS_LABELS: Record<string, string> = {
   backlog: 'Backlog',
   playing: 'Playing',
   completed: 'Completed',
   dnf: 'Did Not Finish',
+  // Ongoing games outside the wheel — multiplayer, sandbox, anything that is
+  // played rather than finished. Added automatically by the desktop agent.
+  ambient: 'Ambient',
 }
 
 export const WHEEL_TURNS = ['spin', 'spin_reroll', 'choose'] as const

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .select('id, title, status, hours_played')
       .eq('user_id', identity.userId)
       .eq('steam_appid', steamAppId)
-      .eq('status', 'playing')
+      .in('status', ['playing', 'ambient'])
       // Several rows per title are legitimate (replays); the most recently
       // touched one is the one being played.
       .order('updated_at', { ascending: false })
@@ -71,9 +71,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!game) return NextResponse.json({ ignored: true, reason: 'no_match' })
 
   // Re-read, never trust: the client does not get to say what status a game is.
-  if (game.status !== 'playing') {
+  // Playing and ambient are both trackable. Completed is the one that must stay
+  // out of reach — writing hours there reverses and re-awards its entire ticket
+  // ledger (see updateGame).
+  if (game.status !== 'playing' && game.status !== 'ambient') {
     return NextResponse.json({
-      ignored: true, reason: 'not_playing', gameId: game.id, title: game.title, status: game.status,
+      ignored: true, reason: 'not_trackable', gameId: game.id, title: game.title, status: game.status,
     })
   }
 
@@ -104,7 +107,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .update({ hours_played: totalHours })
       .eq('id', game.id)
       .eq('user_id', identity.userId)
-      .eq('status', 'playing')
+      // Re-asserted in the write itself, not just the read above: the status
+      // could have changed in between.
+      .in('status', ['playing', 'ambient'])
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
   }
 

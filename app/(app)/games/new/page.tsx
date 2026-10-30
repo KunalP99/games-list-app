@@ -1,6 +1,6 @@
 import GameForm from '@/components/games/GameForm'
 
-const VALID_STATUSES = ['playing', 'completed', 'backlog', 'dnf']
+const VALID_STATUSES = ['playing', 'completed', 'backlog', 'dnf', 'ambient']
 
 export default function NewGamePage({ searchParams }: { searchParams: { status?: string } }) {
   const defaultStatus = VALID_STATUSES.includes(searchParams.status ?? '') ? searchParams.status : undefined

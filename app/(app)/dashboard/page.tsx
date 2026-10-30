@@ -70,7 +70,11 @@ export default async function DashboardPage() {
   // read as opted in.
   const wheelEnabled = profile?.wheel_enabled ?? true
 
+  // Ambient hours included on purpose: they were played. The "Games" count
+  // below excludes them, because that measures a library you built rather than
+  // one the agent filled in for you.
   const totalHours = allGames?.reduce((sum, g) => sum + (g.hours_played ?? 0), 0) ?? 0
+  const curatedGames = allGames?.filter(g => g.status !== 'ambient') ?? []
 
   const completedCount = allGames?.filter(g => g.status === 'completed').length ?? 0
   const startedCount = allGames?.filter(g => g.status === 'completed' || g.status === 'dnf').length ?? 0
@@ -84,7 +88,9 @@ export default async function DashboardPage() {
   const platformDisplayNames: Record<string, string> = {}
 
   for (const g of allGames ?? []) {
-    if (g.status === 'backlog') continue
+    // Backlog is unplayed and ambient was never chosen, so neither describes
+    // what this person actually likes.
+    if (g.status === 'backlog' || g.status === 'ambient') continue
 
     if (g.status === 'completed' && g.completion_date) {
       const year = new Date(g.completion_date).getFullYear().toString()
@@ -184,7 +190,7 @@ export default async function DashboardPage() {
             href="/wheel"
           />
         )}
-        <StatCard label="Games" value={String(allGames?.length ?? 0)} href="/games" linkLabel="View list" />
+        <StatCard label="Games" value={String(curatedGames.length)} href="/games" linkLabel="View list" />
         <StatCard label="Total Hours" value={`${totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}h`} />
         <StatCard
           label="Completion Rate"

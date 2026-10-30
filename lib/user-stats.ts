@@ -22,6 +22,7 @@ export type UserStats = {
   dnfCount: number
   backlogCount: number
   playingCount: number
+  ambientCount: number
   totalHours: number
   completionRate: number | null
   avgRating: number | null
@@ -98,7 +99,11 @@ export async function computeUserStats(
   const dnfGames       = games.filter(g => g.status === 'dnf')
   const backlogGames   = games.filter(g => g.status === 'backlog')
   const playingGames   = games.filter(g => g.status === 'playing')
+  const ambientGames   = games.filter(g => g.status === 'ambient')
 
+  // Every status, ambient included: those hours were genuinely played, and
+  // ongoing games are usually where most of them are. Deliberate, not an
+  // oversight — ambient is kept out of the *counts* below, not the hours.
   const totalHours     = games.reduce((s, g) => s + (g.hours_played ?? 0), 0)
   const startedCount   = completedGames.length + dnfGames.length
   const completionRate = startedCount > 0 ? Math.round((completedGames.length / startedCount) * 100) : null
@@ -135,7 +140,9 @@ export async function computeUserStats(
     // some, then to any game at all, so the banner is never empty for the sake
     // of it.
     ?? completedWithHours.find(hasArt)
-    ?? games.find(hasArt)
+    // Not ambient: the banner should be a game they picked, not whatever the
+    // agent happened to catch them running.
+    ?? games.find(g => g.status !== 'ambient' && hasArt(g))
     ?? null
   const heroGame = heroSource
     ? {
@@ -171,7 +178,9 @@ export async function computeUserStats(
   const platformDisplayNames: Record<string, string> = {}
 
   for (const g of games) {
-    if (g.status === 'backlog') continue
+    // Neither says anything about taste: a backlog game has not been played,
+    // and an ambient one arrived automatically rather than being chosen.
+    if (g.status === 'backlog' || g.status === 'ambient') continue
     if (g.status === 'completed' && g.completion_date) {
       const year = new Date(g.completion_date).getFullYear().toString()
       if (!gamesByYear[year]) gamesByYear[year] = []
@@ -209,6 +218,7 @@ export async function computeUserStats(
     dnfCount: dnfGames.length,
     backlogCount: backlogGames.length,
     playingCount: playingGames.length,
+    ambientCount: ambientGames.length,
     totalHours,
     completionRate,
     avgRating,

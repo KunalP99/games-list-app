@@ -30,7 +30,7 @@ export default async function GamesPage({
   const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
   const q = searchParams.q?.trim()
 
-  const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
+  const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2, ambient: 3 }
 
   const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, release_date, release_date_precision, created_at, updated_at, image_url, cover_image_url, artwork_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date, steam_deck'
 
@@ -42,10 +42,12 @@ export default async function GamesPage({
     .from('games')
     .select(GAME_LIST_COLS)
     .eq('user_id', user!.id)
-    .neq('status', 'playing')
+    // Both of these have a section of their own above the list, so "All"
+    // means "everything else" rather than literally everything.
+    .not('status', 'in', '("playing","ambient")')
     .order(sort === 'status' ? 'created_at' : sort, { ascending: !sortDesc, nullsFirst: false })
 
-  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
   if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
   // Playing games always fetched separately for the Now Playing strip — run

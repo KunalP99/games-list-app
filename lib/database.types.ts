@@ -98,7 +98,7 @@ export type Database = {
           developer: string | null
           release_date: string | null
           release_date_precision: 'full' | 'year'
-          status: 'playing' | 'completed' | 'backlog' | 'dnf'
+          status: 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient'
           hours_played: number | null
           start_date: string | null
           completion_date: string | null
@@ -140,7 +140,7 @@ export type Database = {
           developer?: string | null
           release_date?: string | null
           release_date_precision?: 'full' | 'year'
-          status?: 'playing' | 'completed' | 'backlog' | 'dnf'
+          status?: 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient'
           hours_played?: number | null
           start_date?: string | null
           completion_date?: string | null
@@ -178,7 +178,7 @@ export type Database = {
           developer?: string | null
           release_date?: string | null
           release_date_precision?: 'full' | 'year'
-          status?: 'playing' | 'completed' | 'backlog' | 'dnf'
+          status?: 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient'
           hours_played?: number | null
           start_date?: string | null
           completion_date?: string | null

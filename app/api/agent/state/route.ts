@@ -28,9 +28,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .eq('id', identity.userId)
       .maybeSingle(),
     (sb.from('games') as any)
-      .select('id, title, steam_appid, hours_played')
+      .select('id, title, status, steam_appid, hours_played')
       .eq('user_id', identity.userId)
-      .eq('status', 'playing')
+      // Ambient games are tracked exactly like playing ones; they are simply
+      // the ongoing games that sit outside the wheel.
+      .in('status', ['playing', 'ambient'])
       .order('updated_at', { ascending: false }),
     (sb.from('game_executables') as any)
       .select('exe_name, game_id')

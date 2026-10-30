@@ -170,7 +170,9 @@ async function addWonGameToLibrary(
   const decision = decideWonGameAction(rows)
   if (decision.action === 'noop') return null
 
-  // A backlog copy is pulled straight into playing (with the chosen platform + image).
+  // A backlog or ambient copy is pulled straight into playing (with the chosen
+  // platform + image). hours_played is deliberately untouched, so a game the
+  // agent had been tracking as ambient keeps every hour it earned.
   if (decision.action === 'flip') {
     await (supabase.from('games') as any)
       .update({

@@ -118,6 +118,9 @@ export function buildActivityItems(
     } else if (g.status === 'playing') {
       items.push({ ...base, type: 'playing', date: g.created_at })
     }
+    // Ambient games deliberately produce nothing. They arrive on their own,
+    // several at a time, and would drown a feed that is meant to be about the
+    // games people chose. They have their own "recently played" strip instead.
   }
 
   for (const spin of wheelSpins) {

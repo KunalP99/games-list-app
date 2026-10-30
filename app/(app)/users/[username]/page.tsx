@@ -46,9 +46,13 @@ export default async function UserProfilePage({
     .from('games')
     .select('*')
     .eq('user_id', profile.id)
+    // Matches My Games: Playing and Ambient each have their own section, so
+    // the list below is everything else. Without this, the untabbed "All"
+    // view here would quietly differ from the owner's own page.
+    .not('status', 'in', '("playing","ambient")')
     .order(sort, { ascending: sortAsc, nullsFirst: false })
 
-  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
   const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats] = await Promise.all([

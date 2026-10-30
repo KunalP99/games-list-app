@@ -32,7 +32,8 @@ export default async function LinkExecutablePage({
     .from('games')
     .select('id, title, platform, hours_played, cover_image_url')
     .eq('user_id', user.id)
-    .eq('status', 'playing')
+    // Both are tracked, so both are linkable.
+    .in('status', ['playing', 'ambient'])
     .order('updated_at', { ascending: false }) as {
       data: { id: string; title: string; platform: string | null; hours_played: number | null; cover_image_url: string | null }[] | null
     }
@@ -51,9 +52,9 @@ export default async function LinkExecutablePage({
       {(games ?? []).length === 0 ? (
         <div className="bg-surface-base border border-edge-base rounded-xl p-6 text-center space-y-2">
           <p className="text-4xl">🎮</p>
-          <p className="font-medium text-fg-secondary">Nothing set to Playing</p>
+          <p className="font-medium text-fg-secondary">Nothing being tracked</p>
           <p className="text-sm text-fg-subtle">
-            Hours are only logged for games marked Playing. Set one and come back.
+            Hours are logged for games marked Playing or Ambient. Set one and come back.
           </p>
           <Link href="/games?status=backlog" className="inline-block text-sm text-brand-600 hover:text-brand-700 dark:text-brand-400">
             Go to your backlog →

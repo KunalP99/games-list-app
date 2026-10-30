@@ -42,6 +42,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (game.status === 'playing') {
     return NextResponse.json({ ok: true, gameId: game.id, title: game.title, alreadyPlaying: true })
   }
+  // Ambient games are already tracked, and moving one to Playing would quietly
+  // enrol it in the wheel's world — a turn's worth of meaning the agent has no
+  // business assigning. Only the user may promote one, from the site.
+  if (game.status === 'ambient') {
+    return NextResponse.json({ ok: true, gameId: game.id, title: game.title, alreadyTracked: true })
+  }
 
   const update: Record<string, unknown> = { status: 'playing' }
   if (!game.start_date) update.start_date = new Date().toISOString().slice(0, 10)
