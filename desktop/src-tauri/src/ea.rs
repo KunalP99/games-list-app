@@ -1,149 +1,165 @@
 //! Working out which game an executable belongs to, for EA App.
 //!
-//! Same idea as `launchers.rs` for Epic, a different source. EA writes one
-//! registry key per title it knows about — owned, not necessarily installed
-//! — under `HKLM\Software\Wow6432Node\Origin Games\<contentID>`. Verified
-//! against a real machine: two real entries there, `Bejeweled® 3` and
-//! `STAR WARS™ Battlefront™ II`, both owned but neither actually installed —
-//! which is exactly why a title alone is not enough to treat as a candidate;
-//! an `Install Dir` value only appears once a title is actually installed,
-//! and that is the one this reads.
+//! The first version of this read `HKLM\Software\Wow6432Node\Origin Games`,
+//! on real community documentation that an `Install Dir` value appears there
+//! once a title is installed. Verified live against this machine: it does
+//! not — not for Bejeweled 3, installed and running at the time — meaning
+//! that registry key is a licensing/ownership list left over from the old
+//! Origin client, not a live record of what EA App's modern "EA Desktop"
+//! client has actually put on disk anywhere.
+//!
+//! What EA App writes instead sits right next to the game: every install
+//! drops `<install folder>\__Installer\installerdata.xml`, UTF-16 with a BOM,
+//! carrying the exact title and the same contentID the registry uses. No
+//! central list to go read first — given a running exe, this walks up from
+//! it looking for that file, the same shape Steam's own matching uses
+//! (anchor on a known file, not a trusted central index).
 
-/// One game EA's registry knows about, with somewhere on disk it actually is.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EaGame {
-    pub display_name: String,
-    pub install_location: String,
-}
+use std::path::Path;
 
-/// Parse one `Origin Games\<contentID>` subkey's values.
+/// How many directories to walk up from an exe before giving up. Generous —
+/// Bejeweled 3's own layout is `<game>\__Installer\...` one level up from
+/// where the exe itself can sit nested several folders deep (`<game>\<locale
+/// build>\Game.exe`) — but bounded, so a path with no EA install anywhere
+/// above it does not walk all the way to a drive root on every single poll.
+const MAX_ANCESTORS: usize = 6;
+
+/// Decode installerdata.xml's UTF-16 (with or without a byte-order mark) and
+/// pull out the first `<title>`.
 ///
-/// `None` for an owned-but-not-installed title (no `Install Dir`) — this is
-/// not a rare edge case to guard against, it is the normal state for most of
-/// what is in this key. Also `None` for a blank display name, which should
-/// not occur but is cheap to rule out rather than assume.
-pub fn parse_entry(display_name: Option<&str>, install_dir: Option<&str>) -> Option<EaGame> {
-    let display_name = display_name?.trim();
-    let install_dir = install_dir?.trim();
-    if display_name.is_empty() || install_dir.is_empty() {
+/// Only the title is read. `contentID` is also in this file and matches the
+/// registry's licensing-key naming, but nothing here needs it — the title is
+/// what gets searched against IGDB, the same as every other launcher.
+pub fn parse_title(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 2 {
         return None;
     }
-    Some(EaGame { display_name: display_name.to_string(), install_location: install_dir.to_string() })
-}
-
-/// The display name for a running executable, from a set of installed games.
-///
-/// Install-folder-prefix only, not an exe-name match — same reasoning as the
-/// Epic path, and more clearly necessary here: EA's library spans in-house
-/// and third-party engines with no one naming convention the way Unreal's
-/// `-Win64-Shipping.exe` is, so requiring a specific exe name would miss far
-/// more than it would ever protect against. Safe regardless, because the
-/// server only ever trusts an *exact* IGDB title match — a wrong guess here
-/// just comes back "unknown" and falls through to the ordinary prompt.
-pub fn display_name_for_exe(exe_path: &str, games: &[EaGame]) -> Option<String> {
-    let exe_path = exe_path.to_lowercase();
-    games
-        .iter()
-        .find(|g| exe_path.starts_with(&g.install_location.to_lowercase()))
-        .map(|g| g.display_name.clone())
-}
-
-/// Every EA title installed on this machine, per the registry.
-///
-/// Reads `HKLM\Software\Wow6432Node\Origin Games`. Missing entirely when EA
-/// App has never been installed — not an error, just nothing to offer here.
-#[cfg(windows)]
-pub fn ea_games() -> Vec<EaGame> {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
-    use winreg::RegKey;
-
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let Ok(root) = hklm.open_subkey("Software\\Wow6432Node\\Origin Games") else {
-        return Vec::new();
+    // BOM tells us the byte order; default to little-endian (what EA's own
+    // installer writes) if one is somehow absent.
+    let units: Vec<u16> = if bytes[0] == 0xFF && bytes[1] == 0xFE {
+        bytes[2..].as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect()
+    } else if bytes[0] == 0xFE && bytes[1] == 0xFF {
+        bytes[2..].as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes(*c)).collect()
+    } else {
+        bytes.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect()
     };
 
-    root.enum_keys()
-        .filter_map(|name| name.ok())
-        .filter_map(|name| {
-            let key = root.open_subkey(&name).ok()?;
-            let display_name: Option<String> = key.get_value("DisplayName").ok();
-            let install_dir: Option<String> = key.get_value("Install Dir").ok();
-            parse_entry(display_name.as_deref(), install_dir.as_deref())
-        })
-        .collect()
+    let text: String = char::decode_utf16(units).filter_map(|r| r.ok()).collect();
+    let start = text.find("<title>")? + "<title>".len();
+    let end = text[start..].find("</title>")? + start;
+    let title = text[start..end].trim();
+    if title.is_empty() { None } else { Some(title.to_string()) }
 }
 
-#[cfg(not(windows))]
-pub fn ea_games() -> Vec<EaGame> {
-    Vec::new()
+/// Look for `__Installer\installerdata.xml` at or above an executable's own
+/// directory, and return its parsed title.
+///
+/// `read` takes the manifest path it found and returns the file's raw bytes,
+/// so the walk itself can be tested without real files on disk.
+pub fn find_title_for_exe<F>(exe_path: &str, mut read: F) -> Option<String>
+where
+    F: FnMut(&Path) -> Option<Vec<u8>>,
+{
+    let mut dir = Path::new(exe_path).parent()?.to_path_buf();
+    for _ in 0..MAX_ANCESTORS {
+        let candidate = dir.join("__Installer").join("installerdata.xml");
+        if let Some(bytes) = read(&candidate) {
+            return parse_title(&bytes);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    None
+}
+
+/// The display name for a running executable, reading the real filesystem.
+pub fn display_name_for_exe(exe_path: &str) -> Option<String> {
+    find_title_for_exe(exe_path, |p| std::fs::read(p).ok())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn game(name: &str, loc: &str) -> EaGame {
-        EaGame { display_name: name.into(), install_location: loc.into() }
+    /// UTF-16LE-with-BOM bytes for a minimal installerdata.xml, matching
+    /// what EA's own installer actually writes (confirmed against a real
+    /// file on this machine).
+    fn utf16_bom(s: &str) -> Vec<u8> {
+        let mut out = vec![0xFF, 0xFE];
+        for u in s.encode_utf16() {
+            out.extend_from_slice(&u.to_le_bytes());
+        }
+        out
     }
 
     #[test]
-    fn parses_an_entry_with_both_values() {
-        assert_eq!(
-            parse_entry(Some("Star Wars Battlefront II"), Some(r"C:\Program Files\EA Games\Battlefront II")),
-            Some(game("Star Wars Battlefront II", r"C:\Program Files\EA Games\Battlefront II")),
-        );
+    fn parses_the_title_from_a_real_shaped_file() {
+        // Trimmed from this machine's actual installerdata.xml for Bejeweled 3.
+        let xml = "<?xml version=\"1.0\" encoding=\"utf-16\"?>\n\
+                   <game gameVersion=\"1.1.13.4753\" manifestVersion=\"2.1\">\n\
+                   <contentIDs><contentID>71715</contentID></contentIDs>\n\
+                   <metadata><localeInfo locale=\"en_US\">\n\
+                   <title>Bejeweled\u{ae} 3</title>\n\
+                   </localeInfo></metadata></game>";
+        assert_eq!(parse_title(&utf16_bom(xml)).as_deref(), Some("Bejeweled\u{ae} 3"));
     }
 
     #[test]
-    fn skips_an_owned_but_not_installed_title() {
-        // The real case this guards against: Bejeweled 3 and Star Wars
-        // Battlefront II are both licensed on this machine with no
-        // corresponding install — DisplayName exists, Install Dir does not.
-        assert_eq!(parse_entry(Some("Bejeweled\u{ae} 3"), None), None);
+    fn works_without_a_bom_too() {
+        let mut bytes = Vec::new();
+        for u in "<title>Titanfall 2</title>".encode_utf16() {
+            bytes.extend_from_slice(&u.to_le_bytes());
+        }
+        assert_eq!(parse_title(&bytes).as_deref(), Some("Titanfall 2"));
     }
 
     #[test]
-    fn skips_a_blank_display_name_or_install_dir() {
-        assert_eq!(parse_entry(Some(""), Some(r"C:\Games\X")), None);
-        assert_eq!(parse_entry(Some("X"), Some("  ")), None);
+    fn is_none_for_malformed_or_empty_input() {
+        assert_eq!(parse_title(&[]), None);
+        assert_eq!(parse_title(&utf16_bom("<game>no title here</game>")), None);
+        assert_eq!(parse_title(&utf16_bom("<title></title>")), None);
+        assert_eq!(parse_title(&utf16_bom("<title>   </title>")), None);
     }
 
     #[test]
-    fn identifies_a_running_game_by_its_install_folder() {
-        let games = vec![game("Dragon Age: The Veilguard", r"C:\Program Files\EA Games\Dragon Age The Veilguard")];
-        assert_eq!(
-            display_name_for_exe(
-                r"C:\Program Files\EA Games\Dragon Age The Veilguard\bin\DragonAge.exe",
-                &games,
-            ),
-            Some("Dragon Age: The Veilguard".to_string()),
-        );
+    fn finds_the_manifest_one_level_above_a_locale_subfolder() {
+        // The real shape: Bejeweled3.exe sits in "Bejeweled 3 EN", a sibling
+        // of __Installer, both one level under the actual install root.
+        let xml = utf16_bom("<title>Bejeweled\u{ae} 3</title>");
+        let found = find_title_for_exe(r"C:\Program Files\EA Games\Bejeweled 3\Bejeweled 3 EN\Bejeweled3.exe", |p| {
+            if p == Path::new(r"C:\Program Files\EA Games\Bejeweled 3\Bejeweled 3 EN\__Installer\installerdata.xml") {
+                None // not here — one level too shallow
+            } else if p == Path::new(r"C:\Program Files\EA Games\Bejeweled 3\__Installer\installerdata.xml") {
+                Some(xml.clone())
+            } else {
+                None
+            }
+        });
+        assert_eq!(found.as_deref(), Some("Bejeweled\u{ae} 3"));
     }
 
     #[test]
-    fn is_case_insensitive_about_the_path() {
-        let games = vec![game("Titanfall 2", r"c:\program files\ea games\titanfall2")];
-        assert_eq!(
-            display_name_for_exe(r"C:\Program Files\EA Games\Titanfall2\Titanfall2.exe", &games),
-            Some("Titanfall 2".to_string()),
-        );
+    fn finds_the_manifest_right_beside_the_exe_too() {
+        let xml = utf16_bom("<title>Titanfall 2</title>");
+        let found = find_title_for_exe(r"C:\Program Files\EA Games\Titanfall2\Titanfall2.exe", |p| {
+            if p == Path::new(r"C:\Program Files\EA Games\Titanfall2\__Installer\installerdata.xml") {
+                Some(xml.clone())
+            } else {
+                None
+            }
+        });
+        assert_eq!(found.as_deref(), Some("Titanfall 2"));
     }
 
     #[test]
-    fn ignores_an_executable_outside_any_known_install_folder() {
-        let games = vec![game("Titanfall 2", r"C:\Program Files\EA Games\Titanfall2")];
-        assert_eq!(display_name_for_exe(r"D:\Games\OtherGame\OtherGame.exe", &games), None);
-    }
-
-    #[test]
-    fn picks_the_right_game_among_several_installed() {
-        let games = vec![
-            game("Titanfall 2", r"C:\Program Files\EA Games\Titanfall2"),
-            game("Star Wars Jedi: Survivor", r"C:\Program Files\EA Games\Jedi Survivor"),
-        ];
-        assert_eq!(
-            display_name_for_exe(r"C:\Program Files\EA Games\Jedi Survivor\JEDISURVIVOR.exe", &games),
-            Some("Star Wars Jedi: Survivor".to_string()),
-        );
+    fn gives_up_after_the_bound_rather_than_walking_to_the_drive_root() {
+        let mut calls = 0;
+        let found = find_title_for_exe(r"D:\Games\NotEA\SomeTool.exe", |_| {
+            calls += 1;
+            None
+        });
+        assert_eq!(found, None);
+        assert!(calls <= MAX_ANCESTORS, "walked {calls} levels, bound is {MAX_ANCESTORS}");
     }
 }

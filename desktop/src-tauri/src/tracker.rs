@@ -623,12 +623,12 @@ async fn identify_ea_games(
     candidates: &[detect::Candidate],
     judge: &mut detect::GameJudge,
 ) -> bool {
-    let ea_games = ea::ea_games();
-    if ea_games.is_empty() {
-        return false;
-    }
+    // No central list to check up front, unlike Epic/Steam: EA App's own
+    // registry turned out not to carry a live install record (see ea.rs's
+    // module doc), so this looks for installerdata.xml next to each
+    // candidate directly rather than against a list gathered once per tick.
     identify_by_title(app, base, token, candidates, judge, "EA App", |path| {
-        ea::display_name_for_exe(path, &ea_games)
+        ea::display_name_for_exe(path)
     })
     .await
 }
