@@ -77,6 +77,25 @@ pub fn candidates(sys: &mut System) -> Vec<Candidate> {
         .collect()
 }
 
+/// Programs worth offering when the user links a game by hand.
+///
+/// Looser than `looks_like_game`: the user is telling us what it is, so we do
+/// not need to be sure it is a game — only to keep the list short enough to
+/// scan, which means a visible window and not obviously everyday software.
+pub fn pickable(c: &Candidate) -> bool {
+    if !c.has_window || IGNORED.contains(&c.exe_name.as_str()) {
+        return false;
+    }
+    match c.path.as_deref() {
+        // Windows' own components are never what the user means.
+        Some(path) => match std::env::var_os("SystemRoot") {
+            Some(dir) => !path.starts_with(&dir.to_string_lossy().to_lowercase()),
+            None => true,
+        },
+        None => false,
+    }
+}
+
 /// Remembers which processes have already been judged.
 ///
 /// The last gate walks a process's loaded modules, which means opening a

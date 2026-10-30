@@ -143,10 +143,79 @@ async function refresh() {
 el('btn-connect').addEventListener('click', () => invoke('start_pairing'))
 el('btn-games').addEventListener('click', () => invoke('open_site', { path: '/games' }))
 el('btn-settings').addEventListener('click', () => invoke('open_site', { path: '/settings' }))
-el('btn-link').addEventListener('click', async () => {
-  await invoke('open_site', { path: '/settings/devices/link' })
-  // Whatever they do over there, this window should reflect it on return.
-  window.addEventListener('focus', refreshFromServer, { once: true })
+/**
+ * Linking, in this window.
+ *
+ * This used to open the website's link page in a second window. That window
+ * depended on a webview session that could expire and on the site being
+ * reachable, and when either failed it showed a blank page with no
+ * explanation. Everything needed is already here: the running programs come
+ * from the watcher, the games from the status it already holds.
+ */
+async function openLinkPanel() {
+  const panel = el('link-panel')
+  const exeSelect = el('link-exe')
+  el('link-msg').hidden = true
+
+  const [programs, status] = await Promise.all([
+    invoke('running_programs').catch(() => []),
+    invoke('get_status').catch(() => null),
+  ])
+
+  exeSelect.innerHTML = ''
+  for (const exe of programs) {
+    const opt = document.createElement('option')
+    opt.value = exe
+    opt.textContent = exe
+    exeSelect.appendChild(opt)
+  }
+  if (programs.length === 0) {
+    const opt = document.createElement('option')
+    opt.value = ''
+    opt.textContent = 'No programs found — start the game first'
+    exeSelect.appendChild(opt)
+  }
+
+  const gameSelect = el('link-game')
+  gameSelect.innerHTML = ''
+  for (const game of status?.playing ?? []) {
+    const opt = document.createElement('option')
+    opt.value = game.id
+    opt.textContent = game.linked ? `${game.title} (already linked)` : game.title
+    gameSelect.appendChild(opt)
+  }
+
+  panel.hidden = false
+}
+
+el('btn-link').addEventListener('click', openLinkPanel)
+el('link-cancel').addEventListener('click', () => { el('link-panel').hidden = true })
+
+el('link-save').addEventListener('click', async () => {
+  const exe = el('link-exe').value
+  const gameId = el('link-game').value
+  const msg = el('link-msg')
+  if (!exe || !gameId) {
+    msg.textContent = 'Pick a program and a game.'
+    msg.className = 'panel-msg bad'
+    msg.hidden = false
+    return
+  }
+  el('link-save').disabled = true
+  try {
+    await invoke('link_executable', { exeName: exe, gameId })
+    msg.textContent = `Linked. ${exe} will be tracked from now on.`
+    msg.className = 'panel-msg ok'
+    msg.hidden = false
+    setTimeout(() => { el('link-panel').hidden = true }, 1800)
+    refresh()
+  } catch (err) {
+    msg.textContent = String(err)
+    msg.className = 'panel-msg bad'
+    msg.hidden = false
+  } finally {
+    el('link-save').disabled = false
+  }
 })
 
 el('prompt-yes').addEventListener('click', async () => {

@@ -59,6 +59,26 @@
         </div>
       </section>
 
+      <!-- Linking happens here rather than in a website window: the app
+           already knows what is running and which games are Playing, so a
+           second window (and a webview session that can expire) buys nothing. -->
+      <section class="card link-panel" id="link-panel" hidden>
+        <p class="panel-title">Link a game</p>
+        <p class="panel-help">Pick the program you are playing, then the game it is.</p>
+
+        <label class="field-label" for="link-exe">Program</label>
+        <select id="link-exe" class="field"></select>
+
+        <label class="field-label" for="link-game">Game</label>
+        <select id="link-game" class="field"></select>
+
+        <div class="panel-actions">
+          <button class="primary" id="link-save">Link them</button>
+          <button class="ghost" id="link-cancel">Cancel</button>
+        </div>
+        <p class="panel-msg" id="link-msg" hidden></p>
+      </section>
+
       <section class="section">
         <div class="section-head">
           <h2>Playing</h2>

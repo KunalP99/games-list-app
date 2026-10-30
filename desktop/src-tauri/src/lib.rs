@@ -103,6 +103,13 @@ fn open_site(app: AppHandle, path: String) -> Result<(), String> {
             log::info!("site window navigating to {target}");
             true
         })
+        // Diagnostic channel: a remote page cannot talk to Rust over IPC, but
+        // the window title is readable from outside, so surface script errors
+        // there. Without this a blank window gives nothing to go on.
+        .initialization_script(
+            "window.addEventListener('error', e => { document.title = 'JSERR: ' + (e.message || '') });
+             window.addEventListener('unhandledrejection', e => { document.title = 'REJECT: ' + ((e.reason && e.reason.message) || e.reason || '') });",
+        )
         .on_page_load(|window, payload| {
             // on_navigation fires when a request starts; this fires when the
             // document is actually there. A window that navigates but never
@@ -141,6 +148,39 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
 /// Linking a game happens on the website, in a different window, so the app
 /// has no way to know it happened. The UI calls this whenever it comes back
 /// into focus.
+/// Programs currently running that the user might want to link.
+///
+/// Offered instead of making them type an executable name: the app already
+/// knows what is running, and a list is both quicker and impossible to
+/// mistype.
+#[tauri::command]
+fn running_programs() -> Vec<String> {
+    let mut system = detect::new_system();
+    let mut names: Vec<String> = detect::candidates(&mut system)
+        .into_iter()
+        .filter(detect::pickable)
+        .map(|c| c.exe_name)
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Link an executable to a game, from inside the app.
+///
+/// The website has a page for this too, but doing it here means no second
+/// window, no webview session to expire, and nothing to go blank.
+#[tauri::command]
+async fn link_executable(app: AppHandle, exe_name: String, game_id: String) -> Result<(), String> {
+    let (base, token) = {
+        let config = app.state::<Tracker>().snapshot_config();
+        (config.base(), config.token.clone().unwrap_or_default())
+    };
+    api::post_link(&base, &token, &exe_name, &game_id).await?;
+    app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;
+    Ok(())
+}
+
 #[tauri::command]
 fn refresh_state(app: AppHandle) {
     app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;
@@ -203,6 +243,8 @@ pub fn run() {
             confirm_prompt,
             dismiss_prompt,
             refresh_state,
+            running_programs,
+            link_executable,
             sign_out,
             set_api_base,
         ])
