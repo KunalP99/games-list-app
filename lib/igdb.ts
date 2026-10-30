@@ -116,6 +116,8 @@ type IgdbGame = {
   screenshots?: Array<{ image_id?: string }>
   genres?: Array<{ name: string }>
   involved_companies?: IgdbCompany[]
+  // Only requested by getGameDetail, so absent on search results.
+  external_games?: Array<{ uid?: string; external_game_source?: number }>
 }
 
 // ── Public API (mirrors lib/rawg.ts) ────────────────────────────────────────
@@ -135,8 +137,12 @@ export async function searchGames(query: string, page = 1): Promise<RawgSearchRe
 }
 
 export async function getGameDetail(id: number): Promise<RawgGameDetail | null> {
+  // The external ids ride along with the detail rather than costing a query of
+  // their own, which is what lets every add/edit path store a Steam app id for
+  // free. Added here and not to DETAIL_FIELDS itself, because searchGames uses
+  // that too and has no use for them.
   const games = await igdbQuery<IgdbGame>('games',
-    `fields ${DETAIL_FIELDS}; where id = ${id}; limit 1;`)
+    `fields ${DETAIL_FIELDS}, external_games.uid, external_games.external_game_source; where id = ${id}; limit 1;`)
   const g = games[0]
   if (!g) return null
   return {
@@ -151,6 +157,7 @@ export async function getGameDetail(id: number): Promise<RawgGameDetail | null> 
     genres: (g.genres ?? []).map(x => ({ name: x.name })),
     dominant_color: null, // IGDB provides no dominant colour
     saturated_color: null,
+    steam_app_id: steamAppIdFrom(g.external_games),
   }
 }
 

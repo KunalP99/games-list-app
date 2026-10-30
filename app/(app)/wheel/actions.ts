@@ -202,6 +202,7 @@ async function addWonGameToLibrary(
     cover_image_url: detail?.cover_image ?? null,
     artwork_url: art ?? detail?.artwork_image ?? null,
     [PROVIDER_ID_COLUMN]: rawgGame.id,
+    steam_appid: detail?.steam_app_id ?? null,
     description: detail?.description_raw ?? null,
     genres: detail?.genres?.map(g => g.name) ?? null,
     dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,

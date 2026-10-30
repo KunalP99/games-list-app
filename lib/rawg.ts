@@ -34,6 +34,12 @@ export type RawgGameDetail = {
   genres: Array<{ name: string }>
   dominant_color: string | null
   saturated_color: string | null
+  // Steam app id, from IGDB's external_games, so the desktop agent can match a
+  // running Steam game without an API call per check. Carried on the detail
+  // every add/edit path already fetches, rather than in a query of its own —
+  // it costs no extra IGDB round-trip, the same reasoning as GameExtras below.
+  // Null for games with no Steam release, and always null on the RAWG path.
+  steam_app_id: number | null
 }
 
 export type RawgScreenshot = {
@@ -67,7 +73,9 @@ export async function getRawgGameDetail(rawgId: number): Promise<RawgGameDetail 
     const url = `${RAWG_BASE}/games/${rawgId}?key=${key}`
     const res = await fetch(url, { next: { revalidate: 3600 }, signal: AbortSignal.timeout(RAWG_TIMEOUT_MS) })
     if (!res.ok) return null
-    return await res.json()
+    // RAWG carries no Steam cross-reference. Spelled out rather than left
+    // undefined, so callers can read the field without a guard.
+    return { ...(await res.json()), steam_app_id: null }
   } catch {
     return null
   }

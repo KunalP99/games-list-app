@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { steamReviewBadge, type SteamReviewSummary } from '../steam'
 import { steamAppIdFrom } from '../igdb'
 
@@ -71,5 +71,52 @@ describe('steamAppIdFrom', () => {
       { uid: 'bad', external_game_source: 1 },
       { uid: '413150', external_game_source: 1 },
     ])).toBe(413150)
+  })
+})
+
+
+// The Steam app id only reaches the database if getGameDetail asks IGDB for the
+// external ids in the first place. Nothing fails if it stops: the id just
+// becomes null for every game added from then on, and the desktop agent
+// quietly falls back to guessing from executable names.
+describe('getGameDetail and the Steam app id', () => {
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
+
+  function stubIgdb(game: Record<string, unknown>) {
+    const bodies: string[] = []
+    vi.stubEnv('IGDB_CLIENT_ID', 'test-id')
+    vi.stubEnv('IGDB_CLIENT_SECRET', 'test-secret')
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { body?: string }) => {
+      if (String(url).includes('id.twitch.tv')) {
+        return { ok: true, status: 200, json: async () => ({ access_token: 't', expires_in: 3600 }) }
+      }
+      bodies.push(init?.body ?? '')
+      return { ok: true, status: 200, json: async () => [game] }
+    }))
+    return bodies
+  }
+
+  it('requests the external ids and returns the Steam one', async () => {
+    const { getGameDetail } = await import('../igdb')
+    const bodies = stubIgdb({
+      id: 186725,
+      name: 'Vampire Survivors',
+      external_games: [
+        { uid: 'some-gog-id', external_game_source: 5 },
+        { uid: '1794680', external_game_source: 1 },
+      ],
+    })
+
+    const detail = await getGameDetail(186725)
+
+    expect(bodies[0]).toContain('external_games.external_game_source')
+    expect(bodies[0]).toContain('external_games.uid')
+    expect(detail?.steam_app_id).toBe(1794680)
+  })
+
+  it('is null for a game with no Steam release', async () => {
+    const { getGameDetail } = await import('../igdb')
+    stubIgdb({ id: 1, name: 'Console Only', external_games: [{ uid: '42', external_game_source: 11 }] })
+    expect((await getGameDetail(1))?.steam_app_id).toBeNull()
   })
 })
