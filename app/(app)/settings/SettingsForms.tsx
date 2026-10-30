@@ -1,11 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled } from './actions'
+import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, createDeviceToken, revokeDevice } from './actions'
 import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
 
 const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
+
+function formatSeen(iso: string): string {
+  const diffMins = Math.floor((Date.now() - Date.parse(iso)) / 60000)
+  if (diffMins < 2) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
 
 function StatusMessage({ msg }: { msg: { ok: boolean; text: string } | null }) {
   if (!msg) return null
@@ -16,7 +24,9 @@ function StatusMessage({ msg }: { msg: { ok: boolean; text: string } | null }) {
   )
 }
 
-export default function SettingsForms({ profile, email }: { profile: Profile; email: string }) {
+export type DeviceRow = { id: string; label: string; last_seen_at: string | null; created_at: string }
+
+export default function SettingsForms({ profile, email, devices = [] }: { profile: Profile; email: string; devices?: DeviceRow[] }) {
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
@@ -25,6 +35,12 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
 
   const [appearanceMsg, setAppearanceMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [appearanceLoading, setAppearanceLoading] = useState(false)
+
+  const [deviceMsg, setDeviceMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [deviceLoading, setDeviceLoading] = useState(false)
+  const [deviceLabel, setDeviceLabel] = useState('')
+  // Shown once, in memory only — the server stores a hash and cannot show it again.
+  const [issuedToken, setIssuedToken] = useState<string | null>(null)
 
   const [wheelMsg, setWheelMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [wheelLoading, setWheelLoading] = useState(false)
@@ -52,6 +68,32 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
     setPasswordMsg(result.success ? { ok: true, text: 'Password updated.' } : { ok: false, text: result.error })
     if (result.success) (e.target as HTMLFormElement).reset()
     setPasswordLoading(false)
+  }
+
+  async function handleCreateDevice(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setDeviceLoading(true)
+    setDeviceMsg(null)
+    setIssuedToken(null)
+    const result = await createDeviceToken(deviceLabel)
+    if (result.success) {
+      setIssuedToken(result.data.token)
+      setDeviceLabel('')
+      setDeviceMsg({ ok: true, text: 'Device added. Copy the token now — it is not shown again.' })
+    } else {
+      setDeviceMsg({ ok: false, text: result.error })
+    }
+    setDeviceLoading(false)
+  }
+
+  async function handleRevokeDevice(id: string, label: string) {
+    setDeviceLoading(true)
+    setDeviceMsg(null)
+    const result = await revokeDevice(id)
+    setDeviceMsg(result.success
+      ? { ok: true, text: `Removed ${label}. That device can no longer log hours.` }
+      : { ok: false, text: result.error })
+    setDeviceLoading(false)
   }
 
   async function handleWheelToggle(next: boolean) {
@@ -319,6 +361,78 @@ export default function SettingsForms({ profile, email }: { profile: Profile; em
         </div>
 
         <StatusMessage msg={wheelMsg} />
+      </section>
+
+      {/* Devices — the desktop agent that logs hours automatically */}
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Devices</h2>
+        <p className="text-xs text-fg-subtle leading-relaxed">
+          Pair a PC to log hours automatically while you play. Only games set to
+          <span className="font-medium text-fg-secondary"> Playing </span>
+          are ever updated — completed and backlog games are never touched.
+        </p>
+
+        {devices.length > 0 && (
+          <ul className="divide-y divide-edge-subtle border border-edge-base rounded-lg">
+            {devices.map(d => (
+              <li key={d.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-fg-secondary truncate">{d.label}</p>
+                  <p className="text-xs text-fg-subtle">
+                    {d.last_seen_at ? `Last seen ${formatSeen(d.last_seen_at)}` : 'Never connected'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRevokeDevice(d.id, d.label)}
+                  disabled={deviceLoading}
+                  className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-md border border-edge-base text-fg-muted hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50"
+                >
+                  Revoke
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {issuedToken && (
+          <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 dark:border-brand-700 dark:bg-brand-900/20">
+            <p className="text-xs font-medium text-brand-700 dark:text-brand-300">
+              Paste this into the agent now — it will not be shown again.
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 min-w-0 truncate rounded-md bg-surface-base border border-edge-base px-2 py-1.5 text-xs text-fg-base">
+                {issuedToken}
+              </code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(issuedToken)}
+                className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleCreateDevice} className="flex items-center gap-2">
+          <input
+            value={deviceLabel}
+            onChange={e => setDeviceLabel(e.target.value)}
+            placeholder="e.g. Desktop PC"
+            maxLength={60}
+            className={input}
+          />
+          <button
+            type="submit"
+            disabled={deviceLoading || deviceLabel.trim().length === 0}
+            className="shrink-0 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
+          >
+            {deviceLoading ? 'Working…' : 'Add device'}
+          </button>
+        </form>
+
+        <StatusMessage msg={deviceMsg} />
       </section>
 
     </div>

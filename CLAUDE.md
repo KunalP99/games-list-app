@@ -253,6 +253,61 @@ The full implementation plan (including all database SQL per phase) is at:
   Notification `type`s: `game_released` (linked to a game), `event_live` (no game — the bell shows a 📣 tile).
 - **Steam Deck flag** — `games.steam_deck` boolean. Toggle in `GameForm` (Flags row) and a "Playing on Steam Deck" checkbox in `ReviewGameModal` (shown only for backlog adds via the `showSteamDeck` prop — not the wheel). Set on the detail page shows `/steam-deck.png` next to the title badges. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_deck BOOLEAN NOT NULL DEFAULT false;` Needs the icon at `public/steam-deck.png`.
 - **Emulated flag** — `games.is_emulated` boolean, marks a game as played via emulation. Toggle in `GameForm` (Flags row, 🕹️) only — not wired into `ReviewGameModal`/backlog-add flows or shown elsewhere yet. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS is_emulated BOOLEAN NOT NULL DEFAULT false;`
+- **Desktop play-tracking agent** — a program on the user's PC detects when a game they have set to **Playing** is running and logs the hours automatically. Three parts: the agent (`agent/gameslist-agent.ps1`, prototype), four API routes under `app/api/agent/`, and a "Devices" section in Settings that issues device tokens.
+  - **Only `status = 'playing'` games are ever written to**, and the route re-reads the status server-side rather than trusting the client. This is load-bearing: changing `hours_played` on a *completed* game makes `updateGame` reverse and re-award that game's entire ticket ledger, so the restriction keeps a client program out of the ticket economy.
+  - Hours are **added** to the existing figure. Checkpoints carry the session's cumulative minutes and the server applies only the delta (`lib/agent-session.ts`), so retries and replays cannot double-count. `hours_played` is `numeric(6,1)`, so everything is rounded to 0.1h.
+  - Matching: Steam games resolve from `HKCU\Software\Valve\Steam\RunningAppID` against `games.steam_appid` (backfilled from IGDB by `scripts/backfill-steam-appids.mjs`). Anything else is linked once by executable name, stored in `game_executables` so it syncs across machines.
+  - Auth is a bearer device token, stored only as a sha256 hash (`lib/agent-auth.ts`). Unlike the `CRON_SECRET` guard, a missing token always rejects.
+  - The agent builds no UI: the "link a game" screen is a page in the app (`/settings/devices/link`), so it inherits the user's accent, theme and fonts automatically.
+  - SQL:
+    ```sql
+    CREATE TABLE IF NOT EXISTS public.device_tokens (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      last_seen_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE public.device_tokens ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Users manage own devices" ON public.device_tokens
+      FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+    CREATE TABLE IF NOT EXISTS public.play_sessions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      game_id UUID REFERENCES public.games(id) ON DELETE SET NULL,
+      device_id UUID REFERENCES public.device_tokens(id) ON DELETE SET NULL,
+      client_session_id TEXT NOT NULL,
+      minutes INTEGER NOT NULL CHECK (minutes >= 0),
+      started_at TIMESTAMPTZ NOT NULL,
+      ended_at TIMESTAMPTZ,
+      applied_hours NUMERIC(6,1) NOT NULL DEFAULT 0,
+      last_checkpoint_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, client_session_id)
+    );
+    ALTER TABLE public.play_sessions ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Users read own sessions" ON public.play_sessions
+      FOR SELECT USING (auth.uid() = user_id);
+    CREATE INDEX IF NOT EXISTS play_sessions_user_idx ON public.play_sessions (user_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS public.game_executables (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
+      exe_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, exe_name)
+    );
+    ALTER TABLE public.game_executables ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Users manage own exe links" ON public.game_executables
+      FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+    ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_appid INTEGER;
+    CREATE INDEX IF NOT EXISTS games_steam_appid_idx
+      ON public.games (user_id, steam_appid) WHERE steam_appid IS NOT NULL;
+    ```
 
 ---
 
@@ -273,6 +328,10 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/api/cron/sync-playlists` | `app/api/cron/sync-playlists/route.ts` | Daily Vercel Cron. Mirrors YouTube-sourced playlists (in-site + game media) against their source. `CRON_SECRET`-guarded. |
 | `/api/cron/check-releases` | `app/api/cron/check-releases/route.ts` | Daily Vercel Cron. Creates a `game_released` notification for backlog games whose `release_date` has arrived (idempotent via `games.release_notified`). `CRON_SECRET`-guarded, service-role admin client. |
 | `/api/cron/check-events` | `app/api/cron/check-events/route.ts` | Daily Vercel Cron. Creates an `event_live` notification for every user when an IGDB event happens today (idempotent via the `notified_events` table). `CRON_SECRET`-guarded, service-role admin client. |
+| `/api/agent/state` | `app/api/agent/state/route.ts` | Desktop agent. Playing games + their `steam_appid`, the user's exe links, and theme/accent. Device-token auth, service-role admin client. |
+| `/api/agent/session` | `app/api/agent/session/route.ts` | Desktop agent. A play-session checkpoint; applies the hours delta to a **playing** game only. Device-token auth. |
+| `/api/agent/link` | `app/api/agent/link/route.ts` | Desktop agent. Saves an executable → game mapping. Device-token auth. |
+| `/api/agent/start-tracking` | `app/api/agent/start-tracking/route.ts` | Desktop agent. Moves a backlog game to Playing; refuses completed/DNF games. Device-token auth. |
 
 ---
 
