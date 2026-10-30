@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
@@ -78,6 +78,14 @@ pub struct Shared {
     pub queued: usize,
     pub last_error: Option<String>,
     pub pending_prompt: Option<PendingPrompt>,
+    /// Executables not to ask about again *this run*.
+    ///
+    /// Separate from `asked.json`, which is forever and is written only when
+    /// someone actually says "not a game". This covers the softer cases — the
+    /// question was sent to the link panel, say — so the toast does not
+    /// reappear the moment it is dealt with, while a question that was never
+    /// answered still comes back next time the app starts.
+    pub skip_for_now: HashSet<String>,
     /// Set when something happened off-app that the cached state cannot
     /// know about — linking a game on the website, for instance. The loop
     /// re-reads on its next tick instead of waiting out the cache.
@@ -386,9 +394,10 @@ fn maybe_prompt(
 
     let dir = tracker.data_dir.clone();
     let asked = config::load_asked(&dir);
+    let skip = tracker.shared.lock().unwrap().skip_for_now.clone();
 
     for candidate in candidates {
-        if asked.contains(&candidate.exe_name) {
+        if asked.contains(&candidate.exe_name) || skip.contains(&candidate.exe_name) {
             continue;
         }
         if !judge.judge(candidate) {
@@ -415,7 +424,10 @@ fn maybe_prompt(
             return;
         };
 
-        config::add_asked(&dir, &candidate.exe_name);
+        // Deliberately not recorded as asked here. Posing a question is not
+        // the same as having it answered: a toast nobody saw, or one lost to
+        // the app restarting, used to mean that program was never offered
+        // again. It is written when someone actually answers.
         let prompt = PendingPrompt {
             exe_name: candidate.exe_name.clone(),
             suggested_game_id: suggestion.id.clone(),

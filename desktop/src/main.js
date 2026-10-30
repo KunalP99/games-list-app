@@ -331,7 +331,9 @@ el('prompt-no').addEventListener('click', async () => {
   // Stay in this window: opening the website's link page in a second window
   // was the one part of this flow that could show up blank.
   const exe = el('prompt-card').dataset.exe ?? ''
-  await invoke('dismiss_prompt')
+  // "Pick another", not "not a game": they are about to link it, so this is
+  // not an answer to remember forever.
+  await invoke('dismiss_prompt', { remember: false })
   await openLinkPanel(exe || null)
   refresh()
 })

@@ -104,8 +104,9 @@ el('ask-yes').addEventListener('click', async () => {
   }
 
   // "Pick it" — the app's link panel is the place to choose a game, with this
-  // program already selected.
-  await invoke('dismiss_prompt').catch(() => {})
+  // program already selected. Not remembered: they have said it *is* a game,
+  // so if they wander off without linking it, asking again is right.
+  await invoke('dismiss_prompt', { remember: false }).catch(() => {})
   await invoke('open_app', { linkExe: exe }).catch(() => {})
   close()
 })
@@ -115,7 +116,9 @@ el('ask-no').addEventListener('click', async () => {
   answered = true
   const confident = current.confident
   const exe = current.exe_name
-  await invoke('dismiss_prompt').catch(() => {})
+  // "No" / "Not a game" is the one answer that means never ask about this
+  // program again.
+  await invoke('dismiss_prompt', { remember: true }).catch(() => {})
 
   if (!confident) {
     // They have said there is nothing to link, so offering to link it later

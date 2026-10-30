@@ -148,6 +148,7 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
         let tracker = app.state::<Tracker>();
         let mut shared = tracker.shared.lock().unwrap();
         shared.pending_prompt = None;
+        shared.skip_for_now.insert(prompt.exe_name.clone());
         // Re-read so the new link is picked up on the next tick.
         shared.force_refresh = true;
     }
@@ -245,9 +246,31 @@ fn refresh_state(app: AppHandle) {
     app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;
 }
 
+/// Clear the prompt.
+///
+/// `remember` is the difference between "not a game" and "not now". Only an
+/// outright no is written to `asked.json`, which is permanent; sending the
+/// question to the link panel merely stops it coming back this run, so an
+/// abandoned link still gets another chance tomorrow.
 #[tauri::command]
-fn dismiss_prompt(app: AppHandle) {
-    app.state::<Tracker>().shared.lock().unwrap().pending_prompt = None;
+fn dismiss_prompt(app: AppHandle, remember: Option<bool>) {
+    let tracker = app.state::<Tracker>();
+    let dir = tracker.data_dir.clone();
+    let prompt = {
+        let mut shared = tracker.shared.lock().unwrap();
+        let prompt = shared.pending_prompt.take();
+        if let Some(prompt) = &prompt {
+            shared.skip_for_now.insert(prompt.exe_name.clone());
+        }
+        prompt
+    };
+
+    if remember.unwrap_or(false) {
+        if let Some(prompt) = &prompt {
+            log::info!("{} is not a game; not asking again", prompt.exe_name);
+            config::add_asked(&dir, &prompt.exe_name);
+        }
+    }
     // As in `confirm_prompt`: whichever window answered, the other one is
     // still showing the question.
     let _ = app.emit("status-changed", ());
