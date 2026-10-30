@@ -7,6 +7,7 @@ mod api;
 mod config;
 mod detect;
 mod matching;
+mod ea;
 mod launchers;
 mod pairing;
 mod steam;

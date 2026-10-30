@@ -16,6 +16,7 @@ use tauri_plugin_notification::NotificationExt;
 use crate::api::{self, AgentState, PlayingGame};
 use crate::config::{self, AppConfig};
 use crate::detect;
+use crate::ea;
 use crate::launchers;
 use crate::matching;
 use crate::steam;
@@ -244,12 +245,13 @@ pub async fn run_loop(app: AppHandle) {
             }
             (None, None) => {
                 // A Steam game can be identified exactly, so try that first:
-                // it needs no executable link and no question. Epic's own
-                // manifests are the next best thing, for anything Steam
-                // didn't catch. Only when both come to nothing is the user
-                // asked anything.
+                // it needs no executable link and no question. Epic's and
+                // EA's own local records are the next best thing, for
+                // anything Steam didn't catch. Only when all of these come to
+                // nothing is the user asked anything.
                 let identified = identify_steam_games(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
+                    || identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await
+                    || identify_ea_games(&app, &base, &token, &candidates, &mut judge).await;
                 if identified {
                     // Something was filed; re-read so the next tick can track
                     // it rather than waiting out the state cache.
@@ -517,27 +519,32 @@ async fn identify_steam_games(
 /// server never answers `notAGame` here. A miss just means "inconclusive":
 /// nothing is remembered, and the executable falls through to the ordinary
 /// heuristic prompt exactly as if this function did not exist.
-async fn identify_other_launchers(
+/// Identify by a launcher-reported title, generic over whatever local source
+/// supplies one — Epic's manifests, EA's registry, and (per the plan) GOG's
+/// local database next. Only the resolver and the platform label differ
+/// between callers; everything about *how* an identification is handled —
+/// the asked/identified-titles bookkeeping, the gates, the result handling —
+/// is identical regardless of where the title came from, so it lives here
+/// exactly once rather than once per launcher.
+async fn identify_by_title(
     app: &AppHandle,
     base: &str,
     token: &str,
     candidates: &[detect::Candidate],
     judge: &mut detect::GameJudge,
+    platform: &str,
+    resolve: impl Fn(&str) -> Option<String>,
 ) -> bool {
     let tracker = app.state::<Tracker>();
     let dir = tracker.data_dir.clone();
     let asked = config::load_asked(&dir);
-    let epic_games = launchers::epic_games();
-    if epic_games.is_empty() {
-        return false;
-    }
 
     for candidate in candidates {
         if asked.contains(&candidate.exe_name) {
             continue;
         }
         let Some(path) = candidate.path.as_deref() else { continue };
-        let Some(title) = launchers::display_name_for_exe(path, &epic_games) else { continue };
+        let Some(title) = resolve(path) else { continue };
 
         {
             let shared = tracker.shared.lock().unwrap();
@@ -551,7 +558,7 @@ async fn identify_other_launchers(
         }
 
         let response = match api::post_identify(
-            base, token, api::IdentifyBy::Title(&title), &candidate.exe_name, "Epic Games",
+            base, token, api::IdentifyBy::Title(&title), &candidate.exe_name, platform,
         ).await {
             Ok(r) => r,
             Err(err) => {
@@ -564,10 +571,10 @@ async fn identify_other_launchers(
             "added" => {
                 let shown = response.title.unwrap_or(title);
                 log::info!("added {shown} as an ambient game (by name: \"{shown}\")");
-                // See the Steam path's identical comment: the link this
-                // created is what keeps this from being re-asked, not this
-                // set — and it must stay retryable if that link ever goes
-                // away.
+                // The link this created is what keeps this from being
+                // re-asked, not identified_titles — which must stay
+                // retryable if that link ever goes away (deleted to retest,
+                // say; confirmed live, twice, the night this was fixed).
                 notify(app, "Now tracking", &format!("{shown} — added to your Ambient games."));
                 return true;
             }
@@ -590,6 +597,40 @@ async fn identify_other_launchers(
         }
     }
     false
+}
+
+async fn identify_other_launchers(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    candidates: &[detect::Candidate],
+    judge: &mut detect::GameJudge,
+) -> bool {
+    let epic_games = launchers::epic_games();
+    if epic_games.is_empty() {
+        return false;
+    }
+    identify_by_title(app, base, token, candidates, judge, "Epic Games", |path| {
+        launchers::display_name_for_exe(path, &epic_games)
+    })
+    .await
+}
+
+async fn identify_ea_games(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    candidates: &[detect::Candidate],
+    judge: &mut detect::GameJudge,
+) -> bool {
+    let ea_games = ea::ea_games();
+    if ea_games.is_empty() {
+        return false;
+    }
+    identify_by_title(app, base, token, candidates, judge, "EA App", |path| {
+        ea::display_name_for_exe(path, &ea_games)
+    })
+    .await
 }
 
 /// Offer to link an unrecognised game — at most once per executable, ever.
