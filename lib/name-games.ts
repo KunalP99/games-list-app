@@ -23,14 +23,35 @@ export function normaliseTitle(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
-export async function findGameByExactName(displayName: string): Promise<NameLookup> {
-  const query = displayName.trim()
-  if (!query) return { kind: 'noMatch' }
+/**
+ * Strip the symbols that break IGDB's full-text search without changing what
+ * title is being searched for.
+ *
+ * Confirmed directly against the real API: searching "Bejeweled® 3" returns
+ * zero rows; searching "Bejeweled 3", same moment, same endpoint, returns two.
+ * IGDB handles case differences fine (that is what let "ABZU" match "Abzu"),
+ * but it does not transparently ignore a trademark/registration/copyright
+ * mark inside the search text — and real launcher-reported titles carry these
+ * constantly ("STAR WARS™ Battlefront™ II" is a real title on this machine).
+ * Comparison already tolerates this (`normaliseTitle` drops every non-
+ * alphanumeric character), so only the text actually sent to the search
+ * needed fixing.
+ */
+function sanitiseForSearch(title: string): string {
+  return title.replace(/[®™©]/g, '').replace(/\s+/g, ' ').trim()
+}
 
-  const target = normaliseTitle(query)
+export async function findGameByExactName(displayName: string): Promise<NameLookup> {
+  const trimmed = displayName.trim()
+  if (!trimmed) return { kind: 'noMatch' }
+
+  const target = normaliseTitle(trimmed)
   if (!target) return { kind: 'noMatch' }
 
-  const results = await searchRawgGames(query)
+  const searchQuery = sanitiseForSearch(trimmed)
+  if (!searchQuery) return { kind: 'noMatch' }
+
+  const results = await searchRawgGames(searchQuery)
   const hit = results.find(r => normaliseTitle(r.name) === target)
   return hit ? { kind: 'game', igdbId: hit.id, name: hit.name } : { kind: 'noMatch' }
 }

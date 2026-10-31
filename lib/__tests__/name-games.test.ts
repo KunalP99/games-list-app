@@ -61,4 +61,35 @@ describe('findGameByExactName', () => {
     expect(await findGameByExactName('   ')).toEqual({ kind: 'noMatch' })
     expect(searchRawgGames).not.toHaveBeenCalled()
   })
+
+  it('strips trademark symbols from what is actually searched for', async () => {
+    // The real bug this guards against: IGDB's own search was confirmed
+    // (against the live API) to return zero rows for "Bejeweled® 3" and two
+    // for "Bejeweled 3" — the same endpoint, the same moment, the only
+    // difference the ®. Comparison already tolerated this (normaliseTitle
+    // strips it too), so the symbol reaching IGDB's search text at all was
+    // the actual bug — "ABZU" never caught it only because it has no symbols
+    // to strip in the first place.
+    const { searchRawgGames } = await import('../rawg')
+    vi.mocked(searchRawgGames).mockResolvedValue([{ id: 202091, name: 'Bejeweled 3' } as any])
+    await findGameByExactName('Bejeweled® 3')
+    expect(searchRawgGames).toHaveBeenCalledWith('Bejeweled 3')
+  })
+
+  it('strips trademark and copyright symbols too, and collapses the gap left behind', async () => {
+    const { searchRawgGames } = await import('../rawg')
+    vi.mocked(searchRawgGames).mockResolvedValue([])
+    // A real title on this machine, carrying two in one name.
+    await findGameByExactName('STAR WARS™ Battlefront™ II')
+    expect(searchRawgGames).toHaveBeenCalledWith('STAR WARS Battlefront II')
+    await findGameByExactName('Example© Game')
+    expect(searchRawgGames).toHaveBeenCalledWith('Example Game')
+  })
+
+  it('still matches end to end once the symbol is stripped from the query', async () => {
+    const { searchRawgGames } = await import('../rawg')
+    vi.mocked(searchRawgGames).mockResolvedValue([{ id: 202091, name: 'Bejeweled 3' } as any])
+    expect(await findGameByExactName('Bejeweled® 3'))
+      .toEqual({ kind: 'game', igdbId: 202091, name: 'Bejeweled 3' })
+  })
 })
