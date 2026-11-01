@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, createDeviceToken, revokeDevice } from './actions'
+import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, revokeDevice } from './actions'
 import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
 
@@ -38,8 +38,6 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
 
   const [deviceMsg, setDeviceMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [deviceLoading, setDeviceLoading] = useState(false)
-  // Shown once, in memory only — the server stores a hash and cannot show it again.
-  const [issuedToken, setIssuedToken] = useState<string | null>(null)
 
   const [wheelMsg, setWheelMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [wheelLoading, setWheelLoading] = useState(false)
@@ -67,22 +65,6 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
     setPasswordMsg(result.success ? { ok: true, text: 'Password updated.' } : { ok: false, text: result.error })
     if (result.success) (e.target as HTMLFormElement).reset()
     setPasswordLoading(false)
-  }
-
-  async function handleCreateDevice() {
-    setDeviceLoading(true)
-    setDeviceMsg(null)
-    setIssuedToken(null)
-    // No name to type any more — just distinguishable enough that two paired
-    // PCs don't show up as identical rows in the list below.
-    const result = await createDeviceToken(`Device ${devices.length + 1}`)
-    if (result.success) {
-      setIssuedToken(result.data.token)
-      setDeviceMsg({ ok: true, text: 'Device added. Copy the token now — it is not shown again.' })
-    } else {
-      setDeviceMsg({ ok: false, text: result.error })
-    }
-    setDeviceLoading(false)
   }
 
   async function handleRevokeDevice(id: string, label: string) {
@@ -398,35 +380,6 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
             ))}
           </ul>
         )}
-
-        {issuedToken && (
-          <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 dark:border-brand-700 dark:bg-brand-900/20">
-            <p className="text-xs font-medium text-brand-700 dark:text-brand-300">
-              Paste this into the agent now — it will not be shown again.
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <code className="flex-1 min-w-0 truncate rounded-md bg-surface-base border border-edge-base px-2 py-1.5 text-xs text-fg-base">
-                {issuedToken}
-              </code>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(issuedToken)}
-                className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handleCreateDevice}
-          disabled={deviceLoading}
-          className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
-        >
-          {deviceLoading ? 'Working…' : 'Add device'}
-        </button>
 
         <StatusMessage msg={deviceMsg} />
       </section>
