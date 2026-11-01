@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:kill": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kill-dev-servers.ps1",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

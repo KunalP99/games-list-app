@@ -461,3 +461,27 @@ export async function gameFromSteamAppId(
   if (!hit?.game?.id || !hit.game.name) return { ok: true, game: null }
   return { ok: true, game: { id: hit.game.id, name: hit.game.name } }
 }
+
+/**
+ * The base game a special edition belongs to, if IGDB records one.
+ *
+ * IGDB uses two different fields for this, inconsistently, depending on who
+ * curated the entry: `version_parent` for some re-releases (e.g.
+ * "Borderlands 3: Deluxe Edition"), `parent_game` for others that are just as
+ * much "the same game plus DLC" (confirmed live: "Dead Island: Definitive
+ * Edition" — the actual edition sold on Steam as "Dead Island" today — uses
+ * `parent_game`, not `version_parent`; checking only the latter would have
+ * missed the exact case this exists for). Checking both, preferring
+ * `version_parent`, covers both curation styles.
+ *
+ * Coverage either way is inconsistent — plenty of real editions aren't
+ * linked at all — so a `null` here proves nothing; it just means this
+ * particular route found no shortcut.
+ */
+export async function getVersionParent(id: number): Promise<number | null> {
+  if (!Number.isInteger(id) || id <= 0) return null
+  const rows = await igdbQuery<{ version_parent?: number; parent_game?: number }>(
+    'games', `fields version_parent, parent_game; where id = ${id}; limit 1;`)
+  const row = rows[0]
+  return row?.version_parent ?? row?.parent_game ?? null
+}

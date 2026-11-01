@@ -5,21 +5,32 @@ import { resolveSteamApp } from '@/lib/steam-games'
 import { findGameByExactName } from '@/lib/name-games'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
+import { getVersionParent } from '@/lib/igdb'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * "What is this running game, and can I track it?"
  *
- * Two ways to ask, and the agent uses whichever it actually has:
+ * Four ways to ask, and the agent uses whichever it actually has:
  *
  *   steamAppId — launched through Steam. Exact: the registry's app id maps to
  *                an exact IGDB game via `external_games`, or to nothing.
  *   titleGuess — launched through another launcher (Epic, GOG, …) whose own
- *                manifest names the game authoritatively. Still a search, not
- *                a lookup — IGDB keeps no cross-reference for these stores —
- *                so it is only trusted on an exact match once both names are
- *                reduced to bare lowercase letters and digits.
+ *                manifest names the game authoritatively, or guessed from the
+ *                executable's own name when nothing else identified it. Still
+ *                a search, not a lookup — IGDB keeps no cross-reference for
+ *                these — so it is only trusted on an exact match once both
+ *                names are reduced to bare lowercase letters and digits.
+ *   igdbId     — a specific game a person picked themselves from the agent's
+ *                own search panel. Nothing to resolve: they already chose it,
+ *                so this skips straight to "already owned? else file it".
+ *   lookupExe  — no local signal of any kind, just the raw exe name. Checked
+ *                against `global_exe_links`, the admin-curated table any
+ *                agent can consult once someone has vetted that exe for
+ *                everyone (`/admin/exe-links`). A miss is `unknown`, exactly
+ *                like a title-guess miss — nothing is remembered, since an
+ *                admin could add the mapping moments later.
  *
  * The answer decides everything that follows:
  *
@@ -70,17 +81,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const appId = body?.steamAppId
   const titleGuess = typeof body?.titleGuess === 'string' ? body.titleGuess.trim() : null
+  const pickedIgdbId = body?.igdbId
+  const pickedTitle = typeof body?.title === 'string' ? body.title.trim() : null
   const hasAppId = appId != null
   const hasTitle = !!titleGuess
+  const hasPicked = pickedIgdbId != null
+  const hasLookup = body?.lookupExe === true
 
-  if (hasAppId === hasTitle) {
-    return NextResponse.json({ error: 'exactly one of steamAppId or titleGuess is required' }, { status: 400 })
+  if ([hasAppId, hasTitle, hasPicked, hasLookup].filter(Boolean).length !== 1) {
+    return NextResponse.json({ error: 'exactly one of steamAppId, titleGuess, igdbId or lookupExe is required' }, { status: 400 })
+  }
+  // The other modes carry their own signal; this one is nothing but the exe
+  // name, so unlike them it cannot be optional here.
+  if (hasLookup && !(typeof body?.exeName === 'string' && body.exeName.trim())) {
+    return NextResponse.json({ error: 'exeName is required alongside lookupExe' }, { status: 400 })
   }
   if (hasAppId && (typeof appId !== 'number' || !Number.isInteger(appId) || appId <= 0)) {
     return NextResponse.json({ error: 'steamAppId must be a positive integer' }, { status: 400 })
   }
   if (hasTitle && titleGuess!.length > 200) {
     return NextResponse.json({ error: 'titleGuess too long' }, { status: 400 })
+  }
+  if (hasPicked && (typeof pickedIgdbId !== 'number' || !Number.isInteger(pickedIgdbId) || pickedIgdbId <= 0)) {
+    return NextResponse.json({ error: 'igdbId must be a positive integer' }, { status: 400 })
+  }
+  if (hasPicked && (!pickedTitle || pickedTitle.length > 200)) {
+    return NextResponse.json({ error: 'title is required alongside igdbId' }, { status: 400 })
   }
 
   // Both optional, and both best-effort: an identify call with neither still
@@ -91,7 +117,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     : null
   const platform = typeof body?.platform === 'string' && body.platform.trim() ? body.platform.trim().slice(0, 100) : 'PC'
 
-  // Both paths resolve to the same shape, so everything below is shared.
+  // All three paths resolve to the same shape, so everything below is shared.
   let igdbId: number
   let resolvedName: string
   if (hasAppId) {
@@ -100,11 +126,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (lookup.kind === 'notAGame') return NextResponse.json({ result: 'notAGame' })
     igdbId = lookup.igdbId
     resolvedName = lookup.name
-  } else {
+  } else if (hasTitle) {
     const lookup = await findGameByExactName(titleGuess!)
     if (lookup.kind === 'noMatch') return NextResponse.json({ result: 'unknown' })
     igdbId = lookup.igdbId
     resolvedName = lookup.name
+  } else if (hasLookup) {
+    const { data: globalLink } = await (sb.from('global_exe_links') as any)
+      .select('igdb_id, title')
+      .eq('exe_name', normaliseExeName(body.exeName))
+      .maybeSingle()
+    if (!globalLink) return NextResponse.json({ result: 'unknown' })
+    igdbId = globalLink.igdb_id
+    resolvedName = globalLink.title
+  } else {
+    // Picked directly from a search result — nothing to resolve or verify,
+    // the person already chose this exact game.
+    igdbId = pickedIgdbId
+    resolvedName = pickedTitle!
   }
 
   // Links an executable to a game, the same upsert /api/agent/link uses.
@@ -132,7 +171,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .or(ownedQuery)
     .order('updated_at', { ascending: false })
     .limit(1)
-  const existing = (owned ?? [])[0] as { id: string; title: string; status: string } | undefined
+  let existing = (owned ?? [])[0] as { id: string; title: string; status: string } | undefined
+  // Backfilled onto the matched row below, only when the match came from
+  // this fallback — an exact `existing` match already has the right id.
+  let editionSteamAppId: number | null = null
+
+  // No exact match: this might still be the same game as one already owned,
+  // just a different edition — "Dead Island: Game of the Year Edition" is
+  // its own IGDB id (and, on Steam, its own app id) for what is really Dead
+  // Island plus DLC. IGDB's own `version_parent` link catches that, when it
+  // has one, without ever renaming or replacing the owned row.
+  if (!existing) {
+    const parentId = await getVersionParent(igdbId)
+    if (parentId) {
+      const { data: parentOwned } = await (sb.from('games') as any)
+        .select('id, title, status')
+        .eq('user_id', userId)
+        .eq('igdb_id', parentId)
+        .limit(1)
+      existing = (parentOwned ?? [])[0] as { id: string; title: string; status: string } | undefined
+      if (existing && hasAppId) editionSteamAppId = appId
+    }
+  }
 
   if (existing) {
     const trackable = existing.status === 'playing' || existing.status === 'ambient'
@@ -140,7 +200,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // completed game anyway, so a link here would just be dead weight until
     // the user moves it themselves — at which point linking it by hand, or
     // simply launching it again once it is Playing, covers it.
-    if (trackable) await linkExe(existing.id)
+    if (trackable) {
+      await linkExe(existing.id)
+      // So the next launch matches on steam_appid directly and never needs
+      // this lookup again — the owned row otherwise has no app id at all, or
+      // has a different edition's, since it was never this one running before.
+      if (editionSteamAppId != null) {
+        const { error } = await (sb.from('games') as any)
+          .update({ steam_appid: editionSteamAppId })
+          .eq('id', existing.id)
+        if (error) console.error(`identify: could not backfill steam_appid onto ${existing.id}: ${error.message}`)
+      }
+    }
     return NextResponse.json({
       result: trackable ? 'tracked' : 'untracked',
       gameId: existing.id,

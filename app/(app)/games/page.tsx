@@ -45,12 +45,18 @@ export default async function GamesPage({
     .from('games')
     .select(GAME_LIST_COLS)
     .eq('user_id', user!.id)
-    // Both of these have a section of their own above the list, so "All"
-    // means "everything else" rather than literally everything.
-    .not('status', 'in', '("playing","ambient")')
     .order(sort === 'status' ? 'created_at' : sort, { ascending: !sortDesc, nullsFirst: false })
 
-  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
+  if (status) {
+    gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
+  } else {
+    // "All" means "everything else" rather than literally everything — Playing
+    // and Ambient both have a section of their own above the list. Only for
+    // "All": AND-ing this onto an explicit `status=ambient` (or `=playing`)
+    // tab contradicts the eq() above and always returns nothing, which is
+    // exactly what was making the Ambient tab render empty.
+    gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
+  }
   if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
   // Playing games always fetched separately for the Now Playing strip — run
@@ -140,7 +146,7 @@ export default async function GamesPage({
 
       {/* Ambient games, newest session first — what has actually been running,
           as opposed to what was deliberately picked up above. */}
-      <RecentlyPlayed games={recentlyPlayed} isOwner={true} liveSessions={liveSessions} />
+      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} />
 
       <Suspense>
         <GameFilters />

@@ -19,6 +19,12 @@ const labels: Record<GameStatus, string> = {
 }
 
 export default function StatusBadge({ status }: { status: GameStatus }) {
+  // Ambient games never show a pill, anywhere this renders — they're meant to
+  // read as "just running", not as a tracked status alongside Playing/Backlog/
+  // Completed/DNF. Singled out here, at the source, rather than at each call
+  // site, so there's exactly one place this rule lives.
+  if (status === 'ambient') return null
+
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status]}`}>
       {labels[status]}

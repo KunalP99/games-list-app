@@ -18,7 +18,7 @@ export default function NowPlayingGrid({
 
   return (
     <div>
-      <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wider mb-3">
+      <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
         Now Playing{games.length > 1 && ` · ${games.length}`}
       </h2>
 
