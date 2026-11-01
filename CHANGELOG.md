@@ -7,6 +7,9 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Changed
+- **A play session under a minute no longer shows up in Recent Activity.** A finished session used to always log "played for Xh Ym" — including "played for 0m" for a game glanced at and closed again. Sessions that never reach a minute are dropped from the feed entirely now; an in-progress session still shows "started playing" immediately regardless, since there's no duration to judge yet at that point.
+
+### Changed
 - **Pairing a PC happens in the main window now, not a second popup — and starts itself.** The app used to open a separate window for the sign-in/approve flow; on a machine whose `config.json` held a stale `api_base` from local testing, that showed up as an undiagnosable blank popup. The main window now navigates to the pairing page directly and back again once it's done, so there's no second window left to go blank. It also starts the moment the app notices it isn't paired, with no "Connect" button to click first. Fixed a real race condition this surfaced: the background thread that brings the window back to the approve screen after sign-in was only checking the window's URL *path*, not its *host* — so it mistook the loopback callback itself (`127.0.0.1`, triggered by clicking Allow) for a real page and yanked the window straight back to the pairing form before the success handler ever got to run, which looked exactly like Allow doing nothing no matter how many times it was clicked. The pairing page itself also dropped the "what this device can do" blurb and, since it now only ever opens inside the app's own small window, the site's nav bar (moved out of the `(app)` route group entirely so it no longer inherits it).
 
 ### Added

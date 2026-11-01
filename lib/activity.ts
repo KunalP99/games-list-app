@@ -239,6 +239,11 @@ export function buildActivityItems(
     if (!profile) continue
 
     const ended = session.ended_at != null
+    // A session that never reached a minute isn't worth a "played for 0m"
+    // row — most likely someone glancing at a game and closing it again, not
+    // a real play. The in-progress "started playing" case is untouched: that
+    // fires the moment tracking begins, before there's any duration to judge.
+    if (ended && session.minutes < 1) continue
     items.push({
       type: 'play_session',
       userId: session.user_id,

@@ -375,6 +375,35 @@ describe('buildActivityItems', () => {
     expect(items[0].date).toBe('2024-04-01T12:30:00Z')
   })
 
+  it('drops a finished session under a minute entirely, rather than logging "played for 0m"', () => {
+    const game = { ...baseGame, id: 'amb-1', status: 'ambient' }
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z', ended_at: '2024-04-01T10:00:45Z', minutes: 0,
+    }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+    expect(items).toHaveLength(0)
+  })
+
+  it('still logs a finished session that reaches exactly a minute', () => {
+    const game = { ...baseGame, id: 'amb-1', status: 'ambient' }
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z', ended_at: '2024-04-01T10:01:00Z', minutes: 1,
+    }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+    expect(items).toHaveLength(1)
+    expect(items[0].sessionMinutes).toBe(1)
+  })
+
+  it('does not drop an in-progress session just because it has not reached a minute yet', () => {
+    const game = { ...baseGame, id: 'amb-1', status: 'ambient' }
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z', ended_at: null, minutes: 0,
+    }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+    expect(items).toHaveLength(1)
+    expect(items[0].sessionMinutes).toBeUndefined()
+  })
+
   it('also turns a playing-status game\'s session into its own item — not just ambient', () => {
     // A wheel/choose pick is status 'playing', not 'ambient', but the agent
     // tracks its hours exactly the same way, so its sessions earn the same
