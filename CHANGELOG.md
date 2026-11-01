@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **A Sign Out button, in the desktop app's own Settings.** The app's `config.json` (pairing token + which site it talks to) lives in a folder keyed by the app's identifier, shared by every build on a machine — debug, release, the installer — not by which one is running. A machine already paired from testing stayed paired straight through a fresh install of the real app, with no way to back out of it from inside the app itself. `sign_out` already existed as a command; nothing in the UI called it until now.
 - **A "Download for Windows" button, in Settings → Devices.** `/api/download` asks GitHub for whichever release is actually latest and redirects straight to its installer, so the link never goes stale when a new version ships — nothing to remember to update per release. Making this (and the desktop app's own self-updater, which hits the same kind of GitHub Releases URL) actually work required making the repo public: a private repo's release assets 404 for an unauthenticated request, which is exactly what both a browser clicking this button and the in-app updater are.
 
 ### Fixed

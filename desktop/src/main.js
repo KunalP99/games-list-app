@@ -214,6 +214,16 @@ el('btn-settings').addEventListener('click', () => {
 })
 el('settings-back').addEventListener('click', () => { el('settings-view').hidden = true })
 
+// Clears the stored device token so the next launch (or the next pairing)
+// starts from Connect again — the one thing a freshly installed copy can't
+// tell on its own, since it reads the same config.json any other build on
+// this machine already wrote.
+el('btn-sign-out').addEventListener('click', async () => {
+  await invoke('sign_out')
+  el('settings-view').hidden = true
+  refresh()
+})
+
 el('update-now').addEventListener('click', async () => {
   const button = el('update-now')
   const error = el('update-error')
