@@ -38,7 +38,6 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
 
   const [deviceMsg, setDeviceMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [deviceLoading, setDeviceLoading] = useState(false)
-  const [deviceLabel, setDeviceLabel] = useState('')
   // Shown once, in memory only — the server stores a hash and cannot show it again.
   const [issuedToken, setIssuedToken] = useState<string | null>(null)
 
@@ -70,15 +69,15 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
     setPasswordLoading(false)
   }
 
-  async function handleCreateDevice(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
+  async function handleCreateDevice() {
     setDeviceLoading(true)
     setDeviceMsg(null)
     setIssuedToken(null)
-    const result = await createDeviceToken(deviceLabel)
+    // No name to type any more — just distinguishable enough that two paired
+    // PCs don't show up as identical rows in the list below.
+    const result = await createDeviceToken(`Device ${devices.length + 1}`)
     if (result.success) {
       setIssuedToken(result.data.token)
-      setDeviceLabel('')
       setDeviceMsg({ ok: true, text: 'Device added. Copy the token now — it is not shown again.' })
     } else {
       setDeviceMsg({ ok: false, text: result.error })
@@ -365,11 +364,9 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
 
       {/* Devices — the desktop agent that logs hours automatically */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Devices</h2>
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Tracker App</h2>
         <p className="text-xs text-fg-subtle leading-relaxed">
-          Pair a PC to log hours automatically while you play. Only games set to
-          <span className="font-medium text-fg-secondary"> Playing </span>
-          are ever updated — completed and backlog games are never touched.
+          Pair a PC to log hours automatically while you play.
         </p>
 
         <a
@@ -422,22 +419,14 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
           </div>
         )}
 
-        <form onSubmit={handleCreateDevice} className="flex items-center gap-2">
-          <input
-            value={deviceLabel}
-            onChange={e => setDeviceLabel(e.target.value)}
-            placeholder="e.g. Desktop PC"
-            maxLength={60}
-            className={input}
-          />
-          <button
-            type="submit"
-            disabled={deviceLoading || deviceLabel.trim().length === 0}
-            className="shrink-0 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
-          >
-            {deviceLoading ? 'Working…' : 'Add device'}
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={handleCreateDevice}
+          disabled={deviceLoading}
+          className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
+        >
+          {deviceLoading ? 'Working…' : 'Add device'}
+        </button>
 
         <StatusMessage msg={deviceMsg} />
       </section>
