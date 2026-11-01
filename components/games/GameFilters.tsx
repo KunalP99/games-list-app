@@ -8,6 +8,7 @@ const STATUS_TABS = [
   { value: 'completed', label: 'Completed' },
   { value: 'backlog', label: 'Backlog' },
   { value: 'dnf', label: 'DNF' },
+  { value: 'ambient', label: 'Ambient' },
 ]
 
 const SORT_OPTIONS = [

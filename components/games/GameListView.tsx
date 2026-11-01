@@ -7,13 +7,25 @@ const COVER_GRID = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-
 const CARD_GRID = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
 
 // A responsive grid of game cards in the given view (capsule or box-art cover).
-function CardGrid({ games, isOwner, cover, showReleaseDate = false }: { games: Game[]; isOwner: boolean; cover: boolean; showReleaseDate?: boolean }) {
+function CardGrid({
+  games,
+  isOwner,
+  cover,
+  showReleaseDate = false,
+  liveSessions,
+}: {
+  games: Game[]
+  isOwner: boolean
+  cover: boolean
+  showReleaseDate?: boolean
+  liveSessions: Map<string, string>
+}) {
   return (
     <div className={cover ? COVER_GRID : CARD_GRID}>
       {games.map(game =>
         cover
-          ? <CoverCard key={game.id} game={game} isOwner={isOwner} showReleaseDate={showReleaseDate} />
-          : <GameCard key={game.id} game={game} isOwner={isOwner} showReleaseDate={showReleaseDate} />,
+          ? <CoverCard key={game.id} game={game} isOwner={isOwner} showReleaseDate={showReleaseDate} liveSince={liveSessions.get(game.id) ?? null} />
+          : <GameCard key={game.id} game={game} isOwner={isOwner} showReleaseDate={showReleaseDate} liveSince={liveSessions.get(game.id) ?? null} />,
       )}
     </div>
   )
@@ -26,7 +38,7 @@ function isComingSoon(game: Game, today: string) {
 
 // Backlog view — splits games you can play now from unreleased ones, which go
 // into a separate "Coming Soon" section (soonest first) showing each release date.
-function BacklogView({ games, isOwner, view }: { games: Game[]; isOwner: boolean; view: 'grid' | 'table' | 'cover' }) {
+function BacklogView({ games, isOwner, view, liveSessions }: { games: Game[]; isOwner: boolean; view: 'grid' | 'table' | 'cover'; liveSessions: Map<string, string> }) {
   const today = new Date().toISOString().slice(0, 10)
   const comingSoon = games
     .filter(g => isComingSoon(g, today))
@@ -36,7 +48,7 @@ function BacklogView({ games, isOwner, view }: { games: Game[]; isOwner: boolean
   const renderList = (list: Game[], showReleaseDate: boolean) =>
     view === 'table'
       ? <GameTableView games={list} isOwner={isOwner} showReleaseDate={showReleaseDate} />
-      : <CardGrid games={list} isOwner={isOwner} cover={view === 'cover'} showReleaseDate={showReleaseDate} />
+      : <CardGrid games={list} isOwner={isOwner} cover={view === 'cover'} showReleaseDate={showReleaseDate} liveSessions={liveSessions} />
 
   return (
     <div className="space-y-8">
@@ -85,7 +97,7 @@ function groupByYear(games: Game[]) {
   return { byYear, years }
 }
 
-function CompletedByYear({ games, isOwner, cover }: { games: Game[]; isOwner: boolean; cover: boolean }) {
+function CompletedByYear({ games, isOwner, cover, liveSessions }: { games: Game[]; isOwner: boolean; cover: boolean; liveSessions: Map<string, string> }) {
   const { byYear, years } = groupByYear(games)
   return (
     <div className="space-y-8">
@@ -100,7 +112,7 @@ function CompletedByYear({ games, isOwner, cover }: { games: Game[]; isOwner: bo
               <span className="ml-auto text-xs text-fg-subtle font-medium">{hoursLabel(byYear[year])}</span>
             )}
           </div>
-          <CardGrid games={byYear[year]} isOwner={isOwner} cover={cover} />
+          <CardGrid games={byYear[year]} isOwner={isOwner} cover={cover} liveSessions={liveSessions} />
         </div>
       ))}
     </div>
@@ -112,17 +124,22 @@ export default function GameListView({
   status,
   isOwner = true,
   view = 'grid',
+  liveSessions = new Map(),
 }: {
   games: Game[]
   status: string
   isOwner?: boolean
   view?: 'grid' | 'table' | 'cover'
+  // Realistically only ever has entries for the Playing and Ambient tabs —
+  // those are the only statuses the agent writes play_sessions for — but
+  // threaded through everywhere so no tab has to know that.
+  liveSessions?: Map<string, string>
 }) {
-  if (status === 'backlog') return <BacklogView games={games} isOwner={isOwner} view={view} />
+  if (status === 'backlog') return <BacklogView games={games} isOwner={isOwner} view={view} liveSessions={liveSessions} />
 
   if (view === 'cover') {
-    if (status === 'completed') return <CompletedByYear games={games} isOwner={isOwner} cover />
-    return <CardGrid games={games} isOwner={isOwner} cover />
+    if (status === 'completed') return <CompletedByYear games={games} isOwner={isOwner} cover liveSessions={liveSessions} />
+    return <CardGrid games={games} isOwner={isOwner} cover liveSessions={liveSessions} />
   }
 
   if (view === 'table') {
@@ -162,8 +179,8 @@ export default function GameListView({
   }
 
   if (status === 'completed') {
-    return <CompletedByYear games={games} isOwner={isOwner} cover={false} />
+    return <CompletedByYear games={games} isOwner={isOwner} cover={false} liveSessions={liveSessions} />
   }
 
-  return <CardGrid games={games} isOwner={isOwner} cover={false} />
+  return <CardGrid games={games} isOwner={isOwner} cover={false} liveSessions={liveSessions} />
 }

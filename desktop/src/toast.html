@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GamesList</title>
+  <!-- The same stylesheet as the status screen, so the toast is in the user's
+       accent colour and the app's fonts without a second copy of the tokens. -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="toast-body">
+  <div class="toast" id="toast">
+    <!-- Closes only this window — the question stays pending on the status
+         screen, in case this was a misclick rather than an answer. -->
+    <button type="button" class="toast-dismiss" id="ask-dismiss" aria-label="Close">&times;</button>
+
+    <!-- The question. Which of the two shapes shows depends on whether the
+         executable's name actually resembles a game in the Playing list. -->
+    <section id="ask">
+      <p class="toast-heading" id="ask-heading">Is this your game?</p>
+      <p class="prompt-question">
+        <code id="ask-exe"></code>
+        <span id="ask-named">
+          <span class="toast-arrow" aria-hidden="true">&rarr;</span>
+          <strong id="ask-title"></strong>
+        </span>
+        <span class="toast-help" id="ask-help" hidden>
+          Tell GamesList which one and it will log the hours.
+        </span>
+      </p>
+      <div class="prompt-actions">
+        <button class="primary" id="ask-yes">Yes</button>
+        <button class="ghost" id="ask-no">No</button>
+      </div>
+      <!-- Linking goes over the network, so it can fail. Saying so beats
+           closing as though it had worked. -->
+      <p class="toast-error" id="ask-error" hidden></p>
+    </section>
+
+    <!-- Shown in place after "No", rather than vanishing without a word. -->
+    <section id="said-no" hidden>
+      <p class="toast-heading">No problem.</p>
+      <p class="prompt-question">
+        You can link <code id="no-exe"></code> any time from the GamesList app.
+      </p>
+      <div class="prompt-actions">
+        <button class="ghost" id="no-open">Open GamesList</button>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="toast.js"></script>
+</body>
+</html>

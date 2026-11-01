@@ -1,0 +1,464 @@
+/*
+  The app's own screens, styled to match the website.
+
+  The brand stops (--brand-50 … --brand-950) are not hard-coded: they are
+  written at runtime from the palette the API returns, which is computed by
+  lib/accent.ts — the same function the site uses. So the app is in the user's
+  accent colour, not an approximation of it.
+
+  Surfaces mirror app/globals.css. They are duplicated here because a native
+  window cannot import the site's stylesheet, so this is the one place a copy
+  is unavoidable; keep it in step if the site's palette changes.
+*/
+
+:root {
+  --brand-500: 255 87 34;
+  --brand-600: 232 68 16;
+  --brand-700: 194 50 11;
+
+  --surface-page: #fafafa;
+  --surface-base: #ffffff;
+  --surface-sunken: #f4f4f5;
+  --surface-hover: #f4f4f5;
+  --fg-base: #18181b;
+  --fg-secondary: #3f3f46;
+  --fg-muted: #71717a;
+  --fg-subtle: #a1a1aa;
+  --edge-base: #e4e4e7;
+  --edge-subtle: #f4f4f5;
+}
+
+:root[data-theme='dark'] {
+  --surface-page: #09090b;
+  --surface-base: #18181b;
+  --surface-sunken: #27272a;
+  --surface-hover: #27272a;
+  --fg-base: #fafafa;
+  --fg-secondary: #d4d4d8;
+  --fg-muted: #a1a1aa;
+  --fg-subtle: #71717a;
+  --edge-base: #27272a;
+  --edge-subtle: #1f1f23;
+}
+
+* { box-sizing: border-box; }
+
+/* An explicit `display` beats the browser's built-in [hidden] rule, so a
+ * section styled `display: flex` stays on screen however many times the
+ * code sets .hidden = true. That is exactly what left "Connect your
+ * account" showing after pairing had already succeeded. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--surface-page);
+  color: var(--fg-base);
+  font-family: Geist, -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  /* The window is small and fixed; nothing should ever scroll sideways. */
+  overflow-x: hidden;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-base);
+  border-bottom: 1px solid var(--edge-base);
+}
+
+.wordmark { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+.logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, rgb(var(--brand-500)), rgb(var(--brand-700)));
+  flex-shrink: 0;
+}
+
+.wordmark-text {
+  font-family: Orbitron, Geist, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+.wordmark-accent { color: rgb(var(--brand-600)); }
+
+.who {
+  font-size: 12px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+main { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+/* #signed-in wraps the whole status/prompt/link/playing/footer stack as one
+   child of main, so main's own gap never reached between them — it needed
+   the same treatment. */
+#signed-in { display: flex; flex-direction: column; gap: 14px; }
+
+.card {
+  background: var(--surface-base);
+  border: 1px solid var(--edge-base);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.center { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.big-emoji { font-size: 34px; margin: 4px 0 0; }
+.title { font-size: 17px; font-weight: 700; margin: 0; }
+.muted { color: var(--fg-muted); margin: 0; line-height: 1.5; font-size: 13px; }
+
+/* ── Status ──────────────────────────────────────────────────────────────── */
+.status-head { display: flex; align-items: center; gap: 8px; }
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg-subtle);
+  flex-shrink: 0;
+}
+.dot.live {
+  background: rgb(var(--brand-600));
+  /* A quiet pulse so "it is working" is readable at a glance. */
+  box-shadow: 0 0 0 0 rgb(var(--brand-600) / 0.5);
+  animation: pulse 2.4s ease-out infinite;
+}
+@keyframes pulse {
+  70% { box-shadow: 0 0 0 7px rgb(var(--brand-600) / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--brand-600) / 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.live { animation: none; }
+}
+
+.status-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+.status-game { margin: 8px 0 0; font-size: 16px; font-weight: 600; }
+.status-elapsed {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: rgb(var(--brand-600));
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Playing list ────────────────────────────────────────────────────────── */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.section-head h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin: 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-base);
+  border: 1px solid var(--edge-base);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--edge-subtle);
+}
+.list li:first-child { border-top: 0; }
+.list .empty { color: var(--fg-subtle); font-size: 13px; justify-content: center; }
+
+.game-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-hours { color: var(--fg-subtle); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pill.linked { color: rgb(var(--brand-600)); background: rgb(var(--brand-600) / 0.12); }
+.pill.unlinked { color: var(--fg-muted); background: var(--surface-sunken); }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.footer {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+}
+.sync { font-size: 11px; color: var(--fg-subtle); }
+.actions { display: flex; gap: 6px; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+button { font: inherit; cursor: pointer; border-radius: 8px; transition: background-color .15s, color .15s, border-color .15s; }
+
+.primary {
+  background: rgb(var(--brand-600));
+  color: #fff;
+  border: 0;
+  padding: 9px 16px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.primary:hover { background: rgb(var(--brand-700)); }
+.primary:disabled { opacity: .5; cursor: default; }
+
+.ghost {
+  background: transparent;
+  color: var(--fg-secondary);
+  border: 1px solid var(--edge-base);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.ghost:hover { background: var(--surface-hover); color: var(--fg-base); }
+
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: rgb(var(--brand-600));
+  font-size: 12px;
+}
+.link:hover { text-decoration: underline; }
+
+/* ── "Is this a game?" prompt ────────────────────────────────────────────── */
+.prompt { border-color: rgb(var(--brand-600) / 0.45); }
+.prompt-question { margin: 0 0 10px; line-height: 1.5; }
+.prompt-question code {
+  background: var(--surface-sunken);
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.prompt-actions { display: flex; gap: 8px; }
+
+/* ── In-app "link a game" panel ──────────────────────────────────────────── */
+.link-panel { display: flex; flex-direction: column; gap: 6px; }
+.panel-title { margin: 0; font-weight: 600; }
+.panel-help { margin: 0 0 6px; font-size: 12px; color: var(--fg-muted); }
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  margin-top: 4px;
+}
+.field {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg-base);
+  background: var(--surface-sunken);
+  border: 1px solid var(--edge-base);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.field:focus { outline: none; border-color: rgb(var(--brand-600)); }
+
+.panel-actions { display: flex; gap: 8px; margin-top: 10px; }
+.panel-msg { margin: 8px 0 0; font-size: 12px; }
+.panel-msg.ok { color: rgb(var(--brand-600)); }
+.panel-msg.bad { color: #f87171; }
+
+.panel-warning {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #fbbf24;
+  background: rgb(251 191 36 / 0.1);
+  border: 1px solid rgb(251 191 36 / 0.3);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+#linked-list-wrap { margin-top: 12px; }
+#linked-list li { font-size: 12px; }
+.unlink {
+  background: transparent;
+  border: 1px solid var(--edge-base);
+  color: var(--fg-muted);
+  font-size: 11px;
+  padding: 3px 7px;
+}
+.unlink:hover { color: #f87171; border-color: rgb(248 113 113 / 0.5); }
+
+#search-results { margin-top: 10px; max-height: 260px; overflow-y: auto; }
+#search-results li { font-size: 12px; }
+#search-results img {
+  width: 28px;
+  height: 38px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+.search-add {
+  background: transparent;
+  border: 1px solid var(--edge-base);
+  color: rgb(var(--brand-600));
+  font-size: 11px;
+  padding: 3px 7px;
+  flex-shrink: 0;
+}
+.search-add:hover { border-color: rgb(var(--brand-600) / 0.6); }
+.search-add:disabled { opacity: 0.6; }
+
+/* ── The "is this your game?" toast ──────────────────────────────────────────
+ * Its own window, bottom-right, so the page is only this card. The window is
+ * transparent, which is what lets the card have the same rounded corners and
+ * drop shadow as a card on the website; the body therefore must NOT paint the
+ * page background the status screen uses.
+ */
+.toast-body {
+  background: transparent;
+  overflow: hidden;
+  padding: 6px;
+  display: flex;
+}
+
+.toast {
+  position: relative;
+  flex: 1;
+  background: var(--surface-base);
+  border: 1px solid rgb(var(--brand-600) / 0.45);
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.toast-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--fg-subtle);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.toast-dismiss:hover {
+  color: var(--fg-base);
+  background: var(--surface-sunken);
+}
+
+.toast-heading {
+  margin: 0 0 7px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.toast .prompt-question { font-size: 13px; }
+.toast-arrow { color: var(--fg-subtle); margin: 0 2px; }
+
+.toast-help {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.toast-error {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #f87171;
+}
+
+.field-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--fg-subtle);
+}
+
+/* ── Settings (in-window, over the native UI) ──────────────────────────────── */
+.settings-view {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-page);
+}
+.settings-bar {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--edge-base);
+}
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+.device-add-row { display: flex; gap: 8px; margin-top: 4px; }
+.device-add-row .field { flex: 1; }
+.device-token-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.device-token-row code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 12px;
+}
+#device-list .pill { margin-left: auto; }
+
+/* ── Update modal ────────────────────────────────────────────────────────── */
+/* A real interruption, not the quiet inline prompt-card above — the first
+   modal/overlay this app has needed, so there was nothing existing to reuse. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.45);
+  z-index: 10;
+}
+.modal-dialog { width: 100%; max-width: 320px; }
+.modal-heading { margin: 0 0 7px; font-weight: 600; font-size: 14px; }
+.modal-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg-secondary); }
+.modal-actions { display: flex; gap: 8px; margin-top: 12px; }

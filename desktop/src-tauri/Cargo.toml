@@ -1,0 +1,63 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "GamesList desktop — logs your game hours automatically"
+authors = ["GamesList"]
+license = ""
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.5", features = ["tray-icon"] }
+tauri-plugin-log = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+
+# Process listing. sysinfo is the cross-platform equivalent of Get-Process;
+# what matters is that it is a direct enumeration, not a WMI query (measured
+# 7.9ms vs 294ms per poll on this machine).
+sysinfo = "0.33"
+
+# Steam publishes the running app id in the registry, which is the whole
+# matching problem solved for Steam games.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+# Window enumeration and module listing: the two signals that separate a
+# game from an ordinary background process.
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
+] }
+
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["json", "rustls-tls"]
+
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread", "macros", "time", "sync"]
+
+[dependencies.chrono]
+version = "0.4"
+default-features = false
+features = ["clock", "serde", "std"]
+
+[dependencies.uuid]
+version = "1"
+features = ["v4"]

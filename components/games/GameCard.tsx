@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import StatusBadge from './StatusBadge'
 import MarkCompletedButton from './MarkCompletedButton'
+import LiveIndicator from './LiveIndicator'
 import type { Game } from '@/lib/types'
 
 // Formatted release date, respecting year-only precision. Null when no date.
@@ -11,7 +12,19 @@ function formatRelease(game: Game): string | null {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default function GameCard({ game, isOwner = true, showReleaseDate = false }: { game: Game; isOwner?: boolean; showReleaseDate?: boolean }) {
+export default function GameCard({
+  game,
+  isOwner = true,
+  showReleaseDate = false,
+  liveSince = null,
+}: {
+  game: Game
+  isOwner?: boolean
+  showReleaseDate?: boolean
+  // When set, a play_sessions row for this game is currently in progress —
+  // shown to the owner and to friends alike, same as the rest of the card.
+  liveSince?: string | null
+}) {
   const banner = (game as { artwork_url?: string | null }).artwork_url ?? game.image_url
   const releaseLabel = showReleaseDate ? formatRelease(game) : null
   if (banner) {
@@ -53,6 +66,11 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
                 </>
               )}
             </p>
+          )}
+          {liveSince && (
+            <div className="mt-1">
+              <LiveIndicator startedAt={liveSince} dark />
+            </div>
           )}
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 text-xs text-white/70 flex-wrap drop-shadow">
@@ -96,6 +114,9 @@ export default function GameCard({ game, isOwner = true, showReleaseDate = false
           </div>
           {game.developer && (
             <p className="text-sm text-fg-muted truncate mt-0.5">{game.developer}</p>
+          )}
+          {liveSince && (
+            <p className="mt-1"><LiveIndicator startedAt={liveSince} /></p>
           )}
           {(game.platform || game.steam_deck) && (
             <p className="text-xs text-fg-subtle mt-0.5 flex items-center gap-1.5 min-w-0">

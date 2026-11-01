@@ -7,6 +7,9 @@ import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameCard from '@/components/games/GameCard'
 import GameFilters from '@/components/games/GameFilters'
+import RecentlyPlayed from '@/components/games/RecentlyPlayed'
+import { getRecentlyPlayed } from '@/lib/recently-played'
+import { getLiveSessions } from '@/lib/presence'
 import ProfileHero from '@/components/profile/ProfileHero'
 import { Suspense } from 'react'
 
@@ -30,7 +33,7 @@ export default async function GamesPage({
   const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
   const q = searchParams.q?.trim()
 
-  const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2 }
+  const STATUS_ORDER: Record<string, number> = { backlog: 0, completed: 1, dnf: 2, ambient: 3 }
 
   const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, release_date, release_date_precision, created_at, updated_at, image_url, cover_image_url, artwork_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date, steam_deck'
 
@@ -42,16 +45,24 @@ export default async function GamesPage({
     .from('games')
     .select(GAME_LIST_COLS)
     .eq('user_id', user!.id)
-    .neq('status', 'playing')
     .order(sort === 'status' ? 'created_at' : sort, { ascending: !sortDesc, nullsFirst: false })
 
-  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (status) {
+    gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
+  } else {
+    // "All" means "everything else" rather than literally everything — Playing
+    // and Ambient both have a section of their own above the list. Only for
+    // "All": AND-ing this onto an explicit `status=ambient` (or `=playing`)
+    // tab contradicts the eq() above and always returns nothing, which is
+    // exactly what was making the Ambient tab render empty.
+    gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
+  }
   if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
   // Playing games always fetched separately for the Now Playing strip — run
   // alongside the main games query and the profile-banner stats (computeUserStats
   // is the same helper the friend profile page uses — see lib/user-stats.ts).
-  const [playingGamesRes, gamesRes, stats] = await Promise.all([
+  const [playingGamesRes, gamesRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
     supabase
       .from('games')
       .select(GAME_LIST_COLS)
@@ -60,6 +71,8 @@ export default async function GamesPage({
       .order('created_at', { ascending: false }),
     gamesQuery,
     computeUserStats(supabase, user!.id),
+    getRecentlyPlayed(supabase, user!.id),
+    getLiveSessions(supabase, [user!.id]),
   ])
 
   const playingGames = playingGamesRes.data as Game[] | null
@@ -125,18 +138,22 @@ export default async function GamesPage({
           {/* Now Playing always uses the capsule card, regardless of the list view */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {playingGames.map(game => (
-              <GameCard key={game.id} game={game} isOwner={true} />
+              <GameCard key={game.id} game={game} isOwner={true} liveSince={liveSessions.get(game.id) ?? null} />
             ))}
           </div>
         </div>
       )}
+
+      {/* Ambient games, newest session first — what has actually been running,
+          as opposed to what was deliberately picked up above. */}
+      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} />
 
       <Suspense>
         <GameFilters />
       </Suspense>
 
       {games && games.length > 0 ? (
-        <GameListView games={games} status={selectedStatus} isOwner={true} view={view} />
+        <GameListView games={games} status={selectedStatus} isOwner={true} view={view} liveSessions={liveSessions} />
       ) : (
         <div className="text-center py-16 text-fg-subtle">
           <p className="text-4xl mb-3">🎮</p>

@@ -8,18 +8,22 @@ import PlatformSelect from './PlatformSelect'
 import type { Game } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
 import { fetchGameSearchPage } from '@/lib/searchGamesClient'
+import { todayIsoDate } from '@/lib/dates'
 
 const STATUS_OPTIONS = [
   { value: 'playing', label: 'Playing' },
   { value: 'completed', label: 'Completed' },
   { value: 'backlog', label: 'Backlog' },
   { value: 'dnf', label: 'Did Not Finish (DNF)' },
+  // Ongoing games outside the wheel. Usually set by the desktop agent rather
+  // than here, but a game can be moved in and out by hand.
+  { value: 'ambient', label: 'Ambient (ongoing)' },
 ]
 
-export default function GameForm({ game, defaultStatus }: { game?: Game; defaultStatus?: string }) {
+export default function GameForm({ game, defaultStatus, defaultTitle }: { game?: Game; defaultStatus?: string; defaultTitle?: string }) {
   const isEdit = !!game
   const router = useRouter()
-  const [title, setTitle] = useState(game?.title ?? '')
+  const [title, setTitle] = useState(game?.title ?? defaultTitle ?? '')
   const [developer, setDeveloper] = useState(game?.developer ?? '')
   const [releaseDatePrecision, setReleaseDatePrecision] = useState<'full' | 'year'>(game?.release_date_precision ?? 'full')
   const [releaseDate, setReleaseDate] = useState(
@@ -436,7 +440,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
             <select
               name="status"
               value={status}
-              onChange={e => setStatus(e.target.value as 'backlog' | 'playing' | 'completed' | 'dnf')}
+              onChange={e => setStatus(e.target.value as 'backlog' | 'playing' | 'completed' | 'dnf' | 'ambient')}
               className={input}
             >
               {STATUS_OPTIONS.map(o => (
@@ -531,6 +535,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
                     defaultValue={
                       game?.completion_date_precision === 'year' ? '' : (game?.completion_date ?? '')
                     }
+                    max={todayIsoDate()}
                     className={input}
                   />
                 )}
@@ -616,6 +621,7 @@ export default function GameForm({ game, defaultStatus }: { game?: Game; default
                     defaultValue={
                       game?.completion_date_precision === 'year' ? '' : (game?.completion_date ?? '')
                     }
+                    max={todayIsoDate()}
                     className={input}
                   />
                 )}

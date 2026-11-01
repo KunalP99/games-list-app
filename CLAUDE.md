@@ -219,6 +219,15 @@ The full implementation plan (including all database SQL per phase) is at:
 
 ## Implemented features (beyond the phase plan)
 
+- **The in-run "already identified" sets only remember genuine dead ends.** `identified`/`identified_titles` in `Shared` (`desktop/src-tauri/src/tracker.rs`) originally suppressed re-querying for every outcome, including `added`/`tracked` — but those outcomes create a `game_executables` link, which the main matching loop reads *before* identify is ever reached, so nothing needed remembering there. The bug this caused: delete the game to retest (a normal thing to do) and the link goes with it, but the in-memory set still said "already handled" for the rest of that run — no amount of relaunching the game would ever trigger a retry, only restarting the whole app would. Now only `untracked` (Steam) and `notAGame`/`untracked` (name path) insert into these sets, since those are the only outcomes that genuinely do not change without the user acting on the site. Verified live: deleted an identified Ambient game twice in the same running app session, with no restart, and watched it re-identify and resume tracking within one poll each time.
+- **Identification persists an executable link, not just a one-off flag.** `/api/agent/identify` now takes `exeName` and `platform` alongside `steamAppId`/`titleGuess`, and on a `tracked`/`added` result upserts `game_executables` exactly as `/api/agent/link` does — required because a name-identified game has no `RunningAppID` equivalent to re-recognise it by. Without this, a game filed in by `identify_other_launchers` was identifiable exactly once: `identified_titles` then suppressed re-querying it, but nothing else in the main matching loop (keyed on Steam app id or `game_executables`) could recognise it either, so it fell straight back to the "is this a game?" toast on the very next poll. `platform` is likewise passed through (`"Steam"` / `"Epic Games"`, both real `PLATFORM_GROUPS` values in `components/games/PlatformSelect.tsx`) and used only on a fresh insert — an existing row's platform is never overwritten.
+- **Trademark symbols broke IGDB's search, silently** (`lib/name-games.ts`) — ®/™/© are common in official titles and comparison already ignores them (`normaliseTitle` strips all punctuation), but IGDB's full-text *search* does not: confirmed directly against the live API that `search "Bejeweled® 3"` returns zero rows while `search "Bejeweled 3"`, same moment, returns two. `sanitiseForSearch` strips `®™©` from the text actually sent to `searchRawgGames`, leaving the comparison target (and everything else) untouched. Caught because `identify_ea_games` kept falling through to the toast for a real, correctly-resolved title with no error anywhere in the chain — traced with temporary logging at every layer (Rust candidate resolution → the exact title bytes on the wire → the server's search call → IGDB's raw response) until the one difference between a working manual `curl` test and the failing live request turned out to be a single character.
+- **EA App games identified automatically — by file, not registry** — `desktop/src-tauri/src/ea.rs`. First built against `HKLM\Software\Wow6432Node\Origin Games\<contentID>` (`DisplayName`/`Install Dir`), on real community documentation; then **disproven live** — Bejeweled 3, genuinely installed and running, still had no `Install Dir` in that key, because it's a licensing/ownership list left from the old Origin client, not a record of EA Desktop's actual installs (which otherwise live inside Chromium IndexedDB/LevelDB stores — not practically readable). The real source sits next to the game instead: every EA install drops `<folder>\__Installer\installerdata.xml` (UTF-16 with a BOM, confirmed byte-for-byte against this machine's real file), carrying the exact title. `display_name_for_exe` walks up from a candidate's own path (bounded to `MAX_ANCESTORS = 6`) looking for that file directly — no central list to gather first, unlike Epic/Steam. Verified against the real running game both in isolation (`Some("Bejeweled® 3")`) and through the full identify route (resolved on IGDB as `"Bejeweled 3"`, filed as Ambient, platform `"EA App"`, exe link persisted). `identify_by_title` in `tracker.rs` is the generic identification loop both Epic and EA call through (just the resolver closure and the `platform` label differ) — refactored out once a third caller existed, so the `identified_titles`-only-on-`untracked` discipline (see below) only has to be correct in one place.
+- **Epic Games titles identified automatically** (`desktop/src-tauri/src/launchers.rs`, `lib/name-games.ts`) — the Steam-only sibling of `/api/agent/identify` extended to accept `titleGuess` instead of `steamAppId`. Epic's own install manifests (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`, JSON) give an authoritative `DisplayName` for a running exe — matched on *both* `InstallLocation` prefix and `LaunchExecutable` basename, since several real entries (Quixel Bridge, a Fab plugin) share Unreal Engine's install folder with no exe of their own, and folder-prefix alone would pick whichever happened to be read first. Unlike the Steam path, this is a **search**, not a lookup — IGDB has no Epic cross-reference — so `findGameByExactName` only trusts a result whose name matches *exactly* once both are reduced to bare lowercase letters and digits (`normaliseTitle`), and a miss is `unknown`, never `notAGame`: a search ranking quirk proves nothing, so it's never cached and never blocks the ordinary toast. GOG/itch/etc. are not covered — only Epic has manifests in this shape.
+- **Link panel defaults to nothing, on purpose** — its Game `<select>` used to have no placeholder, so the browser silently pre-selected whichever Playing/Ambient game happened to be first in the list, which read as the app confidently (and wrongly) naming a game. Both selects now start blank; `desktop/src/main.js`'s game-select `change` handler guards against the placeholder's empty value.
+- **"Add it as a new game" escape hatch** — the desktop link panel (`desktop/src/index.html`/`main.js`) only ever offered to attach an unrecognised program to an existing Playing/Ambient game, which was a dead end for any non-Steam launcher (Epic, GOG, itch…): Steam games get auto-filed via `/api/agent/identify`, but nothing else does. A "Can't find it? Add it as a new game" link now opens `open_site('/games/new?status=ambient&title=<guess>')` — `guessTitleFromExe` in `main.js` derives a rough title from the exe name (camelCase/digit-boundary split, strips `Win64`/`Shipping`/etc.), which `app/(app)/games/new/page.tsx`'s new `title` query param feeds into `GameForm`'s existing search box, kicking off the normal IGDB search debounce. Reuses the website's full add-game flow rather than building a second one natively.
+- **Live "Playing now" presence** — a pulsing-dot badge on the game card (`components/games/LiveIndicator.tsx`, client component, ticks locally from `started_at` like the desktop app's own window) shown whenever `play_sessions` has an unended, recently-checkpointed row for that game. "Recently" is the point: `lib/presence.ts`'s `isSessionLive` treats a session as live only while checkpointed within `LIVE_STALE_AFTER_MS` (20 min) of now, since nothing ever marks a session ended if the agent crashes or the PC sleeps — recency is the only signal. The agent now sends a checkpoint immediately on starting a session (`desktop/src-tauri/src/tracker.rs`), not just periodically, so the badge appears within seconds rather than up to 15 minutes late. Visible to the owner **and to friends** (`getLiveSessions` runs through the normal RLS-scoped client, wired into `/games`, `/users/[username]`, `GameListView`, `NowPlayingGrid`, `RecentlyPlayed`) — this needed widening `play_sessions`' SELECT policy from owner-only to any authenticated user, matching `games_select_all`, since nothing else in the app gates friend visibility more tightly. SQL: `db/live-presence.sql`.
+- **Ambient status** — `status` extended with `'ambient'`: ongoing games (multiplayer, sandbox) that sit outside the wheel and never complete. Added automatically by the desktop agent, which identifies a running Steam game exactly (install path → `appmanifest_*.acf` → app id → IGDB `external_games`). **IGDB membership is the "is this a game?" authority** — Blender, Wallpaper Engine and the Steamworks redistributables have no IGDB entry, which is what retires the hand-maintained ignore list. Ambient hours count toward total hours and hour achievements; ambient games are excluded from the "Games" count, library-size achievements, the genre/platform charts, the profile-banner pool, and the `/games` + profile "All" tabs (each has its own tab/strip instead). They produce **no activity-feed rows** on purpose — `lib/activity.ts`'s status chain has no `else`, and `components/games/RecentlyPlayed.tsx` is their surface instead. `decideWonGameAction` *claims* an ambient row (flips it to playing, keeping hours) rather than no-oping. SQL: `db/ambient-status.sql`.
 - **DNF status** — `status` enum extended to `'playing' | 'completed' | 'backlog' | 'dnf'`. Requires updated CHECK constraint in Supabase (`games_status_check`). DNF games show a "Date Dropped" card on the detail page and appear in Recent Activity on the dashboard.
 - **Mobile sidebar nav** — `Nav.tsx` is a client component. On mobile, a hamburger button opens a slide-in sidebar with backdrop overlay. Desktop keeps the horizontal nav unchanged.
 - **Mark as Completed button** — `MarkCompletedButton` (client component) appears on `GameCard` and the game detail page for `status === 'playing'` games. Uses `useTransition` and stops click propagation inside the card link.
@@ -253,6 +262,61 @@ The full implementation plan (including all database SQL per phase) is at:
   Notification `type`s: `game_released` (linked to a game), `event_live` (no game — the bell shows a 📣 tile).
 - **Steam Deck flag** — `games.steam_deck` boolean. Toggle in `GameForm` (Flags row) and a "Playing on Steam Deck" checkbox in `ReviewGameModal` (shown only for backlog adds via the `showSteamDeck` prop — not the wheel). Set on the detail page shows `/steam-deck.png` next to the title badges. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_deck BOOLEAN NOT NULL DEFAULT false;` Needs the icon at `public/steam-deck.png`.
 - **Emulated flag** — `games.is_emulated` boolean, marks a game as played via emulation. Toggle in `GameForm` (Flags row, 🕹️) only — not wired into `ReviewGameModal`/backlog-add flows or shown elsewhere yet. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS is_emulated BOOLEAN NOT NULL DEFAULT false;`
+- **Desktop play-tracking agent** — a program on the user's PC detects when a game they have set to **Playing** is running and logs the hours automatically. Three parts: the agent (`agent/gameslist-agent.ps1`, prototype), four API routes under `app/api/agent/`, and a "Devices" section in Settings that issues device tokens.
+  - **Only `status = 'playing'` or `'ambient'` games are ever written to**, and the route re-reads the status server-side rather than trusting the client. This is load-bearing: changing `hours_played` on a *completed* game makes `updateGame` reverse and re-award that game's entire ticket ledger, so the restriction keeps a client program out of the ticket economy.
+  - Hours are **added** to the existing figure. Checkpoints carry the session's cumulative minutes and the server applies only the delta (`lib/agent-session.ts`), so retries and replays cannot double-count. `hours_played` is `numeric(6,1)`, so everything is rounded to 0.1h.
+  - Matching: Steam games resolve from `HKCU\Software\Valve\Steam\RunningAppID` against `games.steam_appid` (backfilled from IGDB by `scripts/backfill-steam-appids.mjs`). Anything else is linked once by executable name, stored in `game_executables` so it syncs across machines.
+  - Auth is a bearer device token, stored only as a sha256 hash (`lib/agent-auth.ts`). Unlike the `CRON_SECRET` guard, a missing token always rejects.
+  - The agent builds no UI: the "link a game" screen is a page in the app (`/settings/devices/link`), so it inherits the user's accent, theme and fonts automatically.
+  - SQL:
+    ```sql
+    CREATE TABLE IF NOT EXISTS public.device_tokens (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      last_seen_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    ALTER TABLE public.device_tokens ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Users manage own devices" ON public.device_tokens
+      FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+    CREATE TABLE IF NOT EXISTS public.play_sessions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      game_id UUID REFERENCES public.games(id) ON DELETE SET NULL,
+      device_id UUID REFERENCES public.device_tokens(id) ON DELETE SET NULL,
+      client_session_id TEXT NOT NULL,
+      minutes INTEGER NOT NULL CHECK (minutes >= 0),
+      started_at TIMESTAMPTZ NOT NULL,
+      ended_at TIMESTAMPTZ,
+      applied_hours NUMERIC(6,1) NOT NULL DEFAULT 0,
+      last_checkpoint_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, client_session_id)
+    );
+    ALTER TABLE public.play_sessions ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Users read own sessions" ON public.play_sessions
+      FOR SELECT USING (auth.uid() = user_id);
+    CREATE INDEX IF NOT EXISTS play_sessions_user_idx ON public.play_sessions (user_id, started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS public.game_executables (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+      game_id UUID NOT NULL REFERENCES public.games(id) ON DELETE CASCADE,
+      exe_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, exe_name)
+    );
+    ALTER TABLE public.game_executables ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "Users manage own exe links" ON public.game_executables
+      FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+    ALTER TABLE public.games ADD COLUMN IF NOT EXISTS steam_appid INTEGER;
+    CREATE INDEX IF NOT EXISTS games_steam_appid_idx
+      ON public.games (user_id, steam_appid) WHERE steam_appid IS NOT NULL;
+    ```
 
 ---
 
@@ -273,6 +337,11 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/api/cron/sync-playlists` | `app/api/cron/sync-playlists/route.ts` | Daily Vercel Cron. Mirrors YouTube-sourced playlists (in-site + game media) against their source. `CRON_SECRET`-guarded. |
 | `/api/cron/check-releases` | `app/api/cron/check-releases/route.ts` | Daily Vercel Cron. Creates a `game_released` notification for backlog games whose `release_date` has arrived (idempotent via `games.release_notified`). `CRON_SECRET`-guarded, service-role admin client. |
 | `/api/cron/check-events` | `app/api/cron/check-events/route.ts` | Daily Vercel Cron. Creates an `event_live` notification for every user when an IGDB event happens today (idempotent via the `notified_events` table). `CRON_SECRET`-guarded, service-role admin client. |
+| `/api/agent/state` | `app/api/agent/state/route.ts` | Desktop agent. Playing games + their `steam_appid`, the user's exe links, and theme/accent. Device-token auth, service-role admin client. |
+| `/api/agent/session` | `app/api/agent/session/route.ts` | Desktop agent. A play-session checkpoint; applies the hours delta to a **playing** game only. Device-token auth. |
+| `/api/agent/link` | `app/api/agent/link/route.ts` | Desktop agent. Saves an executable → game mapping. Device-token auth. |
+| `/api/agent/identify` | `app/api/agent/identify/route.ts` | Desktop agent. Steam app id → IGDB game (cached in `steam_game_ids`), then files it as **ambient** if the user doesn't own it. Writes, despite the name. Device-token auth. |
+| `/api/agent/start-tracking` | `app/api/agent/start-tracking/route.ts` | Desktop agent. Moves a backlog game to Playing; refuses completed/DNF games. Device-token auth. |
 
 ---
 

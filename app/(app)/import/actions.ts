@@ -54,6 +54,9 @@ type RawgData = {
   genres: string[]
   description: string | null
   dominant_color: string | null
+  // So an imported Steam game is recognised by the desktop agent straight
+  // away, with no executable to link.
+  steam_appid: number | null
 }
 
 async function fetchRawgData(title: string): Promise<RawgData | null> {
@@ -72,6 +75,7 @@ async function fetchRawgData(title: string): Promise<RawgData | null> {
       genres: detail?.genres?.map(g => g.name) ?? [],
       description: detail?.description_raw ?? null,
       dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
+      steam_appid: detail?.steam_app_id ?? null,
     }
   } catch {
     return null
@@ -139,6 +143,7 @@ export async function bulkImportGames(
           image_url: rawg?.image_url ?? null,
           cover_image_url: rawg?.cover_image_url ?? null,
           [PROVIDER_ID_COLUMN]: rawg?.rawg_id ?? null,
+          steam_appid: rawg?.steam_appid ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
           dominant_color: rawg?.dominant_color ?? null,
@@ -176,6 +181,7 @@ export async function bulkImportGames(
           image_url: rawg?.image_url ?? null,
           cover_image_url: rawg?.cover_image_url ?? null,
           [PROVIDER_ID_COLUMN]: rawg?.rawg_id ?? null,
+          steam_appid: rawg?.steam_appid ?? null,
           genres: rawg?.genres?.length ? rawg.genres : null,
           description: rawg?.description ?? null,
           dominant_color: rawg?.dominant_color ?? null,

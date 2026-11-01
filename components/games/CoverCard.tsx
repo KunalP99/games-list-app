@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import StatusBadge from './StatusBadge'
 import MarkCompletedButton from './MarkCompletedButton'
+import LiveIndicator from './LiveIndicator'
 import type { Game } from '@/lib/types'
 
 // Formatted release date, respecting year-only precision. Null when no date.
@@ -12,7 +13,17 @@ function formatRelease(game: Game): string | null {
 }
 
 // Portrait box-art card. Cover on top, the same info GameCard shows beneath.
-export default function CoverCard({ game, isOwner = true, showReleaseDate = false }: { game: Game; isOwner?: boolean; showReleaseDate?: boolean }) {
+export default function CoverCard({
+  game,
+  isOwner = true,
+  showReleaseDate = false,
+  liveSince = null,
+}: {
+  game: Game
+  isOwner?: boolean
+  showReleaseDate?: boolean
+  liveSince?: string | null
+}) {
   const cover = (game as { cover_image_url?: string | null }).cover_image_url ?? null
   const releaseLabel = showReleaseDate ? formatRelease(game) : null
 
@@ -49,6 +60,7 @@ export default function CoverCard({ game, isOwner = true, showReleaseDate = fals
         </div>
         {game.developer && <p className="text-xs text-fg-muted truncate -mt-0.5">{game.developer}</p>}
         {releaseLabel && <p className="text-xs font-medium text-fg-muted truncate">📅 Releases {releaseLabel}</p>}
+        {liveSince && <LiveIndicator startedAt={liveSince} />}
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 text-xs text-fg-subtle min-w-0 flex-wrap">

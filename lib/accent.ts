@@ -37,10 +37,19 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   return [Math.round(ch(h + 1 / 3) * 255), Math.round(ch(h) * 255), Math.round(ch(h - 1 / 3) * 255)]
 }
 
-// Sets --brand-50 through --brand-950 on :root so all brand-* Tailwind classes update.
-export function applyAccentPalette(hex: string) {
+/** One brand shade: its stop name and the RGB triple Tailwind reads. */
+export type AccentShade = [string, [number, number, number]]
+
+/**
+ * The eleven brand stops derived from a user's accent colour.
+ *
+ * Pure, and exported so the desktop app can paint itself in the same
+ * colours the site uses without a second copy of this maths drifting out
+ * of step. Returns null for anything that isn't a hex colour.
+ */
+export function accentPalette(hex: string): AccentShade[] | null {
   const rgb = hexToRgb(hex)
-  if (!rgb) return
+  if (!rgb) return null
   const [h, s, l] = rgbToHsl(...rgb)
   const sat = Math.max(s, 0.55)
 
@@ -58,6 +67,13 @@ export function applyAccentPalette(hex: string) {
     ['950', hslToRgb(h, sat, Math.max(l - 0.36, 0.04))],
   ]
 
+  return shades
+}
+
+// Sets --brand-50 through --brand-950 on :root so all brand-* Tailwind classes update.
+export function applyAccentPalette(hex: string) {
+  const shades = accentPalette(hex)
+  if (!shades) return
   const root = document.documentElement
   for (const [shade, [r, g, b]] of shades) {
     root.style.setProperty(`--brand-${shade}`, `${r} ${g} ${b}`)

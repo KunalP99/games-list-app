@@ -278,6 +278,12 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
 
   const list = games ?? []
   const completed = list.filter(g => g.status === 'completed')
+  // Ambient games are played, but they are not *chosen* — the agent adds them
+  // on its own. So their hours count (below) while anything that measures the
+  // size or shape of a deliberately built library excludes them, or a week of
+  // leaving a sandbox game open would walk someone through several
+  // library-size achievements they never worked for.
+  const curated = list.filter(g => g.status !== 'ambient')
   const totalHours = list.reduce((sum, g) => sum + (g.hours_played ?? 0), 0)
   const perfect = completed.filter(g => g.achievement_progress === 100).length
   const fiveStarCount = list.filter(g => g.rating === 5).length
@@ -285,13 +291,13 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
   const oneRating = list.some(g => g.rating === 1)
 
   const genreSet = new Set<string>()
-  for (const g of list) {
+  for (const g of curated) {
     if (g.status === 'backlog') continue
     for (const genre of g.genres ?? []) genreSet.add(genre)
   }
 
   const platformSet = new Set<string>()
-  for (const g of list) {
+  for (const g of curated) {
     if (g.status === 'backlog') continue
     if (g.platform) platformSet.add(g.platform)
   }
@@ -465,7 +471,7 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
     hasAssignedLoved,
     totalSpins: spins.length,
     assignedCompleteCount,
-    libraryCount: list.length,
+    libraryCount: curated.length,
     dnfCount: list.filter(g => g.status === 'dnf').length,
     hasUsedReroll: spins.some(s => s.spin_type === 'spin_reroll'),
     hasSkippedChoose: spins.some(s => s.spin_type === 'choose_skip'),

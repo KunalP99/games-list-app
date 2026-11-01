@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types'
+import { generateDeviceToken, hashToken, isLoopbackCallback } from '@/lib/agent-auth'
+import { normaliseExeName } from '@/lib/agent-session'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
   const supabase = createClient()
@@ -72,5 +74,119 @@ export async function updateAppearance(formData: FormData): Promise<ActionResult
 
   if (error) return { success: false, error: error.message }
   revalidatePath('/', 'layout')
+  return { success: true, data: undefined }
+}
+
+// ── Devices (desktop play-tracking agent) ───────────────────────────────────
+
+/**
+ * Issue a device token for the desktop agent.
+ *
+ * The plaintext token is returned exactly once — only its hash is stored, so
+ * it can never be shown again. Losing it means revoking and reissuing, which
+ * is the point: a readable token in the database would be a second password.
+ */
+export async function createDeviceToken(label: string): Promise<ActionResult<{ token: string }>> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const trimmed = label.trim()
+  if (trimmed.length === 0) return { success: false, error: 'Give the device a name' }
+  if (trimmed.length > 60) return { success: false, error: 'That name is too long' }
+
+  const token = generateDeviceToken()
+  const { error } = await (supabase.from('device_tokens') as any).insert({
+    user_id: user.id,
+    token_hash: hashToken(token),
+    label: trimmed,
+  })
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { success: true, data: { token } }
+}
+
+export async function revokeDevice(deviceId: string): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('device_tokens')
+    .delete()
+    .eq('id', deviceId)
+    .eq('user_id', user.id)
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { success: true, data: undefined }
+}
+
+/** Link an executable to one of the user's games (the agent's "No" path). */
+export async function linkExecutable(exeName: string, gameId: string): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const normalised = normaliseExeName(exeName)
+  if (!normalised) return { success: false, error: 'No executable given' }
+
+  const { data: game } = await supabase
+    .from('games')
+    .select('id')
+    .eq('id', gameId)
+    .eq('user_id', user.id)
+    .maybeSingle() as { data: { id: string } | null }
+  if (!game) return { success: false, error: 'Game not found' }
+
+  const { error } = await (supabase.from('game_executables') as any).upsert({
+    user_id: user.id,
+    game_id: game.id,
+    exe_name: normalised,
+  }, { onConflict: 'user_id,exe_name' })
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { success: true, data: undefined }
+}
+
+/**
+ * Approve a desktop app's pairing request and hand it a token.
+ *
+ * The callback is re-validated here, not only on the page that rendered the
+ * button: a server action is callable directly, so a check that lives only in
+ * the UI is not a check at all.
+ */
+export async function approveDevicePairing(
+  label: string,
+  callback: string,
+): Promise<ActionResult<{ redirectTo: string }>> {
+  if (!isLoopbackCallback(callback)) {
+    return { success: false, error: 'That pairing link does not point at this computer.' }
+  }
+
+  const issued = await createDeviceToken(label)
+  if (!issued.success) return issued
+
+  const target = new URL(callback)
+  target.searchParams.set('token', issued.data.token)
+  return { success: true, data: { redirectTo: target.toString() } }
+}
+
+/** Forget an executable → game link, from the website. */
+export async function unlinkExecutable(exeName: string): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('game_executables')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('exe_name', normaliseExeName(exeName))
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings/devices/link')
   return { success: true, data: undefined }
 }

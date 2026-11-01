@@ -54,6 +54,30 @@ describe('decideWonGameAction', () => {
       .toEqual({ action: 'flip', gameId: 'b1' })
   })
 
+  it('claims an ambient copy rather than spending the turn on nothing', () => {
+    // An ambient game used to fall through to the owned-but-not-completed
+    // catch-all and return noop: the turn was consumed and nothing changed.
+    // Harmless when ambient did not exist; now the agent files games that way
+    // on its own, so it would happen to anything played before the wheel
+    // offered it.
+    expect(decideWonGameAction([{ id: 'a1', status: 'ambient' }]))
+      .toEqual({ action: 'flip', gameId: 'a1' })
+  })
+
+  it('prefers a backlog copy over an ambient one', () => {
+    expect(decideWonGameAction([
+      { id: 'a1', status: 'ambient' },
+      { id: 'b1', status: 'backlog' },
+    ])).toEqual({ action: 'flip', gameId: 'b1' })
+  })
+
+  it('still does nothing when an ambient copy sits beside one being played', () => {
+    expect(decideWonGameAction([
+      { id: 'a1', status: 'ambient' },
+      { id: 'p1', status: 'playing' },
+    ])).toEqual({ action: 'noop' })
+  })
+
   it('inserts a replay entry when the game is owned only as completed', () => {
     expect(decideWonGameAction([{ id: 'c1', status: 'completed' }]))
       .toEqual({ action: 'insert', isReplay: true })

@@ -7,6 +7,7 @@ import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/li
 import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
 import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
+import { isFutureDate } from '@/lib/dates'
 
 type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
 
@@ -128,12 +129,22 @@ export async function createGame(formData: FormData) {
         ? (formData.get('completion_date_year') ? `${formData.get('completion_date_year')}-01-01` : null)
         : ((formData.get('completion_date') as string) || null))
     : null
+  // A completed or dropped game can't be dated in the future — whichever one
+  // actually happens, it hasn't happened yet.
+  if (completionDate && isFutureDate(completionDate)) {
+    return { error: `${status === 'dnf' ? 'Drop' : 'Completion'} date can't be in the future.` }
+  }
 
   let description: string | null = null
   let genres: string[] | null = null
   let dominantColor: string | null = null
   let coverImage: string | null = null
   let artworkImage: string | null = null
+  // Stored so the desktop agent can recognise a running Steam game without any
+  // name matching at all. It rides along with the detail already being fetched,
+  // so it costs nothing; without it the column is only ever filled by a manual
+  // backfill, and every game added afterwards starts out null again.
+  let steamAppId: number | null = null
   if (rawgId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
@@ -142,6 +153,7 @@ export async function createGame(formData: FormData) {
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
     coverImage = detail?.cover_image ?? null
     artworkImage = detail?.artwork_image ?? null
+    steamAppId = detail?.steam_app_id ?? null
   }
 
   const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
@@ -167,6 +179,7 @@ export async function createGame(formData: FormData) {
     // User-chosen banner from the form's image chooser; auto key-art as fallback.
     artwork_url: (formData.get('artwork_url') as string)?.trim() || artworkImage,
     [PROVIDER_ID_COLUMN]: rawgId,
+    steam_appid: steamAppId,
     description,
     genres,
     dominant_color: dominantColor,
@@ -210,10 +223,10 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Fetch current status, rawg_id, and description before updating to detect transitions
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress')
+    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress, steam_appid')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null } | null }
+    .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null } | null }
 
   const status = formData.get('status') as string
   const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
@@ -234,6 +247,9 @@ export async function updateGame(id: string, formData: FormData) {
         ? (formData.get('completion_date_year') ? `${formData.get('completion_date_year')}-01-01` : null)
         : ((formData.get('completion_date') as string) || null))
     : null
+  if (completionDate && isFutureDate(completionDate)) {
+    return { error: `${status === 'dnf' ? 'Drop' : 'Completion'} date can't be in the future.` }
+  }
 
   // Only re-fetch metadata if the provider id changed
   const existingProviderId = METADATA_PROVIDER === 'igdb' ? existing?.igdb_id : existing?.rawg_id
@@ -242,6 +258,10 @@ export async function updateGame(id: string, formData: FormData) {
   let dominantColor: string | null = existing?.dominant_color ?? null
   let coverImage: string | null = existing?.cover_image_url ?? null
   let artworkImage: string | null = existing?.artwork_url ?? null
+  // Kept unless the game is re-pointed at a different provider entry, like
+  // everything else here: an id set by the backfill must survive an ordinary
+  // edit.
+  let steamAppId: number | null = existing?.steam_appid ?? null
   if (rawgId && rawgId !== existingProviderId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
@@ -250,6 +270,7 @@ export async function updateGame(id: string, formData: FormData) {
     dominantColor = detail?.saturated_color ?? detail?.dominant_color ?? null
     coverImage = detail?.cover_image ?? null
     artworkImage = detail?.artwork_image ?? null
+    steamAppId = detail?.steam_app_id ?? null
   }
 
   const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
@@ -274,6 +295,7 @@ export async function updateGame(id: string, formData: FormData) {
     // User-chosen banner from the form's image chooser; auto key-art as fallback.
     artwork_url: (formData.get('artwork_url') as string)?.trim() || artworkImage,
     [PROVIDER_ID_COLUMN]: rawgId,
+    steam_appid: steamAppId,
     description,
     genres,
     dominant_color: dominantColor,
@@ -361,6 +383,10 @@ export async function markAsCompleted(
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  if (details && isFutureDate(details.completionDate)) {
+    return { error: "Completion date can't be in the future." }
+  }
 
   let hours: number | null
   let achievementProgress: number | null
@@ -505,6 +531,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   let imageUrl = image_url || null
   let coverImageUrl: string | null = null
   let artworkUrl: string | null = null
+  let steamAppId: number | null = null
   if (rawgId) {
     const { getRawgGameDetail } = await import('@/lib/rawg')
     const detail = await getRawgGameDetail(rawgId)
@@ -515,6 +542,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     imageUrl = detail?.background_image ?? imageUrl
     coverImageUrl = detail?.cover_image ?? null
     artworkUrl = detail?.artwork_image ?? null
+    steamAppId = detail?.steam_app_id ?? null
   }
   // A user-picked image (from the review modal) wins over the auto banner.
   if (chosenImage) {
@@ -529,6 +557,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     image_url: imageUrl,
     cover_image_url: coverImageUrl,
     artwork_url: artworkUrl,
+    steam_appid: steamAppId,
     genres: finalGenres,
     status: 'backlog',
     platform,

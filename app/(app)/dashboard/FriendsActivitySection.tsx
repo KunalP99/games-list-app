@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import RecommendationsCarousel from '@/components/users/RecommendationsCarousel'
 import FriendActivityFeed from '@/components/dashboard/FriendActivityFeed'
-import { buildActivityItems, groupActivityItems, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, groupActivityItems, suppressRepeatedStarts, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { providerIdOf } from '@/lib/rawg'
 
@@ -34,6 +34,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
     friendGamesRes,
     friendSpinsRes,
     rawFriendUnlocksRes,
+    rawFriendSessionsRes,
   ] = await Promise.all([
     supabase
       .from('games')
@@ -57,12 +58,30 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
       .in('user_id', friendIds)
       .order('unlocked_at', { ascending: false })
       .limit(20),
+    supabase
+      .from('play_sessions')
+      .select('user_id, game_id, started_at, ended_at, minutes')
+      .in('user_id', friendIds)
+      .order('started_at', { ascending: false })
+      .limit(20),
   ])
 
   const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string; rawg_id: number | null; igdb_id: number | null; release_date: string | null }[] | null
   const friendGames = friendGamesRes.data as { id: string; user_id: string; title: string; status: string; image_url: string | null; cover_image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null
   const friendSpins = friendSpinsRes.data as { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null
   const rawFriendUnlocks = rawFriendUnlocksRes.data as { user_id: string; achievement_id: string; unlocked_at: string }[] | null
+  const rawFriendSessions = rawFriendSessionsRes.data as RawPlaySession[] | null
+
+  // "Started playing" is only worth saying the first time — see the
+  // same check in app/(app)/activity/page.tsx.
+  const ongoingFriendGameIds = Array.from(new Set((rawFriendSessions ?? []).filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))
+  const { data: friendSessionHistory } = ongoingFriendGameIds.length > 0
+    ? await supabase
+        .from('play_sessions')
+        .select('user_id, game_id, started_at')
+        .in('game_id', ongoingFriendGameIds) as { data: { user_id: string; game_id: string | null; started_at: string }[] | null }
+    : { data: [] as { user_id: string; game_id: string | null; started_at: string }[] }
+  const friendSessions = suppressRepeatedStarts(rawFriendSessions ?? [], friendSessionHistory ?? [])
 
   // Wave B — needs friendGames to compute the IDs
   const completedFriendGameIds = (friendGames ?? []).filter(g => g.status === 'completed').map(g => g.id)
@@ -113,6 +132,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
     friendTicketsByGame,
     userId,
     friendAchievementUnlocks,
+    friendSessions,
   ))
 
   if (recommendations.length === 0 && friendActivityItems.length === 0 && !eventsSlot) return null

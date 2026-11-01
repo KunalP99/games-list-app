@@ -1,4 +1,4 @@
-import { activityVerb, formatActivityDate, type ActivityItem } from '@/lib/activity'
+import { activityVerb, activitySuffix, formatActivityDate, type ActivityItem } from '@/lib/activity'
 
 // A compact recap of this one person's recent activity — built on the same
 // lib/activity.ts helpers as the full /activity page, but a single-user card
@@ -14,6 +14,7 @@ const TYPE_ICON: Record<ActivityItem['type'], string> = {
   game_chosen: '🎯',
   choose_skip: '⏭️',
   achievement_unlock: '🏆',
+  play_session: '⏱️',
 }
 
 function Row({ item }: { item: ActivityItem }) {
@@ -31,7 +32,7 @@ function Row({ item }: { item: ActivityItem }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm text-fg-secondary truncate">
           <span>{activityVerb(item)}</span>
-          {showGameTitle && <> <span className="font-medium text-fg-base">{item.gameTitle}</span></>}
+          {showGameTitle && <> <span className="font-medium text-fg-base">{item.gameTitle}</span>{activitySuffix(item)}</>}
           {item.achievementName && (
             <> <span className="font-medium text-fg-base">{item.achievementIcon} {item.achievementName}</span></>
           )}

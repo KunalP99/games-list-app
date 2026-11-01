@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeUserStats } from '@/lib/user-stats'
 import { resolveBannerImage } from '@/lib/hero-banner'
-import { buildActivityItems, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, suppressRepeatedStarts, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import type { Game, Profile } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
@@ -11,6 +11,9 @@ import GameFilters from '@/components/games/GameFilters'
 import ProfileHero from '@/components/profile/ProfileHero'
 import ProfileStatCards from '@/components/profile/ProfileStatCards'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
+import RecentlyPlayed from '@/components/games/RecentlyPlayed'
+import { getRecentlyPlayed } from '@/lib/recently-played'
+import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
 
 export default async function UserProfilePage({
@@ -48,10 +51,18 @@ export default async function UserProfilePage({
     .eq('user_id', profile.id)
     .order(sort, { ascending: sortAsc, nullsFirst: false })
 
-  if (status) gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf')
+  if (status) {
+    gamesQuery = gamesQuery.eq('status', status as 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient')
+  } else {
+    // Matches My Games: Playing and Ambient each have their own section, so
+    // the untabbed list is everything else. Only for "All" — AND-ing this
+    // onto an explicit `status=ambient` tab contradicts the eq() above and
+    // always returns nothing, which is what was making that tab empty.
+    gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
+  }
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
-  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, stats] = await Promise.all([
+  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, recentSessionsRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
     gamesQuery,
     supabase
       .from('games')
@@ -83,7 +94,15 @@ export default async function UserProfilePage({
       .eq('user_id', profile.id)
       .order('unlocked_at', { ascending: false })
       .limit(10),
+    supabase
+      .from('play_sessions')
+      .select('user_id, game_id, started_at, ended_at, minutes')
+      .eq('user_id', profile.id)
+      .order('started_at', { ascending: false })
+      .limit(10),
     computeUserStats(supabase, profile.id),
+    getRecentlyPlayed(supabase, profile.id),
+    getLiveSessions(supabase, [profile.id]),
   ])
 
   const games = gamesRes.data as Game[] | null
@@ -93,15 +112,24 @@ export default async function UserProfilePage({
   const recentGames = (recentGamesRes.data ?? []) as RecentGameRow[]
   const completedIds = recentGames.filter(g => g.status === 'completed').map(g => g.id)
 
+  const rawSessions = (recentSessionsRes.data ?? []) as RawPlaySession[]
+  // "Started playing" is only worth saying the first time — see the
+  // same check in app/(app)/activity/page.tsx.
+  const ongoingGameIds = Array.from(new Set(rawSessions.filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))
+
   // Depends on stats.heroGame and completedIds, so this second wave can't join
   // the Promise.all above — bannerImage may fetch the game's screenshots live
   // (lib/hero-banner.ts), bounded by that call's own timeout.
-  const [bannerImage, ticketRowsRes] = await Promise.all([
+  const [bannerImage, ticketRowsRes, sessionHistoryRes] = await Promise.all([
     stats.heroGame ? resolveBannerImage(stats.heroGame) : Promise.resolve(null),
     completedIds.length > 0
       ? supabase.from('ticket_transactions').select('game_id, amount').in('game_id', completedIds).gt('amount', 0)
       : Promise.resolve({ data: [] as { game_id: string; amount: number }[] }),
+    ongoingGameIds.length > 0
+      ? supabase.from('play_sessions').select('user_id, game_id, started_at').in('game_id', ongoingGameIds)
+      : Promise.resolve({ data: [] as { user_id: string; game_id: string | null; started_at: string }[] }),
   ])
+  const sessions = suppressRepeatedStarts(rawSessions, (sessionHistoryRes.data ?? []) as { user_id: string; game_id: string | null; started_at: string }[])
 
   const ticketsByGame = ((ticketRowsRes.data ?? []) as { game_id: string; amount: number }[]).reduce<Record<string, number>>((acc, r) => {
     acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
@@ -125,7 +153,7 @@ export default async function UserProfilePage({
   const recentSpins = (recentSpinsRes.data ?? []) as RecentSpinRow[]
   // A generous buffer — ProfileStatCards decides how many are actually
   // shown (currently 4, to sit level with the genre card next to it).
-  const activityItems = buildActivityItems(recentGames, recentSpins, profileMap, ticketsByGame, user?.id ?? '', achievementUnlocks).slice(0, 12)
+  const activityItems = buildActivityItems(recentGames, recentSpins, profileMap, ticketsByGame, user?.id ?? '', achievementUnlocks, sessions).slice(0, 12)
 
   const rawView = searchParams.view ?? cookies().get('gameView')?.value
   // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
@@ -165,7 +193,9 @@ export default async function UserProfilePage({
           the stat cards in a right-hand rail, but the grid row was then as tall
           as the rail, leaving a large gap above the games list whenever the
           content beside it was shorter. */}
-      <NowPlayingGrid games={playingGames} isOwner={isOwner} />
+      <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />
+
+      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} />
 
       <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 
@@ -176,7 +206,7 @@ export default async function UserProfilePage({
 
         <div className="mt-4">
           {games && games.length > 0 ? (
-            <GameListView games={games} status={selectedStatus} isOwner={isOwner} view={view} />
+            <GameListView games={games} status={selectedStatus} isOwner={isOwner} view={view} liveSessions={liveSessions} />
           ) : (
             <div className="text-center py-16 text-fg-subtle">
               <p className="text-4xl mb-3">🎮</p>

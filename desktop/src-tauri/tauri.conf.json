@@ -1,0 +1,50 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "GamesList",
+  "version": "0.1.0",
+  "identifier": "uk.co.gameslist.desktop",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "GamesList",
+        "width": 420,
+        "height": 580,
+        "resizable": false,
+        "maximizable": false,
+        "fullscreen": false,
+        "center": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Logs your game hours to GamesList",
+    "longDescription": "Watches for games you have set to Playing on GamesList and logs the hours you spend in them."
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM1OTM0NTI3MUYzRDRBNUIKUldSYlNqMGZKMFdUTmNYTzhSWkxBZ0NKNkgwZlFsTGVkanhlckp2eUd2bEV4SkF6Y00yQ2cxVTkK",
+      "endpoints": [
+        "https://github.com/KunalP99/games-list-app/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

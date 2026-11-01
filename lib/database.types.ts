@@ -98,7 +98,7 @@ export type Database = {
           developer: string | null
           release_date: string | null
           release_date_precision: 'full' | 'year'
-          status: 'playing' | 'completed' | 'backlog' | 'dnf'
+          status: 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient'
           hours_played: number | null
           start_date: string | null
           completion_date: string | null
@@ -113,6 +113,8 @@ export type Database = {
           artwork_url: string | null
           rawg_id: number | null
           igdb_id: number | null
+          /** Steam app id, resolved from IGDB. Lets the desktop agent match a running game. */
+          steam_appid: number | null
           description: string | null
           genres: string[] | null
           platform: string | null
@@ -138,7 +140,7 @@ export type Database = {
           developer?: string | null
           release_date?: string | null
           release_date_precision?: 'full' | 'year'
-          status?: 'playing' | 'completed' | 'backlog' | 'dnf'
+          status?: 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient'
           hours_played?: number | null
           start_date?: string | null
           completion_date?: string | null
@@ -153,6 +155,7 @@ export type Database = {
           artwork_url?: string | null
           rawg_id?: number | null
           igdb_id?: number | null
+          steam_appid?: number | null
           description?: string | null
           genres?: string[] | null
           platform?: string | null
@@ -175,7 +178,7 @@ export type Database = {
           developer?: string | null
           release_date?: string | null
           release_date_precision?: 'full' | 'year'
-          status?: 'playing' | 'completed' | 'backlog' | 'dnf'
+          status?: 'playing' | 'completed' | 'backlog' | 'dnf' | 'ambient'
           hours_played?: number | null
           start_date?: string | null
           completion_date?: string | null
@@ -190,6 +193,7 @@ export type Database = {
           artwork_url?: string | null
           rawg_id?: number | null
           igdb_id?: number | null
+          steam_appid?: number | null
           description?: string | null
           genres?: string[] | null
           platform?: string | null
@@ -204,6 +208,103 @@ export type Database = {
           dlc?: { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
           created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      device_tokens: {
+        Row: {
+          id: string
+          user_id: string
+          /** sha256 of the issued token — the token itself is never stored. */
+          token_hash: string
+          label: string
+          last_seen_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          token_hash: string
+          label: string
+          last_seen_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          token_hash?: string
+          label?: string
+          last_seen_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      play_sessions: {
+        Row: {
+          id: string
+          user_id: string
+          game_id: string | null
+          device_id: string | null
+          /** Agent-generated id; dedupes checkpoints and retries of one session. */
+          client_session_id: string
+          minutes: number
+          started_at: string
+          ended_at: string | null
+          /** Hours already added to games.hours_played for this session. */
+          applied_hours: number
+          last_checkpoint_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          game_id?: string | null
+          device_id?: string | null
+          client_session_id: string
+          minutes: number
+          started_at: string
+          ended_at?: string | null
+          applied_hours?: number
+          last_checkpoint_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          game_id?: string | null
+          device_id?: string | null
+          client_session_id?: string
+          minutes?: number
+          started_at?: string
+          ended_at?: string | null
+          applied_hours?: number
+          last_checkpoint_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      game_executables: {
+        Row: {
+          id: string
+          user_id: string
+          game_id: string
+          /** Lowercased basename, e.g. "splitfiction.exe". */
+          exe_name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          game_id: string
+          exe_name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          game_id?: string
+          exe_name?: string
+          created_at?: string
         }
         Relationships: []
       }
