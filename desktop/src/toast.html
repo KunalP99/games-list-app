@@ -10,6 +10,10 @@
 </head>
 <body class="toast-body">
   <div class="toast" id="toast">
+    <!-- Closes only this window — the question stays pending on the status
+         screen, in case this was a misclick rather than an answer. -->
+    <button type="button" class="toast-dismiss" id="ask-dismiss" aria-label="Close">&times;</button>
+
     <!-- The question. Which of the two shapes shows depends on whether the
          executable's name actually resembles a game in the Playing list. -->
     <section id="ask">

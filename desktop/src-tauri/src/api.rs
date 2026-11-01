@@ -157,13 +157,15 @@ pub async fn post_unlink(base: &str, token: &str, exe_name: &str) -> Result<(), 
 /// `unknown` (the lookup did not get through — try later), `added` (a new
 /// Ambient game was created), `tracked` (already trackable) or `untracked`
 /// (owned, but completed/backlog, so left alone).
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct IdentifyResponse {
     pub result: String,
     #[serde(default)]
     pub title: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    #[serde(rename = "gameId", default)]
+    pub game_id: Option<String>,
 }
 
 /// What to identify a running game by — however the agent came to recognise it.
@@ -171,8 +173,16 @@ pub enum IdentifyBy<'a> {
     /// Exact: the registry's app id maps to an exact IGDB game, or nothing.
     SteamAppId(u32),
     /// A search, not a lookup — a launcher's own manifest names the game
-    /// authoritatively, but IGDB keeps no cross-reference for these stores.
+    /// authoritatively, or was guessed from the executable's own name, but
+    /// IGDB keeps no cross-reference for either, so it is only trusted on an
+    /// exact match.
     Title(&'a str),
+    /// A person picked this exact game themselves, from a real search result
+    /// (`search_games` below) — nothing left to resolve or verify.
+    IgdbId { id: u32, title: &'a str },
+    /// No local signal at all — just the exe name, checked against the
+    /// admin-curated `global_exe_links` table server-side.
+    LookupExe,
 }
 
 /// Ask what a running game is, and have it filed if it is new.
@@ -192,6 +202,8 @@ pub async fn post_identify(
     let mut body = match by {
         IdentifyBy::SteamAppId(id) => serde_json::json!({ "steamAppId": id }),
         IdentifyBy::Title(title) => serde_json::json!({ "titleGuess": title }),
+        IdentifyBy::IgdbId { id, title } => serde_json::json!({ "igdbId": id, "title": title }),
+        IdentifyBy::LookupExe => serde_json::json!({ "lookupExe": true }),
     };
     body["exeName"] = serde_json::json!(exe_name);
     body["platform"] = serde_json::json!(platform);
@@ -208,4 +220,121 @@ pub async fn post_identify(
         return Err(format!("identify failed: {}", res.status()));
     }
     res.json::<IdentifyResponse>().await.map_err(|e| e.to_string())
+}
+
+/// One result from `search_games` — the same shape the website's own add-game
+/// search box renders from (`lib/rawg.ts`'s `RawgSearchResult`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult {
+    pub id: u32,
+    pub name: String,
+    #[serde(default)]
+    pub released: Option<String>,
+    #[serde(default)]
+    pub background_image: Option<String>,
+    #[serde(default)]
+    pub cover_image: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchResponse {
+    #[serde(default)]
+    results: Vec<SearchResult>,
+}
+
+/// Search for a game by text, for the "add it as a new game" panel. Unlike
+/// `post_identify`, this returns real candidates for a person to choose
+/// from rather than collapsing to a single exact match or nothing.
+pub async fn search_games(base: &str, token: &str, query: &str) -> Result<Vec<SearchResult>, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .get(format!("{base}/api/agent/search"))
+        .query(&[("q", query)])
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("search failed: {}", res.status()));
+    }
+    Ok(res.json::<SearchResponse>().await.map_err(|e| e.to_string())?.results)
+}
+
+/// One paired PC, as the Settings page's own Devices section shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    pub id: String,
+    pub label: String,
+    #[serde(rename = "lastSeenAt", default)]
+    pub last_seen_at: Option<String>,
+    #[serde(rename = "isThisDevice", default)]
+    pub is_this_device: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevicesResponse {
+    #[serde(default)]
+    devices: Vec<DeviceInfo>,
+}
+
+/// Every PC paired to this account — the native Devices panel's list.
+pub async fn list_devices(base: &str, token: &str) -> Result<Vec<DeviceInfo>, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .get(format!("{base}/api/agent/devices"))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("unauthorized".into());
+    }
+    if !res.status().is_success() {
+        return Err(format!("devices request failed: {}", res.status()));
+    }
+    Ok(res.json::<DevicesResponse>().await.map_err(|e| e.to_string())?.devices)
+}
+
+#[derive(Debug, Deserialize)]
+struct NewDeviceResponse {
+    token: String,
+}
+
+/// Issue a token for pairing a *different* PC, from this already-paired one.
+pub async fn create_device_token(base: &str, token: &str, label: &str) -> Result<String, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/devices"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "label": label }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("could not create device: {body}"));
+    }
+    Ok(res.json::<NewDeviceResponse>().await.map_err(|e| e.to_string())?.token)
+}
+
+
+/// Revoke a paired PC — including, legitimately, this very one.
+pub async fn revoke_device(base: &str, token: &str, device_id: &str) -> Result<(), String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/devices/revoke"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "deviceId": device_id }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("revoke failed: {}", res.status()))
+    }
 }

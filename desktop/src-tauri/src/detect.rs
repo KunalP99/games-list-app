@@ -42,9 +42,17 @@ const IGNORED: &[&str] = &[
 ];
 
 /// Folders games actually install into.
+///
+/// "roberts space industries" earned its place live: Star Citizen's own
+/// `StarCitizen.exe` (an 11GB+ working set) came back with no graphics
+/// module Toolhelp32Snapshot could see — large or heavily-instrumented
+/// processes are exactly where that enumeration gets unreliable — so without
+/// a folder hint of its own, it fell all the way through to "not a game",
+/// cached, with no second chance.
 const GAME_FOLDER_HINTS: &[&str] = &[
     "steamapps", "epic games", "gog galaxy", "gog games", "xboxgames",
     "ubisoft game launcher", "ea games", "origin games", "battle.net",
+    "roberts space industries",
 ];
 
 /// Graphics runtimes a 3D game loads and ordinary software generally does not.
@@ -121,7 +129,13 @@ pub fn pickable(c: &Candidate) -> bool {
             Some(dir) => !path.starts_with(&dir.to_string_lossy().to_lowercase()),
             None => true,
         },
-        None => false,
+        // No path is not itself a reason to hide something — confirmed live,
+        // a real running game (Star Citizen's own StarCitizen.exe) can have
+        // one unreadable by every method tried (sysinfo, WMI, .NET's own
+        // Process class all come back empty), which used to mean it could
+        // not even be picked here by hand — the one fallback this list exists
+        // to offer once nothing else can identify a program automatically.
+        None => true,
     }
 }
 
@@ -203,15 +217,20 @@ fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> 
         return Verdict::NotAGame;
     }
 
-    // No readable path means we cannot vouch for it, so we stay quiet.
-    let Some(path) = c.path.as_deref() else {
-        return Verdict::NotAGame;
-    };
-
-    if let Some(windows_dir) = std::env::var_os("SystemRoot") {
-        let windows_dir = windows_dir.to_string_lossy().to_lowercase();
-        if path.starts_with(&windows_dir) {
-            return Verdict::NotAGame;
+    // A path lets the next two gates run, but its absence is not itself
+    // suspicious — a real running game can have one unreadable by every
+    // method tried (confirmed live, if intermittently: sysinfo, WMI and
+    // .NET's own `Process` class all came back empty for Star Citizen's own
+    // `StarCitizen.exe` on one run), which used to mean it was written off
+    // immediately, with no fallback at all since the gates below it never
+    // ran either. Everything they'd have caught is still caught on its own
+    // merits further down.
+    if let Some(path) = c.path.as_deref() {
+        if let Some(windows_dir) = std::env::var_os("SystemRoot") {
+            let windows_dir = windows_dir.to_string_lossy().to_lowercase();
+            if path.starts_with(&windows_dir) {
+                return Verdict::NotAGame;
+            }
         }
     }
 
@@ -221,8 +240,10 @@ fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> 
         return Verdict::NotYet;
     }
 
-    if GAME_FOLDER_HINTS.iter().any(|hint| path.contains(hint)) {
-        return Verdict::Game;
+    if let Some(path) = c.path.as_deref() {
+        if GAME_FOLDER_HINTS.iter().any(|hint| path.contains(hint)) {
+            return Verdict::Game;
+        }
     }
 
     // Only reached once everything above has passed, so the cost of walking a
@@ -366,6 +387,23 @@ mod tests {
     }
 
     #[test]
+    fn a_game_in_an_rsi_folder_is_recognised_even_if_the_module_probe_lies() {
+        // The actual bug this guards against: Star Citizen's own
+        // StarCitizen.exe (confirmed live, an 11GB+ working set) can come
+        // back with no graphics module Toolhelp32Snapshot could see, well
+        // past the settle window — large processes are exactly where that
+        // enumeration gets unreliable. The folder hint means this never has
+        // to depend on the module probe being right.
+        let c = candidate(
+            "starcitizen.exe",
+            Some(r"c:\program files\roberts space industries\starcitizen\live\bin64\starcitizen.exe"),
+            600,
+            true,
+        );
+        assert!(GameJudge::default().judge_with(&c, |_| false));
+    }
+
+    #[test]
     fn known_software_is_never_asked_about() {
         let c = candidate("chrome.exe", Some("c:\\program files\\google\\chrome\\chrome.exe"), 9000, true);
         assert!(!GameJudge::default().judge_with(&c, |_| false));
@@ -494,8 +532,32 @@ mod tests {
     }
 
     #[test]
-    fn a_process_with_no_path_is_left_alone() {
+    fn a_process_with_no_path_and_no_graphics_runtime_is_left_alone() {
+        // Old enough to have settled, loads nothing — a pathless process is
+        // not given any special pass; it still has to earn "Game" the same
+        // way everything outside a hinted folder does.
         let c = candidate("mystery.exe", None, 9000, true);
         assert!(!GameJudge::default().judge_with(&c, |_| false));
+    }
+
+    #[test]
+    fn a_pathless_process_can_still_be_recognised_by_its_modules() {
+        // The actual bug this guards against: a real running game can have an
+        // unreadable path by every method tried (confirmed live against Star
+        // Citizen's own StarCitizen.exe — sysinfo, WMI and .NET's own Process
+        // class all come back empty for it), which used to mean an instant,
+        // permanent "not a game" with no fallback, because the module check
+        // was never even reached.
+        let c = candidate("starcitizen.exe", None, 600, true);
+        assert!(GameJudge::default().judge_with(&c, |_| true));
+    }
+
+    #[test]
+    fn a_pathless_process_is_pickable_by_hand() {
+        // The other half of the same bug: unable to vouch for it
+        // automatically, this is the one fallback that exists specifically
+        // for that case — hiding it there too left no way to link it at all.
+        let c = candidate("starcitizen.exe", None, 600, true);
+        assert!(pickable(&c));
     }
 }

@@ -24,6 +24,7 @@ tauri-plugin-log = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 
 # Process listing. sysinfo is the cross-platform equivalent of Get-Process;
 # what matters is that it is a direct enumeration, not a WMI query (measured

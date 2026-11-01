@@ -42,21 +42,32 @@
           <span class="dot" id="status-dot" aria-hidden="true"></span>
           <span class="status-label" id="status-label">Not tracking</span>
         </div>
-        <p class="status-game" id="status-game">Start a game you’ve set to Playing.</p>
+        <p class="status-game" id="status-game"></p>
         <p class="status-elapsed" id="status-elapsed" hidden>0m</p>
       </section>
 
       <!-- Only appears when something that looks like a game is running and
-           has not been linked yet. Asked once per program, ever. -->
+           has not been linked yet. The same question the toast asks, word
+           for word — this is where it stays answerable if the toast's ×
+           gets clicked, so the two must never read as two different
+           questions. -->
       <section class="card prompt" id="prompt-card" hidden>
+        <p class="toast-heading" id="prompt-heading">Is this your game?</p>
         <p class="prompt-question">
-          Is <code id="prompt-exe"></code> your game
-          <strong id="prompt-title"></strong>?
+          <code id="prompt-exe"></code>
+          <span id="prompt-named">
+            <span class="toast-arrow" aria-hidden="true">&rarr;</span>
+            <strong id="prompt-title"></strong>
+          </span>
+          <span class="toast-help" id="prompt-help" hidden>
+            Tell GamesList which one and it will log the hours.
+          </span>
         </p>
         <div class="prompt-actions">
           <button class="primary" id="prompt-yes">Yes</button>
-          <button class="ghost" id="prompt-no">No, pick another</button>
+          <button class="ghost" id="prompt-no">No</button>
         </div>
+        <p class="toast-error" id="prompt-error" hidden></p>
       </section>
 
       <!-- Linking happens here rather than in a website window: the app
@@ -95,10 +106,27 @@
         </div>
       </section>
 
+      <!-- Opened from the link panel's "Add it as a new game" — a real search
+           of the game database, native, rather than opening the website. -->
+      <section class="card link-panel" id="search-panel" hidden>
+        <p class="panel-title">Add a new game</p>
+        <p class="panel-help">Search for the real title, then pick it.</p>
+
+        <label class="field-label" for="search-query">Game</label>
+        <input class="field" id="search-query" type="text" placeholder="Start typing a title…" autocomplete="off" />
+
+        <ul class="list" id="search-results"></ul>
+        <p class="panel-msg" id="search-empty" hidden>No matches yet — keep typing, or try a different spelling.</p>
+        <p class="panel-warning" id="search-error" hidden></p>
+
+        <div class="panel-actions">
+          <button class="ghost" id="search-cancel">Cancel</button>
+        </div>
+      </section>
+
       <section class="section">
         <div class="section-head">
           <h2>Playing</h2>
-          <button class="link" id="btn-games">My games →</button>
         </div>
         <ul class="list" id="playing-list">
           <li class="empty" id="playing-empty">Nothing set to Playing yet.</li>
@@ -114,6 +142,63 @@
       </footer>
     </section>
   </main>
+
+  <!-- Settings, shown in this window rather than opening a second one.
+       Native, not an iframe of the website: the main window's own origin
+       and the website's are different, so the website's auth cookie
+       (SameSite=Lax) never reaches a cross-origin iframe — it just showed a
+       login form. Scoped to Devices only, the one section that's actually
+       about this agent; Profile/Security/Appearance/Wheel stay on the
+       website, where a normal logged-in session already has them. -->
+  <section class="settings-view" id="settings-view" hidden>
+    <div class="settings-bar">
+      <button class="ghost" id="settings-back">← Back</button>
+    </div>
+    <div class="settings-body">
+      <section class="card link-panel">
+        <p class="panel-title">Devices</p>
+        <p class="panel-help">PCs paired to log hours automatically. Revoking one stops it logging right away.</p>
+
+        <ul class="list" id="device-list"></ul>
+
+        <label class="field-label" for="device-label">Pair a new PC</label>
+        <div class="device-add-row">
+          <input class="field" id="device-label" type="text" placeholder="e.g. Work laptop" autocomplete="off" />
+          <button class="primary" id="device-create">Add</button>
+        </div>
+
+        <div id="device-token-wrap" hidden>
+          <p class="field-hint">Copy this now — it won't be shown again.</p>
+          <div class="device-token-row">
+            <code class="field" id="device-token-value"></code>
+            <button class="ghost" id="device-token-copy">Copy</button>
+          </div>
+        </div>
+
+        <p class="panel-msg" id="device-msg" hidden></p>
+      </section>
+    </div>
+  </section>
+
+  <!-- Checked once at launch (lib.rs), surfaced here whenever it's found —
+       a real modal rather than the quiet inline prompt-card above: an update
+       is a more deliberate interruption than "is this your game?". Lives
+       outside both #signed-in and #settings-view so it can appear over
+       either. -->
+  <div class="modal-overlay" id="update-modal" hidden>
+    <section class="card modal-dialog">
+      <p class="modal-heading">Update available</p>
+      <p class="modal-body">
+        Version <strong id="update-version"></strong> is ready.
+        <span id="update-notes"></span>
+      </p>
+      <div class="modal-actions">
+        <button class="primary" id="update-now">Update Now</button>
+        <button class="ghost" id="update-later">Later</button>
+      </div>
+      <p class="toast-error" id="update-error" hidden></p>
+    </section>
+  </div>
 
   <script type="module" src="main.js"></script>
 </body>

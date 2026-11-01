@@ -86,26 +86,69 @@ function renderPlaying(games) {
     // "Linked" means we can recognise it when it starts — either a Steam app
     // id or an executable the user has pointed at it.
     pill.className = `pill ${game.linked ? 'linked' : 'unlinked'}`
-    pill.textContent = game.linked ? 'Ready' : 'Not linked'
+    pill.textContent = game.linked ? 'Linked' : 'Not linked'
 
     li.append(title, hours, pill)
     list.appendChild(li)
   }
 }
 
+/** The prompt currently shown here, so the buttons know what they're answering. */
+let currentPrompt = null
+
+// Mirrors toast.js's render() exactly — the toast's × leaves this card as the
+// only place the question is still answerable, so the two must read as the
+// same question, not a second, differently-worded one.
 function renderPrompt(prompt) {
   const card = el('prompt-card')
+  currentPrompt = prompt
   if (!prompt) {
     card.hidden = true
     return
   }
   card.hidden = false
   el('prompt-exe').textContent = prompt.exe_name
-  el('prompt-title').textContent = prompt.suggested_title
-  card.dataset.exe = prompt.exe_name
+  el('prompt-error').hidden = true
+
+  if (prompt.confident) {
+    el('prompt-heading').textContent = 'Is this your game?'
+    el('prompt-title').textContent = prompt.suggested_title
+    el('prompt-named').hidden = false
+    el('prompt-help').hidden = true
+    el('prompt-yes').textContent = 'Yes'
+    el('prompt-no').textContent = 'No'
+  } else {
+    el('prompt-heading').textContent = 'Is this a game?'
+    el('prompt-named').hidden = true
+    el('prompt-help').hidden = false
+    el('prompt-yes').textContent = 'Pick it'
+    el('prompt-no').textContent = 'Not a game'
+  }
+}
+
+/**
+ * Dismissing the update modal is deliberately in-memory only — this module
+ * reloads fresh on every app launch, and the Rust side only checks once per
+ * launch too, so "next time they open the app" already falls out of that
+ * without needing anything persisted here.
+ */
+let updateDismissed = false
+
+function renderUpdateModal(pendingUpdate) {
+  const modal = el('update-modal')
+  if (updateDismissed || !pendingUpdate) {
+    modal.hidden = true
+    return
+  }
+  el('update-version').textContent = pendingUpdate.version
+  el('update-notes').textContent = pendingUpdate.notes ?? ''
+  el('update-error').hidden = true
+  modal.hidden = false
 }
 
 let startedAtMs = null
+/** The site's base URL, for the in-window settings view — carried on every status refresh. */
+let apiBase = null
 
 function tickElapsed() {
   if (startedAtMs == null || Number.isNaN(startedAtMs)) return
@@ -121,6 +164,7 @@ async function refresh() {
     return
   }
 
+  apiBase = status.api_base ?? apiBase
   applyTheme(status)
 
   el('signed-out').hidden = status.paired
@@ -134,9 +178,7 @@ async function refresh() {
   const tracking = status.tracking
   el('status-dot').classList.toggle('live', Boolean(tracking))
   el('status-label').textContent = tracking ? 'Tracking' : 'Not tracking'
-  el('status-game').textContent = tracking
-    ? tracking.title
-    : 'Start a game you’ve set to Playing.'
+  el('status-game').textContent = tracking ? tracking.title : ''
   el('status-elapsed').hidden = !tracking
 
   // Keep the server's start time, not a local counter: the window can be
@@ -146,13 +188,147 @@ async function refresh() {
 
   renderPlaying(status.playing ?? [])
   renderPrompt(status.pending_prompt)
+  renderUpdateModal(status.pending_update)
   el('sync-line').textContent = formatSync(status.last_sync, status.queued, status.last_error)
 }
 
 // ── Buttons ─────────────────────────────────────────────────────────────────
 el('btn-connect').addEventListener('click', () => invoke('start_pairing'))
-el('btn-games').addEventListener('click', () => invoke('open_site', { path: '/games' }))
-el('btn-settings').addEventListener('click', () => invoke('open_site', { path: '/settings' }))
+/**
+ * Settings, in this window — Devices only.
+ *
+ * Used to open the website's settings page in a second window, which had
+ * the same problem the link panel already ran into: a webview session that
+ * could expire, and on first open (before anything had navigated it
+ * anywhere) a blank white page with no explanation. An iframe was tried
+ * next, but the main window's own origin and the website's are different,
+ * so the website's auth cookie (SameSite=Lax) is a third-party cookie from
+ * the iframe's point of view and never arrives — it just showed a login
+ * form. Native is the only thing that actually works here, so this is
+ * scoped to the one section that's genuinely about this agent (Devices);
+ * Profile/Security/Appearance/Wheel stay on the website.
+ */
+el('btn-settings').addEventListener('click', () => {
+  el('settings-view').hidden = false
+  loadDevices()
+})
+el('settings-back').addEventListener('click', () => { el('settings-view').hidden = true })
+
+el('update-now').addEventListener('click', async () => {
+  const button = el('update-now')
+  const error = el('update-error')
+  error.hidden = true
+  button.disabled = true
+  button.textContent = 'Installing…'
+  try {
+    await invoke('install_update')
+    // On Windows a successful install exits the app before this resolves —
+    // reaching here means it didn't, so leave the button in its error state
+    // below rather than claiming success.
+  } catch (err) {
+    error.textContent = String(err)
+    error.hidden = false
+    button.disabled = false
+    button.textContent = 'Update Now'
+  }
+})
+el('update-later').addEventListener('click', () => {
+  updateDismissed = true
+  el('update-modal').hidden = true
+})
+
+function formatLastSeen(iso) {
+  if (!iso) return 'Never connected'
+  const mins = Math.floor((Date.now() - Date.parse(iso)) / 60000)
+  if (mins < 2) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  if (mins < 1440) return `${Math.floor(mins / 60)}h ago`
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function showDeviceMsg(text, ok) {
+  const msg = el('device-msg')
+  msg.textContent = text
+  msg.className = ok ? 'panel-msg ok' : 'panel-msg bad'
+  msg.hidden = false
+}
+
+async function loadDevices() {
+  const list = el('device-list')
+  list.innerHTML = '<li class="empty">Loading…</li>'
+  let devices
+  try {
+    devices = await invoke('list_devices')
+  } catch (err) {
+    list.innerHTML = ''
+    showDeviceMsg(String(err), false)
+    return
+  }
+
+  list.innerHTML = ''
+  if (devices.length === 0) {
+    list.innerHTML = '<li class="empty">No PCs paired yet.</li>'
+    return
+  }
+
+  for (const device of devices) {
+    const li = document.createElement('li')
+
+    const label = document.createElement('span')
+    label.className = 'game-title'
+    label.textContent = device.isThisDevice ? `${device.label} (this PC)` : device.label
+
+    const seen = document.createElement('span')
+    seen.className = 'game-hours'
+    seen.textContent = formatLastSeen(device.lastSeenAt)
+
+    const revoke = document.createElement('button')
+    revoke.className = 'ghost unlink'
+    revoke.textContent = 'Revoke'
+    revoke.addEventListener('click', async () => {
+      revoke.disabled = true
+      revoke.textContent = 'Revoking…'
+      try {
+        await invoke('revoke_device', { deviceId: device.id })
+        showDeviceMsg(`Removed ${device.label}. That device can no longer log hours.`, true)
+        loadDevices()
+      } catch (err) {
+        revoke.disabled = false
+        revoke.textContent = 'Revoke'
+        showDeviceMsg(String(err), false)
+      }
+    })
+
+    li.append(label, seen, revoke)
+    list.appendChild(li)
+  }
+}
+
+el('device-create').addEventListener('click', async () => {
+  const input = el('device-label')
+  const label = input.value.trim()
+  if (!label) return
+  el('device-msg').hidden = true
+  el('device-token-wrap').hidden = true
+  const button = el('device-create')
+  button.disabled = true
+  try {
+    const token = await invoke('create_device_token', { label })
+    el('device-token-value').textContent = token
+    el('device-token-wrap').hidden = false
+    input.value = ''
+    showDeviceMsg('Device added. Copy the token now — it is not shown again.', true)
+    loadDevices()
+  } catch (err) {
+    showDeviceMsg(String(err), false)
+  } finally {
+    button.disabled = false
+  }
+})
+
+el('device-token-copy').addEventListener('click', () => {
+  navigator.clipboard?.writeText(el('device-token-value').textContent ?? '')
+})
 /**
  * Linking, in this window.
  *
@@ -287,6 +463,93 @@ function renderLinked(status) {
   }
 }
 
+/** The debounce timer for the search box, so fast typing fires one request. */
+let searchDebounce = null
+/** The program "Add a new game" was opened for, if any — linked on success. */
+let searchExe = null
+
+function renderSearchResults(results) {
+  const list = el('search-results')
+  list.innerHTML = ''
+  el('search-empty').hidden = results.length > 0
+
+  for (const game of results) {
+    const li = document.createElement('li')
+
+    const thumb = game.cover_image ?? game.background_image
+    if (thumb) {
+      const img = document.createElement('img')
+      img.src = thumb
+      img.alt = ''
+      li.appendChild(img)
+    }
+
+    const label = document.createElement('span')
+    label.className = 'game-title'
+    label.textContent = game.released ? `${game.name} (${game.released.slice(0, 4)})` : game.name
+
+    const add = document.createElement('button')
+    add.className = 'search-add'
+    add.textContent = 'Add'
+    add.addEventListener('click', async () => {
+      add.disabled = true
+      add.textContent = 'Adding…'
+      try {
+        await invoke('add_searched_game', { igdbId: game.id, title: game.name, exeName: searchExe })
+        el('search-panel').hidden = true
+        refresh()
+      } catch (err) {
+        add.disabled = false
+        add.textContent = 'Add'
+        const msg = el('search-error')
+        msg.textContent = String(err)
+        msg.hidden = false
+      }
+    })
+
+    li.append(label, add)
+    list.appendChild(li)
+  }
+}
+
+async function runSearch(query) {
+  // Mirrors the website's own add-game box: nothing under two characters is
+  // worth a request, since the results would be too broad to mean anything.
+  if (!query || query.trim().length < 2) {
+    renderSearchResults([])
+    return
+  }
+  const results = await invoke('search_games', { query: query.trim() }).catch(() => [])
+  renderSearchResults(results)
+}
+
+/**
+ * Open the search panel in place of the link panel — a real search of the
+ * game database, native, rather than opening the website. `initialQuery` is
+ * only a starting point (from `guessTitleFromExe`), never trusted as the
+ * answer the way it used to be when this opened a pre-filled website form.
+ */
+function openSearchPanel(exe, initialQuery) {
+  searchExe = exe || null
+  el('link-panel').hidden = true
+  el('search-error').hidden = true
+  el('search-empty').hidden = true
+  el('search-results').innerHTML = ''
+  const input = el('search-query')
+  input.value = initialQuery || ''
+  el('search-panel').hidden = false
+  input.focus()
+  runSearch(input.value)
+}
+
+el('search-query').addEventListener('input', () => {
+  clearTimeout(searchDebounce)
+  const query = el('search-query').value
+  searchDebounce = setTimeout(() => runSearch(query), 300)
+})
+
+el('search-cancel').addEventListener('click', () => { el('search-panel').hidden = true })
+
 // Wrapped, not passed directly: a listener is called with the click event, and
 // openLinkPanel would take that object as the program to preselect — putting
 // "[object PointerEvent]" at the top of the picker and skipping the suggestion.
@@ -332,11 +595,9 @@ function guessTitleFromExe(exe) {
   return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-el('link-add-new').addEventListener('click', async () => {
-  const title = guessTitleFromExe(el('link-exe').value)
-  const params = new URLSearchParams({ status: 'ambient' })
-  if (title) params.set('title', title)
-  await invoke('open_site', { path: `/games/new?${params.toString()}` })
+el('link-add-new').addEventListener('click', () => {
+  const exe = el('link-exe').value
+  openSearchPanel(exe, guessTitleFromExe(exe))
 })
 
 el('link-cancel').addEventListener('click', () => { el('link-panel').hidden = true })
@@ -369,17 +630,39 @@ el('link-save').addEventListener('click', async () => {
 })
 
 el('prompt-yes').addEventListener('click', async () => {
-  await invoke('confirm_prompt')
+  if (!currentPrompt) return
+  const { confident, exe_name: exe } = currentPrompt
+
+  if (confident) {
+    // "Yes, that is the game" — link it and get out of the way.
+    el('prompt-yes').disabled = true
+    try {
+      await invoke('confirm_prompt')
+    } catch {
+      // Linking is a request to the site, so it can fail — say so rather
+      // than closing as though it had worked (the prompt is still pending
+      // server-side either way).
+      el('prompt-yes').disabled = false
+      el('prompt-error').textContent = 'Could not reach GamesList. Try again.'
+      el('prompt-error').hidden = false
+      return
+    }
+    refresh()
+    return
+  }
+
+  // "Pick it" — not remembered: they have said it *is* a game, so if they
+  // wander off without linking it, asking again is right. Stays in this
+  // window rather than opening the website's link page in a second one.
+  await invoke('dismiss_prompt', { remember: false })
+  await openLinkPanel(exe || null)
   refresh()
 })
 el('prompt-no').addEventListener('click', async () => {
-  // Stay in this window: opening the website's link page in a second window
-  // was the one part of this flow that could show up blank.
-  const exe = el('prompt-card').dataset.exe ?? ''
-  // "Pick another", not "not a game": they are about to link it, so this is
-  // not an answer to remember forever.
-  await invoke('dismiss_prompt', { remember: false })
-  await openLinkPanel(exe || null)
+  if (!currentPrompt) return
+  // "No" / "Not a game" is the one answer that means never ask about this
+  // program again.
+  await invoke('dismiss_prompt', { remember: true })
   refresh()
 })
 

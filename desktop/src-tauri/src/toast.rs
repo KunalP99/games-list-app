@@ -11,7 +11,11 @@
 //!
 //! It will not draw over a game in *exclusive* fullscreen — nothing can.
 //! Borderless-fullscreen and windowed, which is nearly everything modern, are
-//! fine.
+//! fine — but only once [`force_to_front`] has run. Setting `always_on_top`
+//! when the window is already topmost does not re-sort it, so a game that
+//! grabs the foreground after the toast was built (the ordinary case — the
+//! toast is built the moment the game is judged, not after it has settled
+//! in) could still end up drawn over it without this.
 
 use tauri::{AppHandle, Manager, PhysicalRect, WebviewUrl, WebviewWindowBuilder};
 
@@ -68,7 +72,7 @@ pub fn show(app: &AppHandle, prompt: &PendingPrompt) {
         // Already up for an earlier prompt — the page re-reads the status on
         // `status-changed`, so it will show this one.
         let _ = window.show();
-        let _ = window.set_always_on_top(true);
+        force_to_front(&window);
         return;
     }
 
@@ -107,6 +111,20 @@ pub fn show(app: &AppHandle, prompt: &PendingPrompt) {
         Ok(_) => log::info!("toast asking about {}", prompt.exe_name),
         Err(err) => log::error!("could not show the toast: {err}"),
     }
+}
+
+/// Re-sort the toast to the very front of the topmost band.
+///
+/// Setting `always_on_top(true)` when a window is already topmost is a
+/// no-op for z-order — Windows only re-sorts the topmost band when the flag
+/// actually *changes*. A game that keeps re-grabbing the foreground (overlay
+/// hooks, or just regaining focus after launch) can end up ahead of an
+/// already-topmost toast, which is what let a borderless-fullscreen game
+/// cover it. Toggling the flag off and back on forces a re-sort every time,
+/// rather than only on the first show.
+pub fn force_to_front(window: &tauri::WebviewWindow) {
+    let _ = window.set_always_on_top(false);
+    let _ = window.set_always_on_top(true);
 }
 
 /// Take the toast down, if it is up.

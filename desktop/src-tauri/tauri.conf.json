@@ -14,9 +14,8 @@
         "title": "GamesList",
         "width": 420,
         "height": 580,
-        "minWidth": 380,
-        "minHeight": 480,
-        "resizable": true,
+        "resizable": false,
+        "maximizable": false,
         "fullscreen": false,
         "center": true,
         "visible": true
@@ -29,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -38,5 +38,13 @@
     ],
     "shortDescription": "Logs your game hours to GamesList",
     "longDescription": "Watches for games you have set to Playing on GamesList and logs the hours you spend in them."
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/KunalP99/games-list-app/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -32,6 +32,11 @@ function close() {
   invoke('close_toast').catch(() => {})
 }
 
+// The × button: only the window goes away. `pending_prompt` is untouched, so
+// the same question is still sitting on the status screen for anyone who
+// closed this by mistake and actually meant to answer it.
+el('ask-dismiss').addEventListener('click', close)
+
 function render(prompt) {
   current = prompt
   el('ask-exe').textContent = prompt.exe_name

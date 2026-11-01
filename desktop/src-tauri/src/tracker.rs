@@ -14,6 +14,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::api::{self, AgentState, PlayingGame};
+use crate::battlenet;
 use crate::config::{self, AppConfig};
 use crate::detect;
 use crate::ea;
@@ -245,19 +246,24 @@ pub async fn run_loop(app: AppHandle) {
             }
             (None, None) => {
                 // A Steam game can be identified exactly, so try that first:
-                // it needs no executable link and no question. Epic's and
-                // EA's own local records are the next best thing, for
-                // anything Steam didn't catch. Only when all of these come to
-                // nothing is the user asked anything.
+                // it needs no executable link and no question. An admin-
+                // curated global link is the next most trustworthy thing —
+                // someone has already vetted it, for everyone — ahead of
+                // Epic/EA/Battle.net's own local records, which are real but
+                // per-launcher. Only when all of these come to nothing is the
+                // user asked anything.
                 let identified = identify_steam_games(&app, &base, &token, &candidates, &mut judge).await
+                    || identify_global_exe_links(&app, &base, &token, &candidates, &mut judge).await
                     || identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_ea_games(&app, &base, &token, &candidates, &mut judge).await;
+                    || identify_ea_games(&app, &base, &token, &candidates, &mut judge).await
+                    || identify_battlenet_games(&app, &base, &token, &candidates, &mut judge).await
+                    || identify_guessed_titles(&app, &base, &token, &candidates, &mut judge).await;
                 if identified {
                     // Something was filed; re-read so the next tick can track
                     // it rather than waiting out the state cache.
                     tracker.shared.lock().unwrap().force_refresh = true;
                 } else {
-                    maybe_prompt(&app, &candidates, &playing, &mut judge);
+                    maybe_prompt(&app, &candidates, &playing, &executables, &mut judge);
                 }
             }
         }
@@ -510,6 +516,72 @@ async fn identify_steam_games(
     false
 }
 
+/// Admin-curated exe → game links (`/admin/exe-links`), checked purely by
+/// name — no launcher data, no guess, so unlike every other identify
+/// function here this needs no `candidate.path` at all. That matters: a
+/// real running game's path can be unreadable by every method tried
+/// (confirmed live against Star Citizen's own `StarCitizen.exe` on one run),
+/// which is exactly the kind of case an admin would curate a link for in the
+/// first place.
+async fn identify_global_exe_links(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    candidates: &[detect::Candidate],
+    judge: &mut detect::GameJudge,
+) -> bool {
+    let tracker = app.state::<Tracker>();
+    let dir = tracker.data_dir.clone();
+    let asked = config::load_asked(&dir);
+
+    for candidate in candidates {
+        if asked.contains(&candidate.exe_name) {
+            continue;
+        }
+        {
+            let shared = tracker.shared.lock().unwrap();
+            if shared.identified_titles.contains(&candidate.exe_name) {
+                continue;
+            }
+        }
+        if !judge.judge(candidate) {
+            continue;
+        }
+
+        let response = match api::post_identify(
+            base, token, api::IdentifyBy::LookupExe, &candidate.exe_name, "PC (Windows)",
+        ).await {
+            Ok(r) => r,
+            Err(err) => {
+                log::warn!("could not check global exe links for \"{}\": {err}", candidate.exe_name);
+                continue;
+            }
+        };
+
+        match response.result.as_str() {
+            "added" => {
+                let title = response.title.unwrap_or_else(|| candidate.exe_name.clone());
+                log::info!("added {title} as an ambient game (global exe link: \"{}\")", candidate.exe_name);
+                notify(app, "Now tracking", &format!("{title} — added to your Ambient games."));
+                return true;
+            }
+            "tracked" => return true,
+            "untracked" => {
+                log::info!(
+                    "\"{}\" is owned but {}; leaving it alone",
+                    candidate.exe_name,
+                    response.status.as_deref().unwrap_or("not trackable"),
+                );
+                tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
+            }
+            // "unknown": no global link for this exe yet. Never remembered —
+            // an admin could add one moments later.
+            _ => {}
+        }
+    }
+    false
+}
+
 /// The same idea as [`identify_steam_games`], for launchers that are not
 /// Steam — currently Epic. Only reached once the Steam path has already come
 /// up empty for a candidate, since a game can only ever be one or the other.
@@ -633,22 +705,84 @@ async fn identify_ea_games(
     .await
 }
 
+async fn identify_battlenet_games(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    candidates: &[detect::Candidate],
+    judge: &mut detect::GameJudge,
+) -> bool {
+    let games = battlenet::battlenet_games();
+    if games.is_empty() {
+        return false;
+    }
+    identify_by_title(app, base, token, candidates, judge, "Battle.net", |path| {
+        battlenet::display_name_for_exe(path, &games)
+    })
+    .await
+}
+
+/// Last resort: no launcher's own install record said what this is, so guess
+/// from the executable's own name — "DeadSpace.exe" to "Dead Space" — and let
+/// the server's exact-IGDB-match rule decide whether that guess is real.
+///
+/// Reached only once Steam, Epic, EA and Battle.net have all already had
+/// their (strictly more trustworthy) chance this tick and found nothing, so
+/// this never pre-empts an identification backed by real install data.
+async fn identify_guessed_titles(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    candidates: &[detect::Candidate],
+    judge: &mut detect::GameJudge,
+) -> bool {
+    identify_by_title(app, base, token, candidates, judge, "PC (Windows)", |path| {
+        let exe_name = std::path::Path::new(path).file_name()?.to_str()?;
+        matching::guess_title_from_exe(exe_name)
+    })
+    .await
+}
+
 /// Offer to link an unrecognised game — at most once per executable, ever.
 fn maybe_prompt(
     app: &AppHandle,
     candidates: &[detect::Candidate],
     playing: &[PlayingGame],
+    executables: &HashMap<String, String>,
     judge: &mut detect::GameJudge,
 ) {
     let tracker = app.state::<Tracker>();
-    if tracker.shared.lock().unwrap().pending_prompt.is_some() {
-        return;
+    {
+        let mut shared = tracker.shared.lock().unwrap();
+        if let Some(prompt) = &shared.pending_prompt {
+            // Still up — stay quiet rather than asking about something else
+            // while an answerable question is sitting on the status screen.
+            if candidates.iter().any(|c| c.exe_name == prompt.exe_name) {
+                return;
+            }
+            // The program the prompt was about has closed, so the question no
+            // longer applies. Without this, closing the toast's × (which
+            // deliberately leaves `pending_prompt` set, so an accidental close
+            // doesn't lose the question) and then launching something
+            // completely different silently asked about nothing at all —
+            // indistinguishable from the app simply being broken.
+            log::info!("{} is no longer running; dropping its unanswered prompt", prompt.exe_name);
+            shared.pending_prompt = None;
+            drop(shared);
+            let _ = app.emit("status-changed", ());
+        }
     }
 
-    // Nothing to link it to — say nothing at all.
-    if !playing.iter().any(|g| !g.linked) {
-        return;
-    }
+    // `g.linked` also counts a `steam_appid` on the game row, which only
+    // means something while *that* game is the one Steam reports running.
+    // A game owned on Steam but currently being played through a different
+    // client (confirmed live: Overwatch, played via Battle.net) has no
+    // Steam app id to match this tick and no executable link either — but
+    // `g.linked` still said yes, so this gate silently never asked. Only an
+    // executable link actually rules a game out of needing to be asked
+    // about: by the time this runs, the Steam app id check two steps up in
+    // `run_loop` has already had its chance this tick and come up empty.
+    let has_exe_link = |game_id: &str| executables.values().any(|id| id == game_id);
 
     let dir = tracker.data_dir.clone();
     let asked = config::load_asked(&dir);
@@ -665,7 +799,7 @@ fn maybe_prompt(
         // Name the likeliest game rather than whichever happens to be first:
         // "vampiresurvivors.exe" should ask about Vampire Survivors even if
         // three other games are also unlinked.
-        let unlinked: Vec<&PlayingGame> = playing.iter().filter(|g| !g.linked).collect();
+        let unlinked: Vec<&PlayingGame> = playing.iter().filter(|g| !has_exe_link(&g.id)).collect();
         let matched = matching::best_title(
             &candidate.exe_name,
             unlinked.iter().map(|g| g.title.as_str()),
@@ -674,13 +808,14 @@ fn maybe_prompt(
         .and_then(|(title, _)| unlinked.iter().find(|g| g.title == title))
         .copied();
 
-        // Nothing resembled it, but the gates have already said it looks like a
-        // game, so it is still worth one question — just not one that names a
-        // game at random.
+        // Nothing resembled it — including, now, an empty library with
+        // nothing to resemble at all — but the gates have already said it
+        // looks like a game, so it is still worth one question. `suggestion`
+        // being absent only ever reaches the unconfident toast, which never
+        // reads these fields: "Pick it" opens the search panel for the exe
+        // directly rather than naming a game at random.
         let confident = matched.is_some();
-        let Some(suggestion) = matched.or_else(|| unlinked.first().copied()) else {
-            return;
-        };
+        let suggestion = matched.or_else(|| unlinked.first().copied());
 
         // Deliberately not recorded as asked here. Posing a question is not
         // the same as having it answered: a toast nobody saw, or one lost to
@@ -688,8 +823,8 @@ fn maybe_prompt(
         // again. It is written when someone actually answers.
         let prompt = PendingPrompt {
             exe_name: candidate.exe_name.clone(),
-            suggested_game_id: suggestion.id.clone(),
-            suggested_title: suggestion.title.clone(),
+            suggested_game_id: suggestion.map(|g| g.id.clone()).unwrap_or_default(),
+            suggested_title: suggestion.map(|g| g.title.clone()).unwrap_or_default(),
             confident,
         };
         tracker.shared.lock().unwrap().pending_prompt = Some(prompt.clone());
