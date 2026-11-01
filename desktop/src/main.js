@@ -146,6 +146,13 @@ function renderUpdateModal(pendingUpdate) {
   modal.hidden = false
 }
 
+// Pairing starts itself the moment the app notices it isn't paired — no
+// "Connect" button to click first. Guarded so a 30s refresh tick while
+// already mid-flow (or one that lands right as the window is about to
+// navigate away) doesn't fire it a second time; a failed attempt clears the
+// guard so the next tick is free to retry.
+let autoPairStarted = false
+
 let startedAtMs = null
 /** The site's base URL, for the in-window settings view — carried on every status refresh. */
 let apiBase = null
@@ -173,7 +180,13 @@ async function refresh() {
     ? (status.display_name ?? 'Signed in')
     : 'Not connected'
 
-  if (!status.paired) return
+  if (!status.paired) {
+    if (!autoPairStarted) {
+      autoPairStarted = true
+      invoke('start_pairing').catch(() => { autoPairStarted = false })
+    }
+    return
+  }
 
   const tracking = status.tracking
   el('status-dot').classList.toggle('live', Boolean(tracking))

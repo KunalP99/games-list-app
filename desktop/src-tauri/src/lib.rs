@@ -374,6 +374,17 @@ fn sign_out(app: AppHandle) {
     {
         let mut config = tracker.config.lock().unwrap();
         config.token = None;
+        // config.json is shared by every build on a machine — debug, release,
+        // the installer — keyed by the app's identifier, not by which one
+        // wrote it. A dev build pointed at the local stack with
+        // `set_api_base` (never exposed in the UI; console-only, for
+        // testing) leaves that setting behind for every other build on this
+        // machine too, including a real install. Caught live: Connect opened
+        // a blank window because it was trying to reach `localhost:3000`
+        // with nothing listening there. Sign Out is the one place an actual
+        // user can reach from inside the app, so it's also the place that
+        // resets this back to production.
+        config.api_base = config::DEFAULT_API_BASE.to_string();
         config::save(&tracker.data_dir, &config);
     }
     let mut shared = tracker.shared.lock().unwrap();

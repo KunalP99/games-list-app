@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { approveDevicePairing } from '../../actions'
+import { approveDevicePairing } from '@/app/(app)/settings/actions'
 
 export default function PairDeviceForm({ label, callback }: { label: string; callback: string }) {
   const [name, setName] = useState(label)
@@ -48,15 +48,6 @@ export default function PairDeviceForm({ label, callback }: { label: string; cal
         />
       </div>
 
-      <div className="rounded-lg bg-surface-sunken p-3 space-y-1.5">
-        <p className="text-xs font-medium text-fg-secondary">What this device will be able to do</p>
-        <ul className="text-xs text-fg-subtle space-y-1 leading-relaxed">
-          <li>• Add hours to games you have set to <span className="font-medium text-fg-secondary">Playing</span></li>
-          <li>• See which games are set to Playing, to recognise them</li>
-          <li>• Nothing else — completed and backlog games are never changed</li>
-        </ul>
-      </div>
-
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -68,7 +59,12 @@ export default function PairDeviceForm({ label, callback }: { label: string; cal
         </button>
         <button
           type="button"
-          onClick={() => window.close()}
+          // This page now opens in the app's own main window, not a
+          // disposable popup, so there's no second window for window.close()
+          // to get rid of — it would just hide the whole app instead. Hitting
+          // the same loopback callback with no token tells the app to bring
+          // its own screen back, exactly like a successful Allow does.
+          onClick={() => { window.location.href = callback }}
           className="px-4 py-2 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
         >
           Cancel

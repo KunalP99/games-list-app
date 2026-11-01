@@ -1,9 +1,19 @@
 //! Getting a device token without anybody copying one.
 //!
-//! The app opens a listener on localhost, then opens the site's pair page in
-//! its own window with that address as the callback. The user signs in as
-//! normal, approves once, and the page redirects to the listener with the
-//! token — the standard flow for native apps (RFC 8252).
+//! The app opens a listener on localhost, then navigates the *main* window
+//! itself to the site's pair page, with that address as the callback. The
+//! user signs in as normal, approves once, and the page redirects to the
+//! listener with the token — the standard flow for native apps (RFC 8252).
+//!
+//! This used to open a second, separate window for the pair page. That window
+//! had no diagnostics of its own and, on a machine whose `config.json` held a
+//! stale `api_base` from local testing, showed up as a blank white popup with
+//! nothing to go on — confirmed live, and "same error as before" the moment
+//! it was reported, since a second window was exactly the kind of thing
+//! already blamed for an unrelated blank-window bug earlier. Navigating the
+//! one window the user is already looking at sidesteps the whole class: there
+//! is no second window left to go blank, and the bad `api_base` that caused
+//! this specific instance is now also reset by `sign_out` (see lib.rs).
 //!
 //! The site checks that the callback really is loopback before it will issue
 //! anything (`isLoopbackCallback` in lib/agent-auth.ts), so a token cannot be
@@ -11,8 +21,10 @@
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::config;
 use crate::tracker::Tracker;
@@ -21,6 +33,12 @@ use crate::tracker::Tracker;
 const PAIRING_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 pub fn start(app: AppHandle) -> Result<(), String> {
+    let main = app.get_webview_window("main").ok_or("no main window")?;
+    // Captured now, while it's still pointed at the app's own local UI, so
+    // `finish` has something to navigate back to once pairing is done —
+    // there is no other record of what that URL was.
+    let return_url = main.url().map_err(|e| e.to_string())?;
+
     // Port 0 asks the OS for a free one, and binding to 127.0.0.1 (rather than
     // 0.0.0.0) means nothing outside this machine can reach it.
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
@@ -34,40 +52,51 @@ pub fn start(app: AppHandle) -> Result<(), String> {
         urlencode(&label)
     );
 
-    log::info!("pairing: opening {url}");
+    log::info!("pairing: navigating the main window to {url}");
     let parsed = url.parse().map_err(|_| "could not build the pairing URL".to_string())?;
-    WebviewWindowBuilder::new(&app, "pair", WebviewUrl::External(parsed))
-        .title("Connect GamesList")
-        .inner_size(520.0, 760.0)
-        .center()
-        .on_navigation(|target| {
-            // A blank window is otherwise impossible to diagnose: this says
-            // whether the webview ever tried to go anywhere.
-            log::info!("pairing window navigating to {target}");
-            true
-        })
-        .build()
-        .map_err(|e| e.to_string())?;
+    main.navigate(parsed).map_err(|e| e.to_string())?;
+
+    // Set once pairing concludes, success or cancel, so the poller below
+    // stops immediately instead of continuing to check the window's URL for
+    // up to ten more minutes — including, briefly, while that URL is the
+    // loopback callback itself (see the host check below), which is exactly
+    // what let this poller race the real completion and drag the window back
+    // to the pair page before `finish` ever got a chance to show the result.
+    let done = Arc::new(AtomicBool::new(false));
 
     // Bring the window back to the approve screen once the user has signed in.
     //
     // Signing in redirects to /dashboard, and Next does that as a client-side
-    // router navigation — so `on_navigation` never fires and the window simply
-    // sits there on the games list while the app waits forever. Polling the
-    // window's URL is the only thing that reliably notices.
+    // router navigation, so there is no new top-level navigation to catch —
+    // the window simply sits there on the games list while the app waits
+    // forever. Polling the window's URL is the only thing that reliably
+    // notices.
     {
         let app = app.clone();
         let pair_url = url.clone();
+        let done = done.clone();
         std::thread::spawn(move || {
             let deadline = Instant::now() + PAIRING_TIMEOUT;
-            while Instant::now() < deadline {
+            while Instant::now() < deadline && !done.load(Ordering::Relaxed) {
                 std::thread::sleep(Duration::from_millis(700));
-                let Some(window) = app.get_webview_window("pair") else {
-                    return; // closed, or pairing finished
+                if done.load(Ordering::Relaxed) {
+                    return;
+                }
+                let Some(window) = app.get_webview_window("main") else {
+                    return; // app is closing
                 };
                 let Ok(current) = window.url() else { continue };
                 // about:blank while the first page loads — not a real location.
                 if current.scheme() != "http" && current.scheme() != "https" {
+                    continue;
+                }
+                // The loopback callback itself (127.0.0.1) is never a page to
+                // react to — it's the signal this whole flow is waiting for,
+                // not a place the user organically navigated to. Checking the
+                // host, not just the path, is what makes this safe for any
+                // request to that address, not only the one path this code
+                // happens to send it to today.
+                if current.host_str() == Some("127.0.0.1") {
                     continue;
                 }
                 let path = current.path();
@@ -100,10 +129,22 @@ pub fn start(app: AppHandle) -> Result<(), String> {
                     match token_from_request(&request) {
                         Some(token) => {
                             respond(&mut stream, CONNECTED_PAGE);
-                            finish(&app, token);
+                            done.store(true, Ordering::Relaxed);
+                            finish(&app, Some(token), return_url.clone());
                             break;
                         }
-                        None => respond(&mut stream, FAILED_PAGE),
+                        // No token — Cancel on the pair page, which (now that
+                        // it's loaded in the main window rather than a
+                        // disposable popup) hits this same loopback address
+                        // instead of calling window.close(), so there is
+                        // still a real window to bring back to the app's own
+                        // UI rather than leaving it stuck on a dead end.
+                        None => {
+                            respond(&mut stream, FAILED_PAGE);
+                            done.store(true, Ordering::Relaxed);
+                            finish(&app, None, return_url.clone());
+                            break;
+                        }
                     }
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -117,17 +158,20 @@ pub fn start(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn finish(app: &AppHandle, token: String) {
-    let tracker = app.state::<Tracker>();
-    {
+fn finish(app: &AppHandle, token: Option<String>, return_url: tauri::Url) {
+    // `None` is a cancel, not a success — nothing to save, just a window to
+    // bring back.
+    if let Some(token) = token {
+        let tracker = app.state::<Tracker>();
         let mut config = tracker.config.lock().unwrap();
         config.token = Some(token);
         config::save(&tracker.data_dir, &config);
     }
-    if let Some(window) = app.get_webview_window("pair") {
-        let _ = window.close();
-    }
     if let Some(main) = app.get_webview_window("main") {
+        // Back to the app's own UI, in the same window pairing happened in —
+        // it will read the freshly saved token on its next status refresh
+        // and render as signed in, same as any other state change.
+        let _ = main.navigate(return_url);
         let _ = main.show();
         let _ = main.set_focus();
     }
