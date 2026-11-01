@@ -1,6 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "GamesList",
+  "mainBinaryName": "gameslist",
   "version": "0.1.1",
   "identifier": "uk.co.gameslist.desktop",
   "build": {
