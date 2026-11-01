@@ -6,6 +6,9 @@ All notable changes to **GamesList** are documented here, newest first.
 
 ## [Unreleased]
 
+### Added
+- **A "Download for Windows" button, in Settings → Devices.** `/api/download` asks GitHub for whichever release is actually latest and redirects straight to its installer, so the link never goes stale when a new version ships — nothing to remember to update per release. Making this (and the desktop app's own self-updater, which hits the same kind of GitHub Releases URL) actually work required making the repo public: a private repo's release assets 404 for an unauthenticated request, which is exactly what both a browser clicking this button and the in-app updater are.
+
 ### Fixed
 - **The Ambient tab on My Games (and on a friend's profile) was always empty**, even with real Ambient games in the library. The main list query excluded Playing/Ambient unconditionally — correct for "All", which has its own Now Playing and Recently Played sections above it — but that exclusion stayed applied even after also filtering to `status = 'ambient'`, which is a contradiction no row can ever satisfy. Now the exclusion only applies when no specific tab is selected; confirmed directly against the database that the old query shape returns 0 rows for a user with real Ambient games and the fixed one returns them.
 

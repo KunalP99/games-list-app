@@ -372,6 +372,13 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
           are ever updated — completed and backlog games are never touched.
         </p>
 
+        <a
+          href="/api/download"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+        >
+          Download for Windows
+        </a>
+
         {devices.length > 0 && (
           <ul className="divide-y divide-edge-subtle border border-edge-base rounded-lg">
             {devices.map(d => (
