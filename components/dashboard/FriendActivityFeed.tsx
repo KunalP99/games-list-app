@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { type ActivityItem, activityVerb, formatActivityDate, getInitials } from '@/lib/activity'
+import { type ActivityItem, activityVerb, activitySuffix, formatActivityDate, getInitials } from '@/lib/activity'
 import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
 
 // Two rather than the activity page's three: this card is half-width and a
@@ -56,7 +56,7 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
                   {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
                 </span>
                 {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && (
-                  <>{' '}<span className="font-medium">{item.gameTitle}</span></>
+                  <>{' '}<span className="font-medium">{item.gameTitle}</span>{activitySuffix(item)}</>
                 )}
                 {isBatch && (
                   <>

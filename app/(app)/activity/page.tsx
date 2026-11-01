@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
-import { buildActivityItems, groupActivityItems, activityVerb, formatActivityDate, getInitials, type RawAchievementUnlock } from '@/lib/activity'
+import { buildActivityItems, groupActivityItems, suppressRepeatedStarts, activityVerb, activitySuffix, formatActivityDate, getInitials, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
 
 // How many members of a day's batch get named before the rest collapse into a
@@ -45,6 +45,26 @@ export default async function ActivityPage() {
     .order('created_at', { ascending: false })
     .limit(30) as { data: { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null }
 
+  const { data: rawSessions } = await supabase
+    .from('play_sessions')
+    .select('user_id, game_id, started_at, ended_at, minutes')
+    .in('user_id', allUserIds)
+    .order('started_at', { ascending: false })
+    .limit(30) as { data: RawPlaySession[] | null }
+
+  // "Started playing" is only worth saying the first time — an in-progress
+  // session's own row in `rawSessions` can't tell that on its own, since it's
+  // only a recent window; this checks every session those specific games
+  // have ever had, not just the ones that made the recent-30 cut.
+  const ongoingGameIds = Array.from(new Set((rawSessions ?? []).filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))
+  const { data: sessionHistory } = ongoingGameIds.length > 0
+    ? await supabase
+        .from('play_sessions')
+        .select('user_id, game_id, started_at')
+        .in('game_id', ongoingGameIds) as { data: { user_id: string; game_id: string | null; started_at: string }[] | null }
+    : { data: [] as { user_id: string; game_id: string | null; started_at: string }[] }
+  const sessions = suppressRepeatedStarts(rawSessions ?? [], sessionHistory ?? [])
+
   const { data: rawUnlocks } = await (supabase.from('user_achievements') as any)
     .select('user_id, achievement_id, unlocked_at')
     .in('user_id', allUserIds)
@@ -81,7 +101,7 @@ export default async function ActivityPage() {
   // Group before slicing, so a day of unlocks costs one row of the 40 rather
   // than crowding everything else out.
   const items = groupActivityItems(
-    buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks),
+    buildActivityItems(allGames ?? [], allSpins ?? [], profileMap, ticketsByGame, user!.id, achievementUnlocks, sessions),
   ).slice(0, 40)
 
   return (
@@ -143,7 +163,7 @@ export default async function ActivityPage() {
                       {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
                     </span>
                     {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
-                      <>{' '}<span className="font-medium">{item.gameTitle}</span></>
+                      <>{' '}<span className="font-medium">{item.gameTitle}</span>{activitySuffix(item)}</>
                     )}
                     {isBatch && (
                       <>

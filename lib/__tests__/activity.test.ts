@@ -2,11 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   buildActivityItems,
   activityVerb,
+  activitySuffix,
+  formatSessionDuration,
   formatActivityDate,
   getInitials,
   groupActivityItems,
+  suppressRepeatedStarts,
   type ActivityItem,
   type RawAchievementUnlock,
+  type RawPlaySession,
 } from '../activity'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -97,6 +101,62 @@ describe('activityVerb', () => {
   it('returns "unlocked" for achievement_unlock type', () => {
     expect(activityVerb({ ...base, type: 'achievement_unlock' })).toBe('unlocked')
   })
+
+  it('returns "started playing" for an ambient session with no duration yet', () => {
+    expect(activityVerb({ ...base, type: 'play_session' })).toBe('started playing')
+  })
+
+  it('returns "played" for an ambient session that has ended', () => {
+    expect(activityVerb({ ...base, type: 'play_session', sessionMinutes: 150 })).toBe('played')
+  })
+
+  it('treats a 0-minute ended session as ended, not ongoing', () => {
+    // sessionMinutes is only absent while the session has no end time — a
+    // session that genuinely ended under a minute in must not read as still
+    // ongoing.
+    expect(activityVerb({ ...base, type: 'play_session', sessionMinutes: 0 })).toBe('played')
+  })
+})
+
+// ─── formatSessionDuration ──────────────────────────────────────────────────
+
+describe('formatSessionDuration', () => {
+  it('shows minutes only under an hour', () => {
+    expect(formatSessionDuration(45)).toBe('45m')
+    expect(formatSessionDuration(0)).toBe('0m')
+  })
+
+  it('shows hours and minutes past an hour', () => {
+    expect(formatSessionDuration(135)).toBe('2h 15m')
+  })
+
+  it('omits a zero minutes remainder on an exact hour', () => {
+    expect(formatSessionDuration(120)).toBe('2h')
+  })
+})
+
+// ─── activitySuffix ─────────────────────────────────────────────────────────
+
+describe('activitySuffix', () => {
+  const base = {
+    userId: 'u', displayName: 'A', username: 'a', accentColour: null, date: '', isSelf: false,
+  }
+
+  it('is empty while an ambient session is still ongoing', () => {
+    expect(activitySuffix({ ...base, type: 'play_session' })).toBe('')
+  })
+
+  it('reports the duration once an ambient session has ended', () => {
+    expect(activitySuffix({ ...base, type: 'play_session', sessionMinutes: 150 })).toBe(' for 2h 30m')
+  })
+
+  it('shows minutes only for a sub-hour session', () => {
+    expect(activitySuffix({ ...base, type: 'play_session', sessionMinutes: 45 })).toBe(' for 45m')
+  })
+
+  it('is empty for every other type', () => {
+    expect(activitySuffix({ ...base, type: 'completed' })).toBe('')
+  })
 })
 
 // ─── formatActivityDate ───────────────────────────────────────────────────────
@@ -129,6 +189,13 @@ describe('formatActivityDate', () => {
 
   it('returns "Yesterday" for exactly 1 day ago', () => {
     expect(formatActivityDate('2024-06-14T12:00:00Z')).toBe('Yesterday')
+  })
+
+  it('shows the plain date, not "Just now", for a date in the future', () => {
+    // The actual bug this guards against: a completion date three weeks out
+    // produced a negative diff, which `< 60` (minutes) still satisfied, so
+    // it read as "Just now" instead of the nonsensical future date it was.
+    expect(formatActivityDate('2024-07-05T12:00:00Z')).toBe('5 Jul')
   })
 
   it('returns days for 5 days ago', () => {
@@ -283,6 +350,65 @@ describe('buildActivityItems', () => {
     }
     const items = buildActivityItems([], [], profiles, {}, 'user-2', [unlock])
     expect(items).toHaveLength(0)
+  })
+
+  it('turns an in-progress ambient session into a "started playing" item', () => {
+    const game = { ...baseGame, id: 'amb-1', status: 'ambient' }
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z', ended_at: null, minutes: 0,
+    }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+    expect(items).toHaveLength(1)
+    expect(items[0].type).toBe('play_session')
+    expect(items[0].gameTitle).toBe('Elden Ring')
+    expect(items[0].sessionMinutes).toBeUndefined()
+    expect(items[0].date).toBe('2024-04-01T10:00:00Z')
+  })
+
+  it('turns a finished ambient session into a "played for Xh Ym" item, dated by its end', () => {
+    const game = { ...baseGame, id: 'amb-1', status: 'ambient' }
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z', ended_at: '2024-04-01T12:30:00Z', minutes: 150,
+    }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+    expect(items[0].sessionMinutes).toBe(150)
+    expect(items[0].date).toBe('2024-04-01T12:30:00Z')
+  })
+
+  it('also turns a playing-status game\'s session into its own item — not just ambient', () => {
+    // A wheel/choose pick is status 'playing', not 'ambient', but the agent
+    // tracks its hours exactly the same way, so its sessions earn the same
+    // "started playing" / "played for Xh" treatment. This sits alongside
+    // the game's own one-time 'playing' item (that one is about being
+    // *assigned* the game; this is about actually sitting down with it).
+    const game = { ...baseGame, id: 'g-playing', status: 'playing' }
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'g-playing', started_at: '2024-04-01T10:00:00Z', ended_at: null, minutes: 0,
+    }
+    const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+    expect(items).toHaveLength(2)
+    expect(items.map(i => i.type).sort()).toEqual(['play_session', 'playing'])
+  })
+
+  it('ignores a play session for a backlog/completed/dnf game', () => {
+    // The agent only ever writes hours to a Playing or Ambient game — a
+    // session row against anything else would mean the game moved on since,
+    // and this isn't live play any more.
+    for (const status of ['backlog', 'completed', 'dnf']) {
+      const game = { ...baseGame, id: `g-${status}`, status }
+      const session: RawPlaySession = {
+        user_id: 'user-1', game_id: `g-${status}`, started_at: '2024-04-01T10:00:00Z', ended_at: null, minutes: 0,
+      }
+      const items = buildActivityItems([game], [], profiles, {}, 'user-2', [], [session])
+      expect(items.some(i => i.type === 'play_session')).toBe(false)
+    }
+  })
+
+  it('ignores a play session whose game cannot be found', () => {
+    const session: RawPlaySession = {
+      user_id: 'user-1', game_id: 'missing', started_at: '2024-04-01T10:00:00Z', ended_at: null, minutes: 0,
+    }
+    expect(buildActivityItems([], [], profiles, {}, 'user-2', [], [session])).toHaveLength(0)
   })
 
   it('sorts all items by date descending', () => {
@@ -537,5 +663,53 @@ describe('groupActivityItems: backlog adds', () => {
     const out = groupActivityItems([completed('g1', 'Hades'), completed('g2', 'Celeste')])
     expect(out).toHaveLength(2)
     expect(out[0].batch).toBeUndefined()
+  })
+})
+
+// ─── suppressRepeatedStarts ─────────────────────────────────────────────────
+
+describe('suppressRepeatedStarts', () => {
+  const ongoing = (startedAt: string): RawPlaySession =>
+    ({ user_id: 'user-1', game_id: 'amb-1', started_at: startedAt, ended_at: null, minutes: 0 })
+  const finished = (startedAt: string): RawPlaySession =>
+    ({ user_id: 'user-1', game_id: 'amb-1', started_at: startedAt, ended_at: '2024-04-01T12:00:00Z', minutes: 90 })
+
+  it('keeps an in-progress session that really is the first one ever', () => {
+    const session = ongoing('2024-04-01T10:00:00Z')
+    const history = [{ user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z' }]
+    expect(suppressRepeatedStarts([session], history)).toEqual([session])
+  })
+
+  it('drops an in-progress session once an earlier one exists for the same game', () => {
+    // The actual bug this guards against: every launch writes its own row,
+    // so without this a replayed ambient game re-announced "started
+    // playing" on every single launch, not just the first.
+    const session = ongoing('2024-04-05T10:00:00Z')
+    const history = [
+      { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z' }, // the real first session
+      { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-05T10:00:00Z' }, // this one
+    ]
+    expect(suppressRepeatedStarts([session], history)).toEqual([])
+  })
+
+  it('always keeps a finished session, first or not', () => {
+    const session = finished('2024-04-05T10:00:00Z')
+    const history = [
+      { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z' },
+      { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-05T10:00:00Z' },
+    ]
+    expect(suppressRepeatedStarts([session], history)).toEqual([session])
+  })
+
+  it('does not confuse two different users playing the same game', () => {
+    const session: RawPlaySession = { user_id: 'user-2', game_id: 'amb-1', started_at: '2024-04-05T10:00:00Z', ended_at: null, minutes: 0 }
+    // Only user-1 has history for this game; user-2's own session is their first.
+    const history = [{ user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z' }]
+    expect(suppressRepeatedStarts([session], history)).toEqual([session])
+  })
+
+  it('keeps a session with no history at all passed in', () => {
+    const session = ongoing('2024-04-01T10:00:00Z')
+    expect(suppressRepeatedStarts([session], [])).toEqual([session])
   })
 })

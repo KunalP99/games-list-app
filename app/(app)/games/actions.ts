@@ -7,6 +7,7 @@ import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/li
 import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
 import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
+import { isFutureDate } from '@/lib/dates'
 
 type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
 
@@ -128,6 +129,11 @@ export async function createGame(formData: FormData) {
         ? (formData.get('completion_date_year') ? `${formData.get('completion_date_year')}-01-01` : null)
         : ((formData.get('completion_date') as string) || null))
     : null
+  // A completed or dropped game can't be dated in the future — whichever one
+  // actually happens, it hasn't happened yet.
+  if (completionDate && isFutureDate(completionDate)) {
+    return { error: `${status === 'dnf' ? 'Drop' : 'Completion'} date can't be in the future.` }
+  }
 
   let description: string | null = null
   let genres: string[] | null = null
@@ -241,6 +247,9 @@ export async function updateGame(id: string, formData: FormData) {
         ? (formData.get('completion_date_year') ? `${formData.get('completion_date_year')}-01-01` : null)
         : ((formData.get('completion_date') as string) || null))
     : null
+  if (completionDate && isFutureDate(completionDate)) {
+    return { error: `${status === 'dnf' ? 'Drop' : 'Completion'} date can't be in the future.` }
+  }
 
   // Only re-fetch metadata if the provider id changed
   const existingProviderId = METADATA_PROVIDER === 'igdb' ? existing?.igdb_id : existing?.rawg_id
@@ -374,6 +383,10 @@ export async function markAsCompleted(
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  if (details && isFutureDate(details.completionDate)) {
+    return { error: "Completion date can't be in the future." }
+  }
 
   let hours: number | null
   let achievementProgress: number | null

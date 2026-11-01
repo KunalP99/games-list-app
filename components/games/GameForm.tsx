@@ -8,6 +8,7 @@ import PlatformSelect from './PlatformSelect'
 import type { Game } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
 import { fetchGameSearchPage } from '@/lib/searchGamesClient'
+import { todayIsoDate } from '@/lib/dates'
 
 const STATUS_OPTIONS = [
   { value: 'playing', label: 'Playing' },
@@ -534,6 +535,7 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
                     defaultValue={
                       game?.completion_date_precision === 'year' ? '' : (game?.completion_date ?? '')
                     }
+                    max={todayIsoDate()}
                     className={input}
                   />
                 )}
@@ -619,6 +621,7 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
                     defaultValue={
                       game?.completion_date_precision === 'year' ? '' : (game?.completion_date ?? '')
                     }
+                    max={todayIsoDate()}
                     className={input}
                   />
                 )}
