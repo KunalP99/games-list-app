@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import { createAdminClient } from './supabase/admin'
 
 export type AchievementRarity = 'common' | 'uncommon' | 'rare' | 'epic'
 export type AchievementCategory =
@@ -642,7 +643,8 @@ export async function checkAndAwardAchievements(
     })
     if (insertError) continue
 
-    await (supabase.rpc as any)('award_xp', { p_user_id: userId, p_amount: ach.xp })
+    // award_xp is service-role only (db/security-hardening.sql).
+    await createAdminClient().rpc('award_xp', { p_user_id: userId, p_amount: ach.xp })
     newlyUnlocked.push({ ...ach, unlocked_at: new Date().toISOString() })
   }
 

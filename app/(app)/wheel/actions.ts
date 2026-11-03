@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { TICKET_COSTS, TICKET_AWARDS, WHEEL_MIN_GAMES } from '@/lib/constants'
 import { nextWheelTurn, pickWinner, decideWonGameAction } from '@/lib/wheel'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
@@ -10,8 +11,16 @@ import type { WheelTurn } from '@/lib/types'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { restoreSession, collapsePhase, type WheelSession } from '@/lib/wheel-session'
 
+// The wheel's state columns (wheel_turn, pending_wheel_*, wheel_session) and the
+// ticket functions are not writable by the browser roles — otherwise anyone
+// could hand themselves a Choose turn or a balance from the browser console
+// (db/security-hardening.sql). Those writes go through the service-role client
+// instead, always scoped to the id from auth.getUser(). Reads and the
+// user-owned tables (games, wheel_spins) keep using the caller's own client.
+const privileged = () => createAdminClient()
+
 async function advanceTurn(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  _supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   current: WheelTurn,
   wonGameId?: string | null,
@@ -20,7 +29,7 @@ async function advanceTurn(
   // the turn that produced it. DNF-ing that game reverts the turn (games/actions).
   // Any action that added no game clears the pointer, so only the MOST RECENT
   // wheel outcome is ever revertable.
-  await (supabase.from('profiles') as any)
+  const { error } = await (privileged().from('profiles') as any)
     .update({
       wheel_turn: nextWheelTurn(current),
       pending_wheel_game_id: wonGameId ?? null,
@@ -30,6 +39,7 @@ async function advanceTurn(
       wheel_session: null,
     })
     .eq('id', userId)
+  if (error) console.error('advanceTurn failed:', error.message)
 }
 
 // ─── Resumable turn state ───────────────────────────────────────────────────
@@ -39,11 +49,11 @@ async function advanceTurn(
 // they bought.
 
 async function persistSession(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  _supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   session: WheelSession,
 ) {
-  const { error } = await (supabase.from('profiles') as any)
+  const { error } = await (privileged().from('profiles') as any)
     .update({ wheel_session: session })
     .eq('id', userId)
   if (error) console.error('persistSession failed:', error.message)
@@ -91,7 +101,7 @@ export async function clearWheelSession() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in' }
 
-  await (supabase.from('profiles') as any)
+  await (privileged().from('profiles') as any)
     .update({ wheel_session: null })
     .eq('id', user.id)
   return { success: true as const }
@@ -286,7 +296,7 @@ export async function paySpinAgain(games: string[], exclude: string[] = [], sess
   const pool = games.filter(g => !exclude.includes(g))
   const winner = pickWinner(pool.length > 0 ? pool : games)
 
-  const { error: spendError } = await (supabase.rpc as any)('award_tickets', {
+  const { error: spendError } = await privileged().rpc('award_tickets', {
     p_user_id: user.id,
     p_amount: -TICKET_COSTS.spin,
     p_reason: 'spin',
@@ -335,7 +345,7 @@ export async function payUpgradeToSpinReroll(
   const pool = games.filter(g => !skip.has(g))
   const nextGame = pickWinner(pool.length > 0 ? pool : games)
 
-  const { error: spendError } = await (supabase.rpc as any)('award_tickets', {
+  const { error: spendError } = await privileged().rpc('award_tickets', {
     p_user_id: user.id,
     p_amount: -TICKET_COSTS.spin_reroll,
     p_reason: 'spin_reroll',
@@ -454,7 +464,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
   }
   if (!gameName.trim()) return { error: 'Game name cannot be empty' }
 
-  const { error: spendError } = await (supabase.rpc as any)('award_tickets', {
+  const { error: spendError } = await privileged().rpc('award_tickets', {
     p_user_id: user.id,
     p_amount: -TICKET_COSTS.choose_game,
     p_reason: 'choose_game',
@@ -609,7 +619,7 @@ export async function skipChooseTurn() {
   const profile = await getProfile(supabase, user.id)
   if (profile?.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
 
-  const { error: awardError } = await (supabase.rpc as any)('award_tickets', {
+  const { error: awardError } = await privileged().rpc('award_tickets', {
     p_user_id: user.id,
     p_amount: TICKET_AWARDS.turn_skipped,
     p_reason: 'turn_skipped',

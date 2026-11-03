@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types'
 import { generateDeviceToken, hashToken, isLoopbackCallback } from '@/lib/agent-auth'
@@ -41,8 +42,10 @@ export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
-  const { error } = await supabase
-    .from('profiles')
+  // Service-role: clearing wheel_session touches a wheel column the browser
+  // roles can't write (db/security-hardening.sql). Scoped to the caller's id.
+  const { error } = await (createAdminClient()
+    .from('profiles') as any)
     .update({
       wheel_enabled: enabled,
       // Turning the wheel off discards any half-finished spin — resuming one
@@ -50,7 +53,7 @@ export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult
       // `wheel_turn` is deliberately untouched, so re-enabling puts them back
       // on the same turn they left on.
       ...(enabled ? {} : { wheel_session: null }),
-    } as never)
+    })
     .eq('id', user.id)
 
   if (error) return { success: false, error: error.message }
