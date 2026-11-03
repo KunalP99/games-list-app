@@ -1,6 +1,10 @@
 # Plan — Master list game detection (Discord-style)
 
-Written: 2026-11-03 · Status: **Phases 0–5 built on `main` (local, not pushed); nothing live yet**
+Written: 2026-11-03 · Status: **Done — all phases live in production (2026-11-03)**
+
+Shipped: site deployed with `db/master-list.sql`, `db/security-hardening.sql` and `db/ignored-executables.sql` run in prod (the last was missed at first and briefly took every tracker "offline" — `/api/agent/state` reads it); first import applied via Vercel's cron "Run"; desktop **v0.2.0** released (GitHub release, signed with the existing updater key). `global_exe_links` never existed in prod, so `db/drop-global-exe-links.sql` was a no-op. Schema re-dumped into `db/schema.sql` / `supabase/migrations/`.
+
+The status notes below are kept as the record of how it got there.
 
 ## Status — 2026-11-03, evening
 

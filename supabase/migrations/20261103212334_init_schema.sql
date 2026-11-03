@@ -202,6 +202,119 @@ CREATE TABLE public.changelog_entries (
 
 
 --
+-- Name: detectable_dismissed; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.detectable_dismissed (
+    path_suffix text NOT NULL,
+    dismissed_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: detectable_games; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.detectable_games (
+    id bigint NOT NULL,
+    path_suffix text NOT NULL,
+    source text NOT NULL,
+    name text NOT NULL,
+    steam_appid integer,
+    igdb_id integer,
+    discord_id text,
+    approved_by uuid,
+    last_seen_import timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT detectable_games_source_check CHECK ((source = ANY (ARRAY['discord'::text, 'admin'::text])))
+);
+
+
+--
+-- Name: detectable_games_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.detectable_games_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: detectable_games_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.detectable_games_id_seq OWNED BY public.detectable_games.id;
+
+
+--
+-- Name: detectable_import_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.detectable_import_runs (
+    id bigint NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    status text NOT NULL,
+    entries_seen integer,
+    rows_upserted integer,
+    rows_removed integer,
+    note text,
+    CONSTRAINT detectable_import_runs_status_check CHECK ((status = ANY (ARRAY['applied'::text, 'rejected'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: detectable_import_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.detectable_import_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: detectable_import_runs_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.detectable_import_runs_id_seq OWNED BY public.detectable_import_runs.id;
+
+
+--
+-- Name: device_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.device_tokens (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    label text NOT NULL,
+    last_seen_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: game_executables; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.game_executables (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    game_id uuid NOT NULL,
+    exe_name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    path_suffix text
+);
+
+
+--
 -- Name: games; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -244,12 +357,25 @@ CREATE TABLE public.games (
     release_notified boolean DEFAULT false NOT NULL,
     steam_deck boolean DEFAULT false NOT NULL,
     is_emulated boolean DEFAULT false NOT NULL,
+    steam_appid integer,
     CONSTRAINT games_achievement_progress_check CHECK (((achievement_progress >= (0)::numeric) AND (achievement_progress <= (100)::numeric))),
     CONSTRAINT games_completion_date_precision_check CHECK ((completion_date_precision = ANY (ARRAY['full'::text, 'year'::text]))),
     CONSTRAINT games_hours_played_check CHECK ((hours_played >= (0)::numeric)),
     CONSTRAINT games_rating_check CHECK (((rating >= (1)::numeric) AND (rating <= (10)::numeric))),
     CONSTRAINT games_release_date_precision_check CHECK ((release_date_precision = ANY (ARRAY['full'::text, 'year'::text]))),
-    CONSTRAINT games_status_check CHECK ((status = ANY (ARRAY['playing'::text, 'completed'::text, 'backlog'::text, 'dnf'::text])))
+    CONSTRAINT games_status_check CHECK ((status = ANY (ARRAY['playing'::text, 'completed'::text, 'backlog'::text, 'dnf'::text, 'ambient'::text])))
+);
+
+
+--
+-- Name: ignored_executables; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ignored_executables (
+    id uuid DEFAULT extensions.uuid_generate_v4() NOT NULL,
+    user_id uuid NOT NULL,
+    exe_name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -276,6 +402,26 @@ CREATE TABLE public.notifications (
 CREATE TABLE public.notified_events (
     event_id bigint NOT NULL,
     notified_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: play_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.play_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    game_id uuid,
+    device_id uuid,
+    client_session_id text NOT NULL,
+    minutes integer NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone,
+    applied_hours numeric(6,1) DEFAULT 0 NOT NULL,
+    last_checkpoint_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT play_sessions_minutes_check CHECK ((minutes >= 0))
 );
 
 
@@ -318,6 +464,18 @@ CREATE TABLE public.profiles (
     CONSTRAINT profiles_pending_wheel_turn_check CHECK ((pending_wheel_turn = ANY (ARRAY['spin'::text, 'spin_reroll'::text, 'choose'::text]))),
     CONSTRAINT profiles_theme_preference_check CHECK ((theme_preference = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text]))),
     CONSTRAINT profiles_wheel_turn_check CHECK ((wheel_turn = ANY (ARRAY['spin'::text, 'spin_reroll'::text, 'choose'::text])))
+);
+
+
+--
+-- Name: steam_game_ids; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.steam_game_ids (
+    steam_appid integer NOT NULL,
+    igdb_id integer,
+    name text,
+    checked_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -396,6 +554,20 @@ CREATE TABLE public.wheel_spins (
 
 
 --
+-- Name: detectable_games id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_games ALTER COLUMN id SET DEFAULT nextval('public.detectable_games_id_seq'::regclass);
+
+
+--
+-- Name: detectable_import_runs id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_import_runs ALTER COLUMN id SET DEFAULT nextval('public.detectable_import_runs_id_seq'::regclass);
+
+
+--
 -- Name: changelog_entries changelog_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -404,11 +576,91 @@ ALTER TABLE ONLY public.changelog_entries
 
 
 --
+-- Name: detectable_dismissed detectable_dismissed_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_dismissed
+    ADD CONSTRAINT detectable_dismissed_pkey PRIMARY KEY (path_suffix);
+
+
+--
+-- Name: detectable_games detectable_games_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_games
+    ADD CONSTRAINT detectable_games_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: detectable_games detectable_games_source_path_suffix_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_games
+    ADD CONSTRAINT detectable_games_source_path_suffix_key UNIQUE (source, path_suffix);
+
+
+--
+-- Name: detectable_import_runs detectable_import_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_import_runs
+    ADD CONSTRAINT detectable_import_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: device_tokens device_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.device_tokens
+    ADD CONSTRAINT device_tokens_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: device_tokens device_tokens_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.device_tokens
+    ADD CONSTRAINT device_tokens_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: game_executables game_executables_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_executables
+    ADD CONSTRAINT game_executables_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: game_executables game_executables_user_id_exe_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_executables
+    ADD CONSTRAINT game_executables_user_id_exe_name_key UNIQUE (user_id, exe_name);
+
+
+--
 -- Name: games games_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.games
     ADD CONSTRAINT games_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ignored_executables ignored_executables_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ignored_executables
+    ADD CONSTRAINT ignored_executables_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ignored_executables ignored_executables_user_id_exe_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ignored_executables
+    ADD CONSTRAINT ignored_executables_user_id_exe_name_key UNIQUE (user_id, exe_name);
 
 
 --
@@ -425,6 +677,22 @@ ALTER TABLE ONLY public.notifications
 
 ALTER TABLE ONLY public.notified_events
     ADD CONSTRAINT notified_events_pkey PRIMARY KEY (event_id);
+
+
+--
+-- Name: play_sessions play_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.play_sessions
+    ADD CONSTRAINT play_sessions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: play_sessions play_sessions_user_id_client_session_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.play_sessions
+    ADD CONSTRAINT play_sessions_user_id_client_session_id_key UNIQUE (user_id, client_session_id);
 
 
 --
@@ -449,6 +717,14 @@ ALTER TABLE ONLY public.profiles
 
 ALTER TABLE ONLY public.profiles
     ADD CONSTRAINT profiles_username_key UNIQUE (username);
+
+
+--
+-- Name: steam_game_ids steam_game_ids_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.steam_game_ids
+    ADD CONSTRAINT steam_game_ids_pkey PRIMARY KEY (steam_appid);
 
 
 --
@@ -489,6 +765,20 @@ ALTER TABLE ONLY public.videos
 
 ALTER TABLE ONLY public.wheel_spins
     ADD CONSTRAINT wheel_spins_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: detectable_games_suffix_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX detectable_games_suffix_idx ON public.detectable_games USING btree (path_suffix);
+
+
+--
+-- Name: games_steam_appid_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX games_steam_appid_idx ON public.games USING btree (user_id, steam_appid) WHERE (steam_appid IS NOT NULL);
 
 
 --
@@ -541,6 +831,13 @@ CREATE INDEX notifications_user_idx ON public.notifications USING btree (user_id
 
 
 --
+-- Name: play_sessions_user_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX play_sessions_user_idx ON public.play_sessions USING btree (user_id, started_at DESC);
+
+
+--
 -- Name: profiles_username_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -576,6 +873,46 @@ CREATE TRIGGER trg_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH
 
 
 --
+-- Name: detectable_dismissed detectable_dismissed_dismissed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_dismissed
+    ADD CONSTRAINT detectable_dismissed_dismissed_by_fkey FOREIGN KEY (dismissed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: detectable_games detectable_games_approved_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.detectable_games
+    ADD CONSTRAINT detectable_games_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: device_tokens device_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.device_tokens
+    ADD CONSTRAINT device_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: game_executables game_executables_game_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_executables
+    ADD CONSTRAINT game_executables_game_id_fkey FOREIGN KEY (game_id) REFERENCES public.games(id) ON DELETE CASCADE;
+
+
+--
+-- Name: game_executables game_executables_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.game_executables
+    ADD CONSTRAINT game_executables_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: games games_assigned_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -592,6 +929,14 @@ ALTER TABLE ONLY public.games
 
 
 --
+-- Name: ignored_executables ignored_executables_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ignored_executables
+    ADD CONSTRAINT ignored_executables_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: notifications notifications_game_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -605,6 +950,30 @@ ALTER TABLE ONLY public.notifications
 
 ALTER TABLE ONLY public.notifications
     ADD CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: play_sessions play_sessions_device_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.play_sessions
+    ADD CONSTRAINT play_sessions_device_id_fkey FOREIGN KEY (device_id) REFERENCES public.device_tokens(id) ON DELETE SET NULL;
+
+
+--
+-- Name: play_sessions play_sessions_game_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.play_sessions
+    ADD CONSTRAINT play_sessions_game_id_fkey FOREIGN KEY (game_id) REFERENCES public.games(id) ON DELETE SET NULL;
+
+
+--
+-- Name: play_sessions play_sessions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.play_sessions
+    ADD CONSTRAINT play_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -701,6 +1070,20 @@ CREATE POLICY "Anyone authenticated can read changelog" ON public.changelog_entr
 
 
 --
+-- Name: play_sessions Signed-in users can read play sessions; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Signed-in users can read play sessions" ON public.play_sessions FOR SELECT USING ((auth.role() = 'authenticated'::text));
+
+
+--
+-- Name: steam_game_ids Signed-in users can read steam ids; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Signed-in users can read steam ids" ON public.steam_game_ids FOR SELECT USING ((auth.uid() IS NOT NULL));
+
+
+--
 -- Name: playlists Signed-in users can view playlists; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -729,6 +1112,27 @@ CREATE POLICY "Users manage own achievements" ON public.user_achievements USING 
 
 
 --
+-- Name: device_tokens Users manage own devices; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users manage own devices" ON public.device_tokens USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: game_executables Users manage own exe links; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users manage own exe links" ON public.game_executables USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
+-- Name: ignored_executables Users manage own ignored exes; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Users manage own ignored exes" ON public.ignored_executables USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+
+--
 -- Name: notifications Users manage own notifications; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -747,6 +1151,36 @@ CREATE POLICY "Users manage own wheel spins" ON public.wheel_spins USING ((auth.
 --
 
 ALTER TABLE public.changelog_entries ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: detectable_dismissed; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.detectable_dismissed ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: detectable_games; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.detectable_games ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: detectable_import_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.detectable_import_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: device_tokens; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.device_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: game_executables; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.game_executables ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: games; Type: ROW SECURITY; Schema: public; Owner: -
@@ -783,6 +1217,12 @@ CREATE POLICY games_update_own ON public.games FOR UPDATE USING ((auth.uid() = u
 
 
 --
+-- Name: ignored_executables; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ignored_executables ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: notifications; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -793,6 +1233,12 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.notified_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: play_sessions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.play_sessions ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: playlists; Type: ROW SECURITY; Schema: public; Owner: -
@@ -819,6 +1265,12 @@ CREATE POLICY profiles_select_all ON public.profiles FOR SELECT USING (true);
 
 CREATE POLICY profiles_update_own ON public.profiles FOR UPDATE USING ((auth.uid() = id));
 
+
+--
+-- Name: steam_game_ids; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.steam_game_ids ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: ticket_transactions; Type: ROW SECURITY; Schema: public; Owner: -
