@@ -51,10 +51,14 @@ export default function RecentlyPlayed({
       <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
         {heading}
       </h2>
-      <div className="flex flex-wrap gap-4">
+      {/* Spans the page: the hero takes the spare width, and the covers keep
+          their portrait shape and set the row's height, which the hero
+          stretches to match. On phones the hero sits on its own row above
+          the covers. */}
+      <div className="grid grid-cols-4 sm:grid-cols-[minmax(0,2.8fr)_repeat(4,minmax(0,1fr))] gap-4">
         <Link
           href={`/games/${hero.id}`}
-          className="group relative block w-full sm:w-[380px] h-[200px] shrink-0 rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+          className="group relative block col-span-4 sm:col-span-1 h-[200px] sm:h-auto rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
         >
           <div className="absolute inset-0 bg-surface-active">
             {banner ? (
@@ -93,11 +97,10 @@ export default function RecentlyPlayed({
             <Link
               key={game.id}
               href={`/games/${game.id}`}
-              // Fixed to the hero's own 200px height — not derived from the
-              // 3:4 aspect ratio off a flexible width, which is what let
-              // these grow taller than the hero whenever the row had extra
-              // space to give a stretchy grid column.
-              className="group relative block w-[150px] h-[200px] shrink-0 rounded-lg overflow-hidden bg-surface-sunken"
+              // Portrait box art at 3:4 off the column width. The hero
+              // stretches to this height, not the other way round, so the
+              // two can't drift apart as the row's width changes.
+              className="group relative block aspect-[3/4] rounded-lg overflow-hidden bg-surface-sunken"
             >
               <Cover game={game} />
               {live ? (

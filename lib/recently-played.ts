@@ -46,7 +46,7 @@ export function orderByIds(games: Game[], ids: string[]): Game[] {
 export async function getRecentlyPlayed(
   supabase: { from: (t: string) => any },
   userId: string,
-  limit = 4,
+  limit = 5,
 ): Promise<Game[]> {
   // More sessions than games wanted, since one game can hold many of the most
   // recent rows — an evening of the same game would otherwise fill the window.
