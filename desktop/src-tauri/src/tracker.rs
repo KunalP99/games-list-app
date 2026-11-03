@@ -343,6 +343,9 @@ pub async fn run_loop(app: AppHandle) {
     // Remembers which processes have been judged, so polling every ten
     // seconds does not re-walk the same programs' modules forever.
     let mut judge = detect::GameJudge::default();
+    // Roblox (and only Roblox) must have a visible window to count as being
+    // played — it lives on in the tray after you stop. See detect.rs.
+    let mut window_grace = detect::WindowGrace::default();
     let mut state_fetched: Option<Instant> = None;
     // At startup, then daily (hourly after a failure).
     let mut list_check_due = Instant::now();
@@ -435,6 +438,9 @@ pub async fn run_loop(app: AppHandle) {
         if matched.is_none() {
             for candidate in &candidates {
                 if let Some(game_id) = executables.get(&candidate.exe_name) {
+                    if !window_grace.is_playing(candidate) {
+                        continue;
+                    }
                     if let Some(game) = playing.iter().find(|g| &g.id == game_id) {
                         matched = Some((game.clone(), None, Some(candidate.exe_name.clone())));
                         break;
