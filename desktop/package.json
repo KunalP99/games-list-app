@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tauri dev",
+    "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "restart": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restart.ps1"
   },
   "keywords": [],

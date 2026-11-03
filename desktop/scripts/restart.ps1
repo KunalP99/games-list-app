@@ -17,6 +17,12 @@ Start-Sleep -Milliseconds 500
 
 Write-Host "Building..."
 Push-Location "$root\src-tauri"
+# Merge tauri.dev.conf.json over tauri.conf.json (the same thing
+# `tauri dev --config` does), so this build has its own identifier — and with
+# it its own settings folder, logs and single-instance lock — and never
+# overwrites the installed app's sign-in. Process-scoped: a release build
+# (`npx tauri build`) in another terminal never sees it.
+$env:TAURI_CONFIG = Get-Content -Raw "tauri.dev.conf.json"
 cargo build
 Pop-Location
 

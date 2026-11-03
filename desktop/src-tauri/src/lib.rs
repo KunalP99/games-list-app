@@ -62,10 +62,10 @@ pub struct StatusView {
     pending_update: Option<UpdateInfo>,
     /// True only in a debug build — never in the installed app, which is
     /// release-only. Drives the "DEV" badge, so there's no way to confuse a
-    /// `cargo tauri dev`/`npm run restart` window for the real one, even
-    /// though both share the same `config.json` and can't run side by side
-    /// (the single-instance guard is keyed on the app identifier, which is
-    /// the same for both builds).
+    /// `npm run dev`/`npm run restart` window for the real one. (They no
+    /// longer share anything: both scripts merge in `tauri.dev.conf.json`,
+    /// giving dev builds their own identifier, settings folder and
+    /// single-instance lock, so the two can run side by side.)
     is_dev: bool,
 }
 
