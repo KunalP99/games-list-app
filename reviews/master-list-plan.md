@@ -1,7 +1,72 @@
 # Plan — Master list game detection (Discord-style)
 
-Written: 2026-11-03 · Status: **proposal, nothing implemented yet**
+Written: 2026-11-03 · Status: **Phase 0 written and committed (not yet live); Phases 1–5 not started**
 Related: `website-code-review.md` (C1, C2, M3), `tracker-code-review.md` (T-H1, T-H2, T-M2, T-M3)
+
+## Status — where we left off (2026-11-03)
+
+**Branch:** `fix/security-hardening` — pushed, **not merged**. Production is unchanged.
+
+| Commit | Contents |
+|---|---|
+| `7aeb653` | Phase 0: security hardening (C1, C2, M3) + H5 (removed `/api/admin/import-tickets`). Code + `db/security-hardening.sql`. |
+| `c0f28d9` | The two reviews and this plan. |
+| `4679817` | Unrelated **WIP**: IGDB search ranking (`lib/search-ranking.ts`). Its `popularity()` still has a `TODO(human)` placeholder. |
+
+Verified on the laptop: `npm test` 380/380 passing, `tsc --noEmit` clean. **Not yet tested against a database.**
+
+**Next steps, in order:**
+1. **Dev machine:** `git fetch && git switch fix/security-hardening && npm ci`, then
+   `npm run env:dev && npm run db:reset && npm run seed:dev`, run `db/security-hardening.sql` in local Studio (http://127.0.0.1:54323), `npm run dev`, and check by hand:
+   - complete a Playing game (tickets awarded),
+   - spin + accept on the wheel (turn advances),
+   - save display name / theme in Settings,
+   - toggle the wheel off and on.
+2. **Vercel:** confirm `CRON_SECRET` is set (Production env vars). The crons now return 401 without it, and the daily jobs would silently stop.
+3. **Merge to `main`** → wait for the Vercel deploy → **then** run `db/security-hardening.sql` in the production SQL editor and check its two verify queries. (Code first, SQL second: the new code works under old permissions, not vice versa.)
+4. `npm run db:dump && npm run db:migration` — picks up the dropped `tickets_insert_own` policy. Privileges are **not** captured (dump uses `--no-privileges`), so re-run the hardening SQL after every local `db:reset`.
+5. Start **Phase 1** below.
+
+## Background — why the plan looks like this
+
+**Source of the list:** `https://discord.com/api/v9/applications/detectable` — an undocumented endpoint the Discord desktop client downloads for game detection (open-source reimplementations such as arRPC are built on it). No auth needed. May change or disappear without notice; hence the weekly snapshot (Phase 2).
+
+**Measured on 2026-11-03** (13 MB download):
+
+| | Count |
+|---|---|
+| Total entries | 25,081 |
+| Entries with a Windows exe | 10,464 |
+| Windows exe rows | 11,173 |
+| …given as a path ending (`folder/game.exe`) | 9,293 (83%) |
+| Windows entries with a **Steam app id** | 10,179 (97%) |
+| …with an Epic id | 1,562 |
+| …with no store id at all | 222 |
+| Rows flagged `is_launcher` | 20 |
+| Rows starting with `>` (shared engine exes) | 9 |
+| Rows with required `arguments` | 15 |
+
+**Why match on path endings, not exe names:** bare exe names collide badly — `game.exe` belongs to **192** different games, `hl2.exe` to 36, `nw.exe` to 35; 429 bare names are shared by 2+ games. Discord disambiguates by folder (`star conflict/game.exe` vs `mirror/game.exe`). This also separates Hades (`hades.exe`) from Hades II (`ship/hades2.exe`).
+
+**Why the Steam id matters:** `lib/steam-games.ts` (`resolveSteamApp`) already turns a Steam app id into the exact IGDB game, so 97% of list hits resolve exactly with no name search.
+
+**Why match on the PC, not the server:** sending every running process to the server each poll would leak everything a user runs and recreate the request flood in tracker finding T-H2. The PC only reports a *hit*.
+
+**Example entry (Tunic), fields we use:**
+```json
+{
+  "id": "1129504770533634149",
+  "name": "TUNIC",
+  "aliases": ["TUNIC"],
+  "executables": [{ "is_launcher": false, "name": "tunic/tunic.exe", "os": "win32" }],
+  "third_party_skus": [
+    { "distributor": "epic",  "id": "B6FAA05B8B594EC39944FF71DBDFDFC1" },
+    { "distributor": "xbox",  "id": "9NLRT31Z4RWM" },
+    { "distributor": "steam", "id": "553420" }
+  ]
+}
+```
+Other fields (ratings, themes, image hashes, `hook`/`overlay*`) are for Discord's overlay — ignore them. `name` is display text (note the capitals) — never match on it; use the Steam id.
 
 ## Decisions (from discussion)
 
@@ -33,11 +98,13 @@ Master list = Discord rows (`source='discord'`) + admin-approved rows (`source='
 
 Admin approvals will now affect *every* user's tracker, so the admin flag must be trustworthy first.
 
-- [ ] **C2**: column-restrict `profiles` updates so users can't set `is_admin` / `ticket_balance` themselves.
-- [ ] **C1**: revoke EXECUTE on the ticket/XP functions from `anon`/`authenticated`.
-- [ ] **M3**: make cron routes fail closed when `CRON_SECRET` is missing (the new cron below relies on it).
+- [x] **C2**: column-restrict `profiles` updates so users can't set `is_admin` / `ticket_balance` themselves. *(Code + SQL in `7aeb653`; SQL not yet run in prod. Users may update only `display_name`, `theme_preference`, `accent_colour`.)*
+- [x] **C1**: revoke EXECUTE on the ticket/XP functions from `anon`/`authenticated`. *(Code + SQL in `7aeb653`; SQL not yet run in prod.)*
+- [x] **M3**: make cron routes fail closed when `CRON_SECRET` is missing (the new cron below relies on it). *(In `7aeb653`.)*
+- [x] **H5** (bonus): removed `/api/admin/import-tickets`, which bypassed both of the above. *(In `7aeb653`.)*
+- [ ] **Go live:** test locally → check `CRON_SECRET` on Vercel → merge → run `db/security-hardening.sql` in prod. See "Next steps" at the top.
 
-See `website-code-review.md` for the exact SQL.
+The SQL is `db/security-hardening.sql`.
 
 ---
 
