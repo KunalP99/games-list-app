@@ -5,6 +5,7 @@
 import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, GameCompany, GameExtras, DeveloperGamesInfo, RelatedGame } from './rawg'
 import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
+import { rankSearchResults, mergeById, apicalypseString, FULL_GAME_TYPES, type RankCandidate } from './search-ranking'
 
 const TIMEOUT_MS = 8000
 
@@ -135,10 +136,52 @@ type IgdbGame = {
 
 // ── Public API (mirrors lib/rawg.ts) ────────────────────────────────────────
 
+// Fields the re-ranking in lib/search-ranking.ts reads, on top of the display ones.
+const RANK_FIELDS = 'game_type, version_parent, total_rating_count, hypes'
+// How many rows the plain text search contributes to the ranking pool. The
+// pool is ranked as a whole and then paged locally, so this also bounds how
+// many pages a search can have.
+const SEARCH_POOL_SIZE = 50
+
+type IgdbRankedGame = IgdbGame & RankCandidate
+
+/**
+ * Three result sets in one round trip (IGDB's `multiquery`, so the 4 req/s
+ * limit sees a single request):
+ *
+ *   search — IGDB's own full-text search, the broad net.
+ *   exact  — case-insensitive exact title. Full-text ranking can bury an
+ *            exact title under its own expansions ("World of Warcraft").
+ *   prefix — the most-rated full games whose title starts with the query, so
+ *            "Cyber" reaches Cyberpunk 2077 even where full-text search would
+ *            rather match whole words.
+ *
+ * Falls back to the plain search alone if the multiquery itself fails, so a
+ * problem here degrades to the old behaviour rather than to no results.
+ */
+async function searchPool(query: string): Promise<IgdbRankedGame[]> {
+  const q = apicalypseString(query)
+  const fields = `fields ${DETAIL_FIELDS}, ${RANK_FIELDS};`
+  const fullGame = `game_type = (${FULL_GAME_TYPES.join(',')}) & version_parent = null`
+  const body = [
+    `query games "search" { search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE}; };`,
+    `query games "exact" { ${fields} where name ~ "${q}"; limit 10; };`,
+    `query games "prefix" { ${fields} where name ~ "${q}"* & ${fullGame}; sort total_rating_count desc; limit 20; };`,
+  ].join('\n')
+
+  const multi = await igdbTry<{ name: string; result: IgdbRankedGame[] }>('multiquery', body)
+  if (multi.ok) {
+    const set = (name: string) => multi.rows.find(r => r.name === name)?.result ?? []
+    // Search first: mergeById keeps the first copy, and the ranking's final
+    // tie-break is position, so IGDB's own relevance order survives for ties.
+    return mergeById(set('search'), set('exact'), set('prefix'))
+  }
+  return igdbQuery<IgdbRankedGame>('games', `search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE};`)
+}
+
 export async function searchGames(query: string, page = 1): Promise<RawgSearchResult[]> {
-  const q = query.replace(/"/g, '\\"')
-  const games = await igdbQuery<IgdbGame>('games',
-    `search "${q}"; fields ${DETAIL_FIELDS}; limit ${SEARCH_PAGE_SIZE}; offset ${(page - 1) * SEARCH_PAGE_SIZE};`)
+  const ranked = rankSearchResults(query, await searchPool(query))
+  const games = ranked.slice((page - 1) * SEARCH_PAGE_SIZE, page * SEARCH_PAGE_SIZE)
   return games.map(g => ({
     id: g.id,
     name: g.name,

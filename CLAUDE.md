@@ -157,7 +157,12 @@ ships with it) and ensures `uuid-ossp` up front, because column defaults call
 
 ### Known differences from production
 
-- Vercel Cron doesn't fire; hit `/api/cron/*` by hand to test those.
+- Vercel Cron doesn't fire; hit `/api/cron/*` by hand to test those. The cron
+  routes **fail closed**: set `CRON_SECRET` in `.env.dev.local` and send
+  `Authorization: Bearer <secret>`, or they answer 401.
+- `db/security-hardening.sql` (function/column privileges) is **not** carried by
+  `db:dump`/`db:migration` — the dump uses `--no-privileges`. Re-run it in local
+  Studio after every `db:reset`.
 - Signup emails go to the local mail catcher, not a real inbox.
 - `local` is Postgres 17 (`supabase/config.toml`), matching production's 17.6.
 
@@ -391,6 +396,14 @@ The full implementation plan (including all database SQL per phase) is at:
 ---
 
 ## Postgres RPC functions
+
+**Service role only.** These are `SECURITY DEFINER` and take a user id as a
+plain argument, so `db/security-hardening.sql` revokes EXECUTE from the browser
+roles. Always call them through `createAdminClient()` (see `lib/tickets.ts`),
+never the cookie client — from the cookie client they now fail with a
+permission error. The same file limits which `profiles` columns users may update
+directly; wheel state (`wheel_turn`, `pending_wheel_*`, `wheel_session`) and
+`wheel_enabled` are written server-side through the service role.
 
 | Function | Purpose |
 |---|---|

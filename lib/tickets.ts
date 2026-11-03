@@ -1,5 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { TICKET_AWARDS, TICKET_PENALTIES } from './constants'
+import { createAdminClient } from './supabase/admin'
+
+// The ticket functions (award_tickets, reverse_*) are SECURITY DEFINER and take
+// a user id as a plain argument, so they are not callable from the browser
+// roles — see db/security-hardening.sql. Every ticket write therefore goes
+// through the service-role client. The `supabase` parameters below are still
+// the caller's own client, used only for reads; the caller is responsible for
+// `userId` being the signed-in user (always taken from auth.getUser()).
+const ledger = () => createAdminClient()
 
 type AwardEntry = { reason: string; amount: number }
 
@@ -40,8 +49,9 @@ export async function awardCompletionTickets(
   achievementProgress: number | null,
 ) {
   const awards = calculateCompletionAwards(hours, achievementProgress)
+  const admin = ledger()
   for (const { reason, amount } of awards) {
-    const { error } = await supabase.rpc('award_tickets', {
+    const { error } = await admin.rpc('award_tickets', {
       p_user_id: userId,
       p_amount: amount,
       p_reason: reason,
@@ -57,7 +67,7 @@ export async function applyDnfPenalty(
   userId: string,
   gameId: string,
 ) {
-  const { error } = await (supabase.rpc as any)('award_tickets', {
+  const { error } = await ledger().rpc('award_tickets', {
     p_user_id: userId,
     p_amount: TICKET_PENALTIES.assigned_game_incomplete,
     p_reason: 'assigned_game_incomplete',
@@ -71,7 +81,7 @@ export async function reverseDnfPenalty(
   userId: string,
   gameId: string,
 ) {
-  const { error } = await (supabase.rpc as any)('reverse_game_dnf_tickets', {
+  const { error } = await ledger().rpc('reverse_game_dnf_tickets', {
     p_user_id: userId,
     p_game_id: gameId,
   })
@@ -91,7 +101,7 @@ async function checkAndAwardSequelBonus(
 
   if (!game?.is_sequel) return
 
-  const { error } = await supabase.rpc('award_tickets', {
+  const { error } = await ledger().rpc('award_tickets', {
     p_user_id: userId,
     p_amount: TICKET_AWARDS.sequel_back_to_back,
     p_reason: 'sequel_back_to_back',

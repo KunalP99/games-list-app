@@ -10,7 +10,8 @@ export const maxDuration = 60
 // notified_events table, so an event is only ever announced once.
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const secret = process.env.CRON_SECRET
-  if (secret && request.headers.get('authorization') !== `Bearer ${secret}`) {
+  // Fail closed: a missing CRON_SECRET must lock these service-role jobs, not open them.
+  if (!secret || request.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 

@@ -1,4 +1,5 @@
 import { searchRawgGames } from './rawg'
+import { normaliseTitle } from './search-ranking'
 
 /**
  * Identifying a non-Steam game by its launcher's own display name.
@@ -19,9 +20,9 @@ export type NameLookup =
   // Inconclusive, not negative — never follow this with "don't ask again".
   | { kind: 'noMatch' }
 
-export function normaliseTitle(raw: string): string {
-  return raw.toLowerCase().replace(/[^a-z0-9]+/g, '')
-}
+// Lives with the search ranking, which needs the identical rule to decide what
+// counts as an exact title; re-exported so existing imports keep working.
+export { normaliseTitle } from './search-ranking'
 
 /**
  * Strip the symbols that break IGDB's full-text search without changing what

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/lib/tickets'
 import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
@@ -27,7 +28,9 @@ async function consumeWheelPending(
     .single() as { data: { pending_wheel_game_id: string | null; pending_wheel_turn: 'spin' | 'spin_reroll' | 'choose' | null } | null }
   if (prof?.pending_wheel_game_id !== gameId) return false
   const doRevert = revert && !!prof.pending_wheel_turn
-  await (supabase.from('profiles') as any)
+  // Wheel columns are not user-writable (db/security-hardening.sql), so this
+  // write goes through the service-role client, scoped to the caller's id.
+  await (createAdminClient().from('profiles') as any)
     .update({
       ...(doRevert ? { wheel_turn: prof.pending_wheel_turn } : {}),
       pending_wheel_game_id: null,
@@ -93,12 +96,12 @@ async function awardGameCompletionXp(
 ) {
   const xp = gameCompletionXp(hours, achievementProgress)
   if (xp > 0) {
-    await (supabase.rpc as any)('award_xp', { p_user_id: userId, p_amount: xp })
+    await createAdminClient().rpc('award_xp', { p_user_id: userId, p_amount: xp })
   }
 }
 
 async function reverseGameCompletionTickets(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, gameId: string) {
-  const { error } = await (supabase.rpc as any)('reverse_game_completion_tickets', {
+  const { error } = await createAdminClient().rpc('reverse_game_completion_tickets', {
     p_user_id: userId,
     p_game_id: gameId,
   })
