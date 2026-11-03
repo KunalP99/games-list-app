@@ -8,8 +8,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
@@ -18,9 +18,69 @@ use crate::config::{self, AppConfig};
 use crate::detect;
 use crate::ea;
 use crate::launchers;
+use crate::master_list;
 use crate::matching;
 use crate::steam;
 use crate::toast;
+
+/// How long an inconclusive identify answer is trusted before asking again.
+const RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
+/// How often to check the site for a newer master list.
+const LIST_CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+/// After a failed list check — offline, say — try again sooner than a day.
+const LIST_RETRY_EVERY: Duration = Duration::from_secs(60 * 60);
+
+/// Whether `exe_name` is still backing off from an inconclusive identify.
+fn backing_off(app: &AppHandle, exe_name: &str) -> bool {
+    let tracker = app.state::<Tracker>();
+    let shared = tracker.shared.lock().unwrap();
+    shared.retry_after.get(exe_name).is_some_and(|t| Instant::now() < *t)
+}
+
+/// Don't put `exe_name` to the site again for a while.
+fn back_off(app: &AppHandle, exe_name: &str) {
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    let now = Instant::now();
+    // Forget expired entries so the map can't grow for the life of the process.
+    shared.retry_after.retain(|_, t| *t > now);
+    shared.retry_after.insert(exe_name.to_string(), now + RETRY_AFTER);
+}
+
+/// Load the cached master list on first use, then check the site for a newer
+/// one. Returns when the next check is due. A failure keeps whatever list is
+/// already in memory — the cached copy is the snapshot.
+async fn refresh_master_list(app: &AppHandle, base: &str, token: &str) -> Instant {
+    let tracker = app.state::<Tracker>();
+    let dir = tracker.data_dir.clone();
+
+    let current_version = {
+        let mut shared = tracker.shared.lock().unwrap();
+        if shared.master_list.is_none() {
+            if let Some(file) = master_list::load_cache(&dir) {
+                let list = master_list::MasterList::from_file(file);
+                log::info!("loaded cached master list v{} ({} entries)", list.version, list.len());
+                shared.master_list = Some(Arc::new(list));
+            }
+        }
+        shared.master_list.as_ref().map(|l| l.version.clone())
+    };
+
+    match api::fetch_detectable(base, token, current_version.as_deref()).await {
+        Ok(None) => Instant::now() + LIST_CHECK_EVERY,
+        Ok(Some(file)) => {
+            master_list::save_cache(&dir, &file);
+            let list = master_list::MasterList::from_file(file);
+            log::info!("master list updated to v{} ({} entries)", list.version, list.len());
+            tracker.shared.lock().unwrap().master_list = Some(Arc::new(list));
+            Instant::now() + LIST_CHECK_EVERY
+        }
+        Err(err) => {
+            log::warn!("could not check for a newer master list: {err}");
+            Instant::now() + LIST_RETRY_EVERY
+        }
+    }
+}
 
 /// A game currently being timed.
 #[derive(Debug, Clone)]
@@ -150,16 +210,15 @@ pub struct Shared {
     /// The same, for executables identified by a launcher-reported title
     /// rather than a Steam app id — keyed by exe name, since there is no id.
     pub identified_titles: HashSet<String>,
-    /// Exe names checked against the global exe-link catalog this refresh
-    /// cycle and found to have no row. Separate from `identified_titles`
-    /// (which is only for an exe the catalog *did* resolve, just not to a
-    /// currently-trackable game): this is what keeps `identify_global_exe_links`
-    /// from hitting the server every single poll for a program that was
-    /// never going to be in the catalog, now that it no longer requires the
-    /// full heuristic judge first. Cleared alongside `identified`/
-    /// `identified_titles` on every state refresh, so an admin adding a row
-    /// is picked up within the same ~60-second window as everything else.
-    pub catalog_unknown: HashSet<String>,
+    /// Exe name -> when it may be put to `/api/agent/identify` again, after
+    /// an inconclusive answer (`unknown`) or a failed request. Without this
+    /// an unresolvable program was re-sent every poll for as long as it ran
+    /// (tracker review T-H2). Time-based rather than cleared on each state
+    /// refresh, which happens every minute — far too often for this.
+    pub retry_after: HashMap<String, Instant>,
+    /// The master list (`master_list.rs`), once loaded from the cache or the
+    /// site. `None` until then; matching simply skips that step meanwhile.
+    pub master_list: Option<Arc<master_list::MasterList>>,
     /// Executables whose *toast* the user closed with its × — the question
     /// itself stays pending on the status screen, deliberately, so an
     /// accidental close doesn't lose it.
@@ -285,6 +344,8 @@ pub async fn run_loop(app: AppHandle) {
     // seconds does not re-walk the same programs' modules forever.
     let mut judge = detect::GameJudge::default();
     let mut state_fetched: Option<Instant> = None;
+    // At startup, then daily (hourly after a failure).
+    let mut list_check_due = Instant::now();
 
     loop {
         let tracker = app.state::<Tracker>();
@@ -320,7 +381,6 @@ pub async fn run_loop(app: AppHandle) {
                     // held for the rest of the process.
                     shared.identified.clear();
                     shared.identified_titles.clear();
-                    shared.catalog_unknown.clear();
                     drop(shared);
                     ping_ui(&app);
                 }
@@ -334,6 +394,10 @@ pub async fn run_loop(app: AppHandle) {
         }
 
         flush_queue(&app, &base, &token).await;
+
+        if Instant::now() >= list_check_due {
+            list_check_due = refresh_master_list(&app, &base, &token).await;
+        }
 
         // ── What is running? ────────────────────────────────────────────────
         let mut candidates = detect::candidates(&mut system);
@@ -434,35 +498,29 @@ pub async fn run_loop(app: AppHandle) {
                 stop_session(&app, &base, &token).await;
             }
             (None, None) => {
-                // A Steam game can be identified exactly, so try that first:
-                // it needs no executable link and no question. The global
-                // exe-link table is the next most trustworthy thing — an
-                // admin-reviewed row is vetted for everyone, and even a
-                // bulk-imported one is only ever trusted when the exe name
-                // is unambiguous (or the install path narrows it down) —
-                // ahead of Epic/EA's own local records, which are real but
-                // per-launcher. Only when all of these come to nothing is the
-                // user asked anything. Battle.net has no install-record
-                // lookup of its own — its games (Overwatch, WoW, ...) just
-                // fall through to the generic exe-name guess below, same as
-                // any other unrecognised launcher.
+                // The master list first: a local match on the program's own
+                // path, which is itself the proof it's a game, and resolves
+                // exactly for nearly every hit (admin igdb_id, or a Steam id).
+                // Then the per-launcher fallbacks, which read real install
+                // records: Steam's folder manifest, Epic's manifests, EA's
+                // installerdata.xml. Only when all of these come to nothing
+                // is the user asked anything — and a title guessed from the
+                // exe name only ever *suggests* (the toast's search box),
+                // never files a game on its own (tracker review T-H1).
                 // TEMP DIAG: time each step
                 let t0 = std::time::Instant::now();
-                let s = identify_steam_games(&app, &base, &token, &candidates, &mut judge).await;
-                log::info!("DIAG CHAIN steam={s} elapsed={:?}", t0.elapsed());
+                let m = identify_master_list(&app, &base, &token, &candidates).await;
+                log::info!("DIAG CHAIN master={m} elapsed={:?}", t0.elapsed());
                 let t1 = std::time::Instant::now();
-                let c = !s && identify_global_exe_links(&app, &base, &token, &candidates).await;
-                log::info!("DIAG CHAIN catalog={c} elapsed={:?}", t1.elapsed());
+                let s = !m && identify_steam_games(&app, &base, &token, &candidates, &mut judge).await;
+                log::info!("DIAG CHAIN steam={s} elapsed={:?}", t1.elapsed());
                 let t2 = std::time::Instant::now();
-                let e = !s && !c && identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
+                let e = !m && !s && identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
                 log::info!("DIAG CHAIN epic={e} elapsed={:?}", t2.elapsed());
                 let t3 = std::time::Instant::now();
-                let ea = !s && !c && !e && identify_ea_games(&app, &base, &token, &candidates, &mut judge).await;
+                let ea = !m && !s && !e && identify_ea_games(&app, &base, &token, &candidates, &mut judge).await;
                 log::info!("DIAG CHAIN ea={ea} elapsed={:?}", t3.elapsed());
-                let t4 = std::time::Instant::now();
-                let g = !s && !c && !e && !ea && identify_guessed_titles(&app, &base, &token, &candidates, &mut judge).await;
-                log::info!("DIAG CHAIN guess={g} elapsed={:?}", t4.elapsed());
-                let identified = s || c || e || ea || g;
+                let identified = m || s || e || ea;
                 if identified {
                     // Something was filed; re-read so the next tick can track
                     // it rather than waiting out the state cache.
@@ -665,18 +723,20 @@ async fn identify_steam_games(
         // The gates still apply. They cost nothing here and keep installers
         // and redistributables — which live in the same folders — from being
         // sent anywhere.
-        if !judge.judge(candidate) {
+        if !judge.judge(candidate) || backing_off(app, &candidate.exe_name) {
             continue;
         }
 
+        let suffix = master_list::path_suffix(path);
         let response = match api::post_identify(
-            base, token, api::IdentifyBy::SteamAppId(app_id), &candidate.exe_name, "Steam",
+            base, token, api::IdentifyBy::SteamAppId(app_id), &candidate.exe_name, "Steam", suffix.as_deref(),
         ).await {
             Ok(r) => r,
             Err(err) => {
                 // Offline, or the site is down. Decide nothing and try again
-                // on a later tick.
+                // in a while.
                 log::warn!("could not identify steam app {app_id}: {err}");
+                back_off(app, &candidate.exe_name);
                 continue;
             }
         };
@@ -732,66 +792,53 @@ async fn identify_steam_games(
                 tracker.shared.lock().unwrap().identified.insert(app_id);
             }
             // "unknown", or anything a newer site version returns: decide
-            // nothing, and leave it to be retried.
-            _ => {}
+            // nothing, and leave it to be retried in a while.
+            _ => back_off(app, &candidate.exe_name),
         }
     }
     false
 }
 
-/// The global exe-link table (`/admin/exe-links`): admin-curated rows plus a
-/// much larger bulk-imported catalog (`scripts/import-exe-catalog.mjs`),
-/// checked by name. Unlike every other identify function here this needs no
-/// `candidate.path` to look the exe up at all — only to disambiguate an exe
-/// name shared by more than one title, which the path is sent along for.
-/// That path-optional lookup matters on its own: a real running game's path
-/// can be unreadable by every method tried (confirmed live against Star
-/// Citizen's own `StarCitizen.exe` on one run), which is exactly the kind of
-/// case an admin would curate an unambiguous link for in the first place.
+/// The master list (`master_list.rs`): the program's own path matched against
+/// a known path ending, on this PC. Only a hit is sent to the site.
 ///
-/// Also the one identify path that does **not** go through
-/// `detect::GameJudge` first, using the looser `detect::plausible_candidate`
-/// instead. Being on the catalog *is* the evidence that something is a game
-/// — an admin promoted it, or it came from a reviewed import — so requiring
-/// the local heuristic to independently agree only ever subtracted. It
-/// actively broke real cases: confirmed live against Dead by Daylight, whose
-/// anti-cheat leaves both its install path and its loaded modules
-/// unreadable, so the judge never settles on `Game` — and a game on the
-/// catalog would still have fallen through to the generic "is this a game?"
-/// toast on every user's PC, which is exactly what the catalog exists to
-/// prevent.
-async fn identify_global_exe_links(
+/// Gated by [`detect::plausible_candidate`] — a visible window, running at
+/// least 20 seconds, not everyday software or an installer — and **not** by
+/// the full `GameJudge`: being on the list is already the proof it's a game,
+/// and the judge's graphics-module probe can be defeated by anti-cheat
+/// (confirmed live against Dead by Daylight, whose path and modules are both
+/// unreadable). Without a readable path only bare-name entries can match.
+async fn identify_master_list(
     app: &AppHandle,
     base: &str,
     token: &str,
     candidates: &[detect::Candidate],
 ) -> bool {
     let tracker = app.state::<Tracker>();
+    let Some(list) = tracker.shared.lock().unwrap().master_list.clone() else { return false };
     let dir = tracker.data_dir.clone();
     let asked = config::load_asked(&dir);
 
     for candidate in candidates {
-        if asked.contains(&candidate.exe_name) {
+        if asked.contains(&candidate.exe_name) || !detect::plausible_candidate(candidate) {
             continue;
         }
+        let Some(hit) = list.find(candidate.path.as_deref(), &candidate.exe_name) else { continue };
+        if tracker.shared.lock().unwrap().identified_titles.contains(&candidate.exe_name)
+            || backing_off(app, &candidate.exe_name)
         {
-            let shared = tracker.shared.lock().unwrap();
-            if shared.identified_titles.contains(&candidate.exe_name)
-                || shared.catalog_unknown.contains(&candidate.exe_name)
-            {
-                continue;
-            }
-        }
-        if !detect::plausible_candidate(candidate) {
             continue;
         }
 
+        let platform = master_list::platform_for_path(candidate.path.as_deref());
+        let suffix = candidate.path.as_deref().and_then(master_list::path_suffix);
         let response = match api::post_identify(
-            base, token, api::IdentifyBy::LookupExe { path: candidate.path.as_deref() }, &candidate.exe_name, "PC (Windows)",
+            base, token, api::IdentifyBy::Detectable(hit.id), &candidate.exe_name, platform, suffix.as_deref(),
         ).await {
             Ok(r) => r,
             Err(err) => {
-                log::warn!("could not check global exe links for \"{}\": {err}", candidate.exe_name);
+                log::warn!("could not identify \"{}\" (master list {}): {err}", candidate.exe_name, hit.suffix);
+                back_off(app, &candidate.exe_name);
                 continue;
             }
         };
@@ -799,11 +846,13 @@ async fn identify_global_exe_links(
         match response.result.as_str() {
             "added" => {
                 let title = response.title.unwrap_or_else(|| candidate.exe_name.clone());
-                log::info!("added {title} as an ambient game (global exe link: \"{}\")", candidate.exe_name);
+                log::info!("added {title} as an ambient game (master list: \"{}\")", hit.suffix);
+                // As with the other paths: the link this created is what
+                // keeps it from being re-asked, so nothing is remembered here.
                 if let Some(game_id) = response.game_id.clone() {
                     config::add_unconfirmed_platform(&dir, &game_id);
                     tracker.shared.lock().unwrap().pending_platform_prompt =
-                        Some(PendingPlatformPrompt { game_id, title: title.clone(), current_platform: "PC (Windows)".into() });
+                        Some(PendingPlatformPrompt { game_id, title: title.clone(), current_platform: platform.into() });
                     toast::show(app, &title);
                 }
                 notify(app, "Now tracking", &format!("{title} — added to your Ambient games."));
@@ -821,14 +870,10 @@ async fn identify_global_exe_links(
                 );
                 tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
             }
-            // "unknown": no global link for this exe yet — remembered only
-            // until the next state refresh, so an admin adding a row is
-            // picked up within a minute rather than needing a restart, while
-            // an ordinary program that will never be on the catalog is not
-            // asked about on every single ten-second poll.
-            _ => {
-                tracker.shared.lock().unwrap().catalog_unknown.insert(candidate.exe_name.clone());
-            }
+            // "unknown": on the list, but nothing on IGDB matched it. Not a
+            // "not a game" — try again in a while, and meanwhile let the
+            // later steps and the ordinary toast have their go.
+            _ => back_off(app, &candidate.exe_name),
         }
     }
     false
@@ -877,16 +922,18 @@ async fn identify_by_title(
             }
         }
 
-        if !judge.judge(candidate) {
+        if !judge.judge(candidate) || backing_off(app, &candidate.exe_name) {
             continue;
         }
 
+        let suffix = master_list::path_suffix(path);
         let response = match api::post_identify(
-            base, token, api::IdentifyBy::Title(&title), &candidate.exe_name, platform,
+            base, token, api::IdentifyBy::Title(&title), &candidate.exe_name, platform, suffix.as_deref(),
         ).await {
             Ok(r) => r,
             Err(err) => {
                 log::warn!("could not identify \"{title}\": {err}");
+                back_off(app, &candidate.exe_name);
                 continue;
             }
         };
@@ -923,10 +970,10 @@ async fn identify_by_title(
                 );
                 tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
             }
-            // "unknown" (no exact IGDB match, or the request failed): decide
-            // nothing — not even remembered — and let the heuristic prompt
-            // offer the usual "is this a game?" toast instead.
-            _ => {}
+            // "unknown" (no exact IGDB match): decide nothing, ask again in
+            // a while, and let the heuristic prompt offer the usual "is this
+            // a game?" toast meanwhile.
+            _ => back_off(app, &candidate.exe_name),
         }
     }
     false
@@ -962,30 +1009,6 @@ async fn identify_ea_games(
     // candidate directly rather than against a list gathered once per tick.
     identify_by_title(app, base, token, candidates, judge, "EA App", |path| {
         ea::display_name_for_exe(path)
-    })
-    .await
-}
-
-/// Last resort: no launcher's own install record said what this is, so guess
-/// from the executable's own name — "DeadSpace.exe" to "Dead Space" — and let
-/// the server's exact-IGDB-match rule decide whether that guess is real.
-/// Battle.net games (Overwatch, WoW, ...) land here too — there's no
-/// install-record lookup for that launcher, so a guessed title plus the
-/// server's exact-match check is simply how they get identified.
-///
-/// Reached only once Steam, Epic and EA have all already had their (strictly
-/// more trustworthy) chance this tick and found nothing, so this never
-/// pre-empts an identification backed by real install data.
-async fn identify_guessed_titles(
-    app: &AppHandle,
-    base: &str,
-    token: &str,
-    candidates: &[detect::Candidate],
-    judge: &mut detect::GameJudge,
-) -> bool {
-    identify_by_title(app, base, token, candidates, judge, "PC (Windows)", |path| {
-        let exe_name = std::path::Path::new(path).file_name()?.to_str()?;
-        matching::guess_title_from_exe(exe_name)
     })
     .await
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { normaliseExeName } from '@/lib/agent-session'
+import { cleanSubmittedSuffix } from '@/lib/detectable'
 
 type Result = { success: true } | { success: false; error: string }
 
@@ -20,70 +20,69 @@ async function requireAdmin() {
 }
 
 /**
- * Add or replace a global exe -> game link, picked from a real search
- * result. `folderHint` disambiguates an exe name already in use under a
- * different title — '' (the default) means "no hint", the common case —
- * and together with `exeName` is the row's real identity: this always
- * upserts onto that pair, never onto `exeName` alone.
+ * Add a path ending to the master list as an admin row, pointing at an exact
+ * IGDB game. Every tracker picks it up at its next daily list check. Where a
+ * Discord row has the same ending, this one wins (see `compactList`).
  */
-export async function addGlobalExeLink(
-  exeName: string,
-  igdbId: number,
-  title: string,
-  coverImageUrl: string | null,
-  folderHint: string = '',
-): Promise<Result> {
+export async function addDetectable(pathSuffix: string, igdbId: number, name: string): Promise<Result> {
   const user = await requireAdmin()
   if (!user) return { success: false, error: 'Admins only.' }
 
-  const normalised = normaliseExeName(exeName)
-  if (!normalised) return { success: false, error: 'Enter an executable name.' }
+  const suffix = cleanSubmittedSuffix(pathSuffix)
+  if (!suffix) {
+    return { success: false, error: 'Enter a path ending like "tunic/tunic.exe": up to three parts, ending in .exe, no drive or user folder.' }
+  }
+  if (!Number.isInteger(igdbId) || igdbId <= 0) return { success: false, error: 'Pick a game.' }
 
   const sb = createAdminClient()
-  const { error } = await (sb.from('global_exe_links') as any).upsert({
-    exe_name: normalised,
-    folder_hint: folderHint.trim().toLowerCase(),
-    igdb_id: igdbId,
-    title,
-    cover_image_url: coverImageUrl,
+  const { error } = await (sb.from('detectable_games') as any).upsert({
+    path_suffix: suffix,
     source: 'admin',
-    created_by: user.id,
-  }, { onConflict: 'exe_name,folder_hint' })
-
+    name,
+    igdb_id: igdbId,
+    approved_by: user.id,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'source,path_suffix' })
   if (error) return { success: false, error: error.message }
+
+  // Approving something once dismissed brings it back for good.
+  await (sb.from('detectable_dismissed') as any).delete().eq('path_suffix', suffix)
+
   revalidatePath('/admin/exe-links')
   return { success: true }
 }
 
-/**
- * Promote something people have linked on their own libraries into the
- * global list. Bound directly to a plain `<form action>` on the review
- * queue, so (unlike `addGlobalExeLink`) this returns nothing for the UI to
- * read — a failure here is rare enough, and low-stakes enough, that logging
- * it server-side is enough. `game_executables` carries no folder info, so
- * this always lands in the no-hint slot for that exe name.
- */
-export async function promoteExeLink(exeName: string, igdbId: number, title: string): Promise<void> {
-  const result = await addGlobalExeLink(exeName, igdbId, title, null)
-  if (!result.success) console.error(`promoteExeLink(${exeName}): ${result.error}`)
+/** Take a queue item off the queue: "not a game", or not worth listing. */
+export async function dismissQueueItem(key: string): Promise<Result> {
+  const user = await requireAdmin()
+  if (!user) return { success: false, error: 'Admins only.' }
+
+  const sb = createAdminClient()
+  const { error } = await (sb.from('detectable_dismissed') as any).upsert({
+    path_suffix: key.trim().toLowerCase(),
+    dismissed_by: user.id,
+  }, { onConflict: 'path_suffix' })
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/admin/exe-links')
+  return { success: true }
 }
 
-/** Bound to a plain `<form action>` on the global-links list — see `promoteExeLink`. */
-export async function removeGlobalExeLink(exeName: string, folderHint: string = ''): Promise<void> {
+/** Bound to a plain `<form action>`. Admin rows only — Discord rows come and go with the weekly import. */
+export async function removeDetectable(id: number): Promise<void> {
   const user = await requireAdmin()
   if (!user) {
-    console.error('removeGlobalExeLink: admins only')
+    console.error('removeDetectable: admins only')
     return
   }
 
   const sb = createAdminClient()
-  const { error } = await (sb.from('global_exe_links') as any)
+  const { error } = await (sb.from('detectable_games') as any)
     .delete()
-    .eq('exe_name', normaliseExeName(exeName))
-    .eq('folder_hint', folderHint)
-
+    .eq('id', id)
+    .eq('source', 'admin')
   if (error) {
-    console.error(`removeGlobalExeLink(${exeName}): ${error.message}`)
+    console.error(`removeDetectable(${id}): ${error.message}`)
     return
   }
   revalidatePath('/admin/exe-links')

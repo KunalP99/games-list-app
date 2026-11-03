@@ -9,6 +9,7 @@ mod detect;
 mod matching;
 mod ea;
 mod launchers;
+mod master_list;
 mod pairing;
 mod steam;
 mod toast;
@@ -128,7 +129,9 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
     };
     let Some(prompt) = prompt else { return Ok(()) };
 
-    if let Err(err) = api::post_link(&base, &token, &prompt.exe_name, &prompt.suggested_game_id).await
+    let suffix = running_path_suffix(&prompt.exe_name);
+    if let Err(err) =
+        api::post_link(&base, &token, &prompt.exe_name, &prompt.suggested_game_id, suffix.as_deref()).await
     {
         // Worth a line of its own: the prompt stays pending, so without this
         // the only trace of a failed link is the user saying it did nothing.
@@ -152,11 +155,17 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Ask the watcher to re-read the server on its next tick.
-///
-/// Linking a game happens on the website, in a different window, so the app
-/// has no way to know it happened. The UI calls this whenever it comes back
-/// into focus.
+/// The path ending (`tunic/tunic.exe`) of a running program, for the site's
+/// master-list admin queue — see `master_list::path_suffix`. None when it
+/// isn't running or its path can't be read; the link still goes ahead.
+fn running_path_suffix(exe_name: &str) -> Option<String> {
+    let mut system = detect::new_system();
+    detect::candidates(&mut system)
+        .into_iter()
+        .find(|c| c.exe_name == exe_name && c.path.is_some())
+        .and_then(|c| master_list::path_suffix(c.path.as_deref()?))
+}
+
 /// Programs currently running that the user might want to link.
 ///
 /// Offered instead of making them type an executable name: the app already
@@ -241,7 +250,8 @@ async fn link_executable(
         let config = app.state::<Tracker>().snapshot_config();
         (config.base(), config.token.clone().unwrap_or_default())
     };
-    api::post_link(&base, &token, &exe_name, &game_id).await?;
+    let suffix = running_path_suffix(&exe_name);
+    api::post_link(&base, &token, &exe_name, &game_id, suffix.as_deref()).await?;
     if let Some(platform) = platform {
         if current_platform.as_deref() != Some(platform.as_str()) {
             api::post_platform(&base, &token, &game_id, &platform).await?;
@@ -251,6 +261,11 @@ async fn link_executable(
     Ok(())
 }
 
+/// Ask the watcher to re-read the server on its next tick.
+///
+/// Linking a game happens on the website, in a different window, so the app
+/// has no way to know it happened. The UI calls this whenever it comes back
+/// into focus.
 #[tauri::command]
 fn refresh_state(app: AppHandle) {
     app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;
@@ -293,6 +308,7 @@ async fn add_searched_game(
         api::IdentifyBy::IgdbId { id: igdb_id, title: &title },
         "",
         "PC (Windows)",
+        None,
     )
     .await?;
     app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;

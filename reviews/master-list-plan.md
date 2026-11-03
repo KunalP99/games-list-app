@@ -1,6 +1,19 @@
 # Plan — Master list game detection (Discord-style)
 
-Written: 2026-11-03 · Status: **Phase 0 written and committed (not yet live); Phases 1–5 not started**
+Written: 2026-11-03 · Status: **Phases 0–5 built on `main` (local, not pushed); nothing live yet**
+
+## Status — 2026-11-03, evening
+
+Phases 1–5 are written and verified against the **local** stack (Vitest 413 passing, `cargo test` 86 passing, `tsc` clean). Real import ran locally: 25,081 entries → 11,083 rows (70 skipped). Checked live on local: list endpoint 200 then 304; `identify` by `detectableId` (Steam-id row, no-Steam-id row, admin row), old-style `lookupExe` (unique name resolves, `game.exe` refused); `link` drops a `c:/users/…` ending; admin queue approve/dismiss through the UI.
+
+**Go-live, in order** (Phase 0's steps further down still come first):
+1. Prod SQL: `db/master-list.sql` → `npm run db:dump && npm run db:migration`.
+2. Push → Vercel deploy (adds the weekly cron).
+3. `node scripts/import-detectable.mjs https://<site>` with prod's `CRON_SECRET` → check counts on `/admin/exe-links`.
+4. New desktop release (tracker changes).
+5. Then `db/drop-global-exe-links.sql` in prod.
+
+Deviations from the text below: the `DROP TABLE` lives in its own file (step 5); `scripts/import-detectable.mjs` calls the cron route rather than duplicating the import; the guessed-title path was removed outright (T-H1) — `main.js` already pre-fills the toast's search with that guess; a pathless program can still match bare-name entries.
 Related: `website-code-review.md` (C1, C2, M3), `tracker-code-review.md` (T-H1, T-H2, T-M2, T-M3)
 
 ## Status — where we left off (2026-11-03)
@@ -219,10 +232,10 @@ fetch Discord list (30 s timeout)
 4. Then the existing owned/added/untracked logic, and save the exe link **with `path_suffix`**.
 
 **Also in this phase (closes tracker findings):**
-- [ ] Remove the `identify_global_exe_links` step (table is gone).
-- [ ] **T-H1:** guessed-title path becomes toast-only — suggests a title, never auto-adds.
-- [ ] **T-H2:** per-run backoff for `unknown` results (e.g. retry after 10 minutes).
-- [ ] Keep `lookupExe` working in `identify` for older desktop versions until everyone updates — it now looks up `detectable_games` by bare exe name (only if exactly one row has that basename).
+- [x] Remove the `identify_global_exe_links` step (table is gone).
+- [x] **T-H1:** guessed-title path becomes toast-only — suggests a title, never auto-adds.
+- [x] **T-H2:** per-run backoff for `unknown` results (e.g. retry after 10 minutes).
+- [x] Keep `lookupExe` working in `identify` for older desktop versions until everyone updates — it now looks up `detectable_games` by bare exe name (only if exactly one row has that basename).
 
 ---
 

@@ -3,18 +3,48 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { resolveSteamApp } from '@/lib/steam-games'
 import { findGameByExactName } from '@/lib/name-games'
-import { resolveExeCandidate } from '@/lib/exe-catalog'
+import { cleanSubmittedSuffix, uniqueByBasename } from '@/lib/detectable'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent } from '@/lib/igdb'
 
 export const dynamic = 'force-dynamic'
 
+type Sb = ReturnType<typeof createAdminClient>
+type DetectableHit = { id: number; name: string; steam_appid: number | null; igdb_id: number | null }
+type Resolved = { igdbId: number; name: string; steamAppId: number | null } | null
+
+/**
+ * A master-list row to an exact IGDB game: the admin's own igdb_id first,
+ * then the row's Steam id through the same cache the Steam path uses, and
+ * only then — for the ~2% with no store id — an exact-title search.
+ */
+async function resolveDetectable(sb: Sb, row: DetectableHit): Promise<Resolved> {
+  if (row.igdb_id != null) return { igdbId: row.igdb_id, name: row.name, steamAppId: row.steam_appid }
+  if (row.steam_appid != null) {
+    const lookup = await resolveSteamApp(sb as any, row.steam_appid)
+    if (lookup.kind === 'game') return { igdbId: lookup.igdbId, name: lookup.name, steamAppId: row.steam_appid }
+    // notAGame/unknown: IGDB doesn't map this Steam id. The list still says
+    // it's a game, so fall through to its name rather than giving up.
+  }
+  const byName = await findGameByExactName(row.name)
+  return byName.kind === 'game' ? { igdbId: byName.igdbId, name: byName.name, steamAppId: null } : null
+}
+
+/** `_` and `%` are LIKE wildcards; exe names contain the former often. */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, c => `\\${c}`)
+}
+
 /**
  * "What is this running game, and can I track it?"
  *
- * Four ways to ask, and the agent uses whichever it actually has:
+ * Five ways to ask, and the agent uses whichever it actually has:
  *
+ *   detectableId — the tracker matched the program's path against the master
+ *                list (`/api/agent/detectable`) on the PC itself. Resolved via
+ *                `resolveDetectable`: exact for admin rows and for the 97% of
+ *                Discord rows with a Steam id.
  *   steamAppId — launched through Steam. Exact: the registry's app id maps to
  *                an exact IGDB game via `external_games`, or to nothing.
  *   titleGuess — launched through another launcher (Epic, GOG, …) whose own
@@ -26,21 +56,11 @@ export const dynamic = 'force-dynamic'
  *   igdbId     — a specific game a person picked themselves from the agent's
  *                own search panel. Nothing to resolve: they already chose it,
  *                so this skips straight to "already owned? else file it".
- *   lookupExe  — no local signal of any kind, just the raw exe name (plus,
- *                optionally, the install `installPath` the agent found it
- *                running from). Checked against `global_exe_links`, which
- *                holds both admin-curated rows and a much larger bulk-
- *                imported catalog (`scripts/import-exe-catalog.mjs`). An exe
- *                name used by more than one title (an unrelated launcher and
- *                an unrelated game sharing a name, say) is only trusted when
- *                `installPath` disambiguates to exactly one row's
- *                `folder_hint` — otherwise it's `unknown`, same as a miss,
- *                rather than risk guessing between two different games. A
- *                catalog row with no `igdb_id` yet (every bulk-imported row
- *                starts this way) is resolved via the same exact-match title
- *                search as `titleGuess`, and the result is cached back onto
- *                the row — so every subsequent user hitting that exe gets the
- *                instant path, and the resolution only ever happens once.
+ *   lookupExe  — kept for trackers released before the master list: just
+ *                the bare exe name. Checked against `detectable_games` by
+ *                basename, and only trusted when every row with that name
+ *                is the same game (`uniqueByBasename`) — `game.exe` belongs
+ *                to 190+ games, so a bare name is often no answer at all.
  *
  * The answer decides everything that follows:
  *
@@ -79,7 +99,9 @@ export const dynamic = 'force-dynamic'
  * via an app id, and not trackable via a link, because none was ever made.
  * So a `tracked`/`added` result upserts into `game_executables` exactly the
  * way a manual "Link a game" would — the identical table, the identical
- * shape, just written automatically instead of by a click.
+ * shape, just written automatically instead of by a click. `pathSuffix`
+ * (the exe plus its nearest telling folder, never the full path) rides
+ * along for the admin queue on `/admin/exe-links`.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const sb = createAdminClient()
@@ -104,9 +126,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const hasTitle = !!titleGuess
   const hasPicked = pickedIgdbId != null
   const hasLookup = body?.lookupExe === true
+  const detectableId = body?.detectableId
+  const hasDetectable = detectableId != null
 
-  if ([hasAppId, hasTitle, hasPicked, hasLookup].filter(Boolean).length !== 1) {
-    return NextResponse.json({ error: 'exactly one of steamAppId, titleGuess, igdbId or lookupExe is required' }, { status: 400 })
+  if ([hasAppId, hasTitle, hasPicked, hasLookup, hasDetectable].filter(Boolean).length !== 1) {
+    return NextResponse.json({ error: 'exactly one of steamAppId, titleGuess, igdbId, detectableId or lookupExe is required' }, { status: 400 })
+  }
+  if (hasDetectable && (typeof detectableId !== 'number' || !Number.isInteger(detectableId) || detectableId <= 0)) {
+    return NextResponse.json({ error: 'detectableId must be a positive integer' }, { status: 400 })
   }
   // The other modes carry their own signal; this one is nothing but the exe
   // name, so unlike them it cannot be optional here.
@@ -133,41 +160,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ? normaliseExeName(body.exeName)
     : null
   const platform = typeof body?.platform === 'string' && body.platform.trim() ? body.platform.trim().slice(0, 100) : 'PC (Windows)'
+  // Optional and silently dropped if it doesn't look like a short ending —
+  // a bad suffix must never cost the user their identification.
+  const pathSuffix = cleanSubmittedSuffix(body?.pathSuffix)
 
-  // All three paths resolve to the same shape, so everything below is shared.
+  // Every path resolves to the same shape, so everything below is shared.
+  // `steamAppId` is the exact Steam id where one is known (the Steam path, or
+  // a master-list row carrying one): it matches owned rows more precisely
+  // than the IGDB id and is stored on a newly filed game.
   let igdbId: number
   let resolvedName: string
+  let steamAppId: number | null = null
   if (hasAppId) {
     const lookup = await resolveSteamApp(sb as any, appId)
     if (lookup.kind === 'unknown') return NextResponse.json({ result: 'unknown' })
     if (lookup.kind === 'notAGame') return NextResponse.json({ result: 'notAGame' })
     igdbId = lookup.igdbId
     resolvedName = lookup.name
+    steamAppId = appId
   } else if (hasTitle) {
     const lookup = await findGameByExactName(titleGuess!)
     if (lookup.kind === 'noMatch') return NextResponse.json({ result: 'unknown' })
     igdbId = lookup.igdbId
     resolvedName = lookup.name
-  } else if (hasLookup) {
-    const { data: rows } = await (sb.from('global_exe_links') as any)
-      .select('id, igdb_id, title, folder_hint')
-      .eq('exe_name', normaliseExeName(body.exeName))
-    const installPath = typeof body?.installPath === 'string' ? body.installPath : null
-    const match = resolveExeCandidate(rows ?? [], installPath)
-    if (!match) return NextResponse.json({ result: 'unknown' })
-
-    if (match.igdb_id != null) {
-      igdbId = match.igdb_id
-      resolvedName = match.title
+  } else if (hasDetectable || hasLookup) {
+    let row: DetectableHit | null = null
+    if (hasDetectable) {
+      const { data } = await (sb.from('detectable_games') as any)
+        .select('id, name, steam_appid, igdb_id')
+        .eq('id', detectableId)
+        .maybeSingle()
+      row = data ?? null
     } else {
-      const lookup = await findGameByExactName(match.title)
-      if (lookup.kind === 'noMatch') return NextResponse.json({ result: 'unknown' })
-      igdbId = lookup.igdbId
-      resolvedName = lookup.name
-      // Self-optimising: every subsequent user hitting this exe gets the
-      // instant igdb_id path, so this resolution only has to happen once.
-      await (sb.from('global_exe_links') as any).update({ igdb_id: igdbId }).eq('id', match.id)
+      const exe = normaliseExeName(body.exeName)
+      const columns = 'id, name, steam_appid, igdb_id, path_suffix, source, discord_id'
+      const [{ data: bare }, { data: nested }] = await Promise.all([
+        (sb.from('detectable_games') as any).select(columns).eq('path_suffix', exe),
+        (sb.from('detectable_games') as any).select(columns).like('path_suffix', `%/${escapeLike(exe)}`),
+      ])
+      row = uniqueByBasename([...(bare ?? []), ...(nested ?? [])], exe)
     }
+    const resolved = row ? await resolveDetectable(sb, row) : null
+    if (!resolved) return NextResponse.json({ result: 'unknown' })
+    igdbId = resolved.igdbId
+    resolvedName = resolved.name
+    steamAppId = resolved.steamAppId
   } else {
     // Picked directly from a search result — nothing to resolve or verify,
     // the person already chose this exact game.
@@ -186,6 +223,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       user_id: userId,
       game_id: gameId,
       exe_name: exeName,
+      // Only when known — an upsert without it must not wipe one already saved.
+      ...(pathSuffix ? { path_suffix: pathSuffix } : {}),
     }, { onConflict: 'user_id,exe_name' })
     if (error) console.error(`identify: could not link ${exeName} to ${gameId}: ${error.message}`)
   }
@@ -193,7 +232,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Already theirs? Match on the Steam id first where we have one — it is
   // exact — then on the IGDB id, which catches a copy added before Steam ids
   // were being stored, or one found by name in the first place.
-  const ownedQuery = hasAppId ? `steam_appid.eq.${appId},igdb_id.eq.${igdbId}` : `igdb_id.eq.${igdbId}`
+  const ownedQuery = steamAppId != null ? `steam_appid.eq.${steamAppId},igdb_id.eq.${igdbId}` : `igdb_id.eq.${igdbId}`
   const { data: owned } = await (sb.from('games') as any)
     .select('id, title, status')
     .eq('user_id', userId)
@@ -225,7 +264,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         .eq('igdb_id', parentId)
         .limit(1)
       existing = (parentOwned ?? [])[0] as { id: string; title: string; status: string } | undefined
-      if (existing && hasAppId) editionSteamAppId = appId
+      if (existing && steamAppId != null) editionSteamAppId = steamAppId
     }
   }
 
@@ -273,7 +312,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       status: 'ambient',
       platform,
       start_date: new Date().toISOString().slice(0, 10),
-      steam_appid: hasAppId ? appId : null,
+      steam_appid: steamAppId,
       [PROVIDER_ID_COLUMN]: igdbId,
       image_url: detail?.background_image ?? null,
       cover_image_url: detail?.cover_image ?? null,

@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/check-events",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-detectable",
+      "schedule": "0 3 * * 1"
     }
   ]
 }

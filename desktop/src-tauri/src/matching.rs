@@ -222,43 +222,6 @@ pub fn best_exe<'a>(title: &str, exe_names: impl IntoIterator<Item = &'a str>) -
         .max_by_key(|(_, points)| *points)
 }
 
-/// A plausible display title straight from an executable's own name —
-/// "DeadSpace.exe" to "Dead Space" — for when no launcher's install record
-/// says what a program actually is.
-///
-/// Built on this module's own `tokens()` rather than re-deriving the same
-/// cleanup: the camelCase/digit-boundary splitting and apostrophe handling
-/// already has to be right for `score()`, so reusing it here means a fix to
-/// one fixes the other. `None` for a name this module already treats as
-/// uninformative (`GENERIC`, same check `score()` makes) — guessing from
-/// `launcher.exe` would be worse than not guessing.
-pub fn guess_title_from_exe(exe_name: &str) -> Option<String> {
-    let parts = tokens(exe_name);
-    if parts.is_empty() {
-        return None;
-    }
-    // Same two checks `score()` makes: the whole name concatenated, and
-    // every token individually — the camelCase split turns "ShooterGame"
-    // into ["shooter", "game"], neither of which alone is "shootergame".
-    let joined = parts.concat();
-    if GENERIC.contains(&joined.as_str()) || parts.iter().all(|p| GENERIC.contains(&p.as_str())) {
-        return None;
-    }
-    Some(
-        parts
-            .iter()
-            .map(|p| {
-                let mut chars = p.chars();
-                match chars.next() {
-                    Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                    None => String::new(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,29 +307,5 @@ mod tests {
         let running = vec!["brave.exe", "discord.exe"];
         let best = best_exe("Vampire Survivors", running);
         assert!(best.is_none_or(|(_, points)| points < CONFIDENT));
-    }
-
-    // ── guess_title_from_exe ────────────────────────────────────────────────
-
-    #[test]
-    fn guesses_a_clean_title_from_camel_case() {
-        assert_eq!(guess_title_from_exe("DeadSpace.exe").as_deref(), Some("Dead Space"));
-    }
-
-    #[test]
-    fn guesses_a_clean_title_from_separators() {
-        assert_eq!(guess_title_from_exe("split_fiction-Win64-Shipping.exe").as_deref(), Some("Split Fiction"));
-    }
-
-    #[test]
-    fn refuses_a_generic_name_whole_or_tokenised() {
-        assert_eq!(guess_title_from_exe("launcher.exe"), None);
-        assert_eq!(guess_title_from_exe("ShooterGame-Win64-Shipping.exe"), None);
-    }
-
-    #[test]
-    fn is_none_for_an_empty_or_noise_only_name() {
-        assert_eq!(guess_title_from_exe(".exe"), None);
-        assert_eq!(guess_title_from_exe("Win64-Shipping.exe"), None);
     }
 }

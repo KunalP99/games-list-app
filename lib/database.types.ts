@@ -290,6 +290,8 @@ export type Database = {
           game_id: string
           /** Lowercased basename, e.g. "splitfiction.exe". */
           exe_name: string
+          /** The exe plus its nearest telling folder, e.g. "tunic/tunic.exe". Null for website-made links. */
+          path_suffix: string | null
           created_at: string
         }
         Insert: {
@@ -297,6 +299,7 @@ export type Database = {
           user_id: string
           game_id: string
           exe_name: string
+          path_suffix?: string | null
           created_at?: string
         }
         Update: {
@@ -304,7 +307,90 @@ export type Database = {
           user_id?: string
           game_id?: string
           exe_name?: string
+          path_suffix?: string | null
           created_at?: string
+        }
+        Relationships: []
+      }
+      detectable_games: {
+        Row: {
+          id: number
+          /** Lowercase, '/'-separated path ending, e.g. "tunic/tunic.exe". */
+          path_suffix: string
+          source: 'discord' | 'admin'
+          name: string
+          steam_appid: number | null
+          igdb_id: number | null
+          discord_id: string | null
+          approved_by: string | null
+          last_seen_import: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          path_suffix: string
+          source: 'discord' | 'admin'
+          name: string
+          steam_appid?: number | null
+          igdb_id?: number | null
+          discord_id?: string | null
+          approved_by?: string | null
+          last_seen_import?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          path_suffix?: string
+          source?: 'discord' | 'admin'
+          name?: string
+          steam_appid?: number | null
+          igdb_id?: number | null
+          discord_id?: string | null
+          approved_by?: string | null
+          last_seen_import?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      detectable_import_runs: {
+        Row: {
+          id: number
+          started_at: string
+          status: 'applied' | 'rejected' | 'failed'
+          entries_seen: number | null
+          rows_upserted: number | null
+          rows_removed: number | null
+          note: string | null
+        }
+        Insert: {
+          id?: number
+          started_at?: string
+          status: 'applied' | 'rejected' | 'failed'
+          entries_seen?: number | null
+          rows_upserted?: number | null
+          rows_removed?: number | null
+          note?: string | null
+        }
+        Update: {
+          status?: 'applied' | 'rejected' | 'failed'
+          note?: string | null
+        }
+        Relationships: []
+      }
+      detectable_dismissed: {
+        Row: {
+          path_suffix: string
+          dismissed_by: string | null
+          created_at: string
+        }
+        Insert: {
+          path_suffix: string
+          dismissed_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          dismissed_by?: string | null
         }
         Relationships: []
       }

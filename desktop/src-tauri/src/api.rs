@@ -118,18 +118,51 @@ pub async fn post_session(
     res.json::<SessionResponse>().await.map_err(|e| e.to_string())
 }
 
-/// Remember that an executable is a particular game.
+/// The master list, unless it is unchanged since `etag` — then `Ok(None)`.
+pub async fn fetch_detectable(
+    base: &str,
+    token: &str,
+    etag: Option<&str>,
+) -> Result<Option<crate::master_list::ListFile>, String> {
+    // Longer than the usual timeout: ~400 KB, on whatever connection this is.
+    let mut req = reqwest::Client::builder()
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|e| e.to_string())?
+        .get(format!("{base}/api/agent/detectable"))
+        .bearer_auth(token);
+    if let Some(etag) = etag {
+        req = req.header(reqwest::header::IF_NONE_MATCH, format!("\"{etag}\""));
+    }
+    let res = req.send().await.map_err(|e| e.to_string())?;
+    if res.status() == reqwest::StatusCode::NOT_MODIFIED {
+        return Ok(None);
+    }
+    if !res.status().is_success() {
+        return Err(format!("master list request failed: {}", res.status()));
+    }
+    res.json::<crate::master_list::ListFile>().await.map(Some).map_err(|e| e.to_string())
+}
+
+/// Remember that an executable is a particular game. `path_suffix` (the exe
+/// and its nearest telling folder, never the full path) feeds the site's
+/// admin queue for the master list.
 pub async fn post_link(
     base: &str,
     token: &str,
     exe_name: &str,
     game_id: &str,
+    path_suffix: Option<&str>,
 ) -> Result<(), String> {
+    let mut body = serde_json::json!({ "exeName": exe_name, "gameId": game_id });
+    if let Some(suffix) = path_suffix {
+        body["pathSuffix"] = serde_json::json!(suffix);
+    }
     let res = client()
         .map_err(|e| e.to_string())?
         .post(format!("{base}/api/agent/link"))
         .bearer_auth(token)
-        .json(&serde_json::json!({ "exeName": exe_name, "gameId": game_id }))
+        .json(&body)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -195,13 +228,9 @@ pub enum IdentifyBy<'a> {
     /// A person picked this exact game themselves, from a real search result
     /// (`search_games` below) — nothing left to resolve or verify.
     IgdbId { id: u32, title: &'a str },
-    /// No local signal beyond the exe name itself (plus, where known, the
-    /// install path it's running from) — checked against `global_exe_links`
-    /// server-side, which holds both admin-curated rows and a much larger
-    /// bulk-imported catalog. The path is what lets the server tell apart
-    /// two different games sharing one exe name, by matching it against
-    /// each candidate's `folder_hint`.
-    LookupExe { path: Option<&'a str> },
+    /// The program's path matched a master-list entry on this PC
+    /// (`master_list.rs`). The row id is all the server needs.
+    Detectable(u64),
 }
 
 /// Ask what a running game is, and have it filed if it is new.
@@ -217,21 +246,19 @@ pub async fn post_identify(
     by: IdentifyBy<'_>,
     exe_name: &str,
     platform: &str,
+    path_suffix: Option<&str>,
 ) -> Result<IdentifyResponse, String> {
     let mut body = match by {
         IdentifyBy::SteamAppId(id) => serde_json::json!({ "steamAppId": id }),
         IdentifyBy::Title(title) => serde_json::json!({ "titleGuess": title }),
         IdentifyBy::IgdbId { id, title } => serde_json::json!({ "igdbId": id, "title": title }),
-        IdentifyBy::LookupExe { path } => {
-            let mut b = serde_json::json!({ "lookupExe": true });
-            if let Some(path) = path {
-                b["installPath"] = serde_json::json!(path);
-            }
-            b
-        }
+        IdentifyBy::Detectable(id) => serde_json::json!({ "detectableId": id }),
     };
     body["exeName"] = serde_json::json!(exe_name);
     body["platform"] = serde_json::json!(platform);
+    if let Some(suffix) = path_suffix {
+        body["pathSuffix"] = serde_json::json!(suffix);
+    }
     let res = client()
         .map_err(|e| e.to_string())?
         .post(format!("{base}/api/agent/identify"))

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
+import { cleanSubmittedSuffix } from '@/lib/detectable'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'gameId is required' }, { status: 400 })
   }
   const exeName = normaliseExeName(body.exeName)
+  // The exe plus its nearest telling folder ("tunic/tunic.exe"), for the
+  // admin queue on /admin/exe-links. Optional, and dropped rather than
+  // refused when it doesn't look like a short ending.
+  const pathSuffix = cleanSubmittedSuffix(body?.pathSuffix)
 
   // The game must be theirs — a device token is not a licence to touch anyone
   // else's library.
@@ -43,6 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     user_id: identity.userId,
     game_id: game.id,
     exe_name: exeName,
+    ...(pathSuffix ? { path_suffix: pathSuffix } : {}),
   }, { onConflict: 'user_id,exe_name' })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

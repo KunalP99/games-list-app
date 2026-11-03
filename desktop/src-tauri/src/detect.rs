@@ -285,21 +285,21 @@ fn is_not_obviously_excluded(c: &Candidate) -> bool {
     true
 }
 
-/// Worth checking against the global exe-link catalog, regardless of
+/// Worth checking against the master list (`master_list.rs`), regardless of
 /// whether the local heuristic below can confirm it is a game on its own.
 ///
 /// Deliberately looser than [`looks_like_game_with`]: it skips the
 /// folder-hint and module-probe checks entirely and just rules out what
 /// plainly is not worth a network round-trip (everyday software, installers,
 /// anything inside the Windows folder, anything too young to have finished
-/// launching), leaving the rest to the catalog's own answer. This exists
+/// launching), leaving the rest to the list's own answer. This exists
 /// because a real game can actively block the two signals the full judge
 /// depends on — confirmed live against Dead by Daylight, whose anti-cheat
 /// makes both its install path *and* its loaded modules unreadable, so the
-/// judge never settles on `Game` and the catalog (which needs neither) would
-/// otherwise never even be asked. A miss here just means "not on the list
-/// yet", the same as it already did for a judge-confirmed game — not a
-/// "this is not a game" verdict of any kind.
+/// judge never settles on `Game` and the list would otherwise never even be
+/// consulted. A miss here just means "not on the list yet", the same as it
+/// already did for a judge-confirmed game — not a "this is not a game"
+/// verdict of any kind.
 pub fn plausible_candidate(c: &Candidate) -> bool {
     is_not_obviously_excluded(c) && c.run_time_secs >= MIN_RUN_TIME_SECS
 }

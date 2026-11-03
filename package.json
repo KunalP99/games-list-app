@@ -16,6 +16,7 @@
     "env:prod": "node scripts/use-env.mjs prod",
     "db:dump": "node scripts/dump-schema.mjs",
     "seed:dev": "node scripts/seed-dev.mjs",
+    "import:detectable": "node scripts/import-detectable.mjs",
     "db:migration": "node scripts/make-migration.mjs",
     "db:reset": "npx supabase db reset",
     "supabase:start": "npx supabase start",
