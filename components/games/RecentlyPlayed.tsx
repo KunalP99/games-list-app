@@ -54,11 +54,13 @@ export default function RecentlyPlayed({
       {/* Spans the page: the hero takes the spare width, and the covers keep
           their portrait shape and set the row's height, which the hero
           stretches to match. On phones the hero sits on its own row above
-          the covers. */}
+          the covers. The hero's min-height is load-bearing: with only one
+          recently played game there are no covers to take the height from,
+          and it collapsed to nothing on wide screens. */}
       <div className="grid grid-cols-4 sm:grid-cols-[minmax(0,2.8fr)_repeat(4,minmax(0,1fr))] gap-4">
         <Link
           href={`/games/${hero.id}`}
-          className="group relative block col-span-4 sm:col-span-1 h-[200px] sm:h-auto rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+          className="group relative block col-span-4 sm:col-span-1 h-[200px] sm:h-auto sm:min-h-[200px] rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
         >
           <div className="absolute inset-0 bg-surface-active">
             {banner ? (
