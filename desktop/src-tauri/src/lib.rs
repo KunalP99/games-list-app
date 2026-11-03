@@ -4,7 +4,6 @@
 //! website everywhere else, so there is only ever one copy of the UI.
 
 mod api;
-mod battlenet;
 mod config;
 mod detect;
 mod matching;
@@ -19,7 +18,7 @@ use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
-use tracker::{PendingPrompt, Tracker};
+use tracker::{PendingPlatformPrompt, PendingPrompt, PendingResumePrompt, Tracker};
 
 /// A version seen once at launch, waiting on the main window's modal to ask
 /// about it. Holds the real `Update` handle, not just its version string —
@@ -56,8 +55,17 @@ pub struct StatusView {
     queued: usize,
     last_error: Option<String>,
     pending_prompt: Option<PendingPrompt>,
+    pending_platform_prompt: Option<PendingPlatformPrompt>,
+    pending_resume_prompt: Option<PendingResumePrompt>,
     api_base: String,
     pending_update: Option<UpdateInfo>,
+    /// True only in a debug build — never in the installed app, which is
+    /// release-only. Drives the "DEV" badge, so there's no way to confuse a
+    /// `cargo tauri dev`/`npm run restart` window for the real one, even
+    /// though both share the same `config.json` and can't run side by side
+    /// (the single-instance guard is keyed on the app identifier, which is
+    /// the same for both builds).
+    is_dev: bool,
 }
 
 /// Everything the status screen needs, in one call.
@@ -94,8 +102,11 @@ fn get_status(app: AppHandle) -> StatusView {
         queued: shared.queued,
         last_error: shared.last_error.clone(),
         pending_prompt: shared.pending_prompt.clone(),
+        pending_platform_prompt: shared.pending_platform_prompt.clone(),
+        pending_resume_prompt: shared.pending_resume_prompt.clone(),
         api_base: config.base(),
         pending_update,
+        is_dev: cfg!(debug_assertions),
     }
 }
 
@@ -107,6 +118,8 @@ fn start_pairing(app: AppHandle) -> Result<(), String> {
 /// "Yes, that is the game" — link the executable and clear the prompt.
 #[tauri::command]
 async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
+    // TEMP DIAG
+    log::info!("DIAG confirm_prompt entered");
     let (base, token, prompt) = {
         let tracker = app.state::<Tracker>();
         let config = tracker.snapshot_config();
@@ -127,6 +140,7 @@ async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
     {
         let tracker = app.state::<Tracker>();
         let mut shared = tracker.shared.lock().unwrap();
+        log::info!("DIAG CLEAR path=confirm_prompt exe={}", prompt.exe_name);
         shared.pending_prompt = None;
         shared.skip_for_now.insert(prompt.exe_name.clone());
         // Re-read so the new link is picked up on the next tick.
@@ -210,13 +224,29 @@ fn suggest_program(title: String) -> Option<String> {
 ///
 /// The website has a page for this too, but doing it here means no second
 /// window, no webview session to expire, and nothing to go blank.
+///
+/// `platform`, if given, is only sent on when it differs from what the game
+/// already has — the link panel's dropdown always has *some* value selected,
+/// and resending the same one on every link would be pointless traffic, not
+/// a correction.
 #[tauri::command]
-async fn link_executable(app: AppHandle, exe_name: String, game_id: String) -> Result<(), String> {
+async fn link_executable(
+    app: AppHandle,
+    exe_name: String,
+    game_id: String,
+    platform: Option<String>,
+    current_platform: Option<String>,
+) -> Result<(), String> {
     let (base, token) = {
         let config = app.state::<Tracker>().snapshot_config();
         (config.base(), config.token.clone().unwrap_or_default())
     };
     api::post_link(&base, &token, &exe_name, &game_id).await?;
+    if let Some(platform) = platform {
+        if current_platform.as_deref() != Some(platform.as_str()) {
+            api::post_platform(&base, &token, &game_id, &platform).await?;
+        }
+    }
     app.state::<Tracker>().shared.lock().unwrap().force_refresh = true;
     Ok(())
 }
@@ -237,14 +267,21 @@ async fn search_games(app: AppHandle, query: String) -> Result<Vec<api::SearchRe
     api::search_games(&base, &token, &query).await
 }
 
-/// Add a game the user picked themselves from a search result, optionally
-/// linking it to the program that prompted the search.
+/// Add a game the user picked themselves from a search result.
+///
+/// Deliberately never links it to a program itself, even when the search
+/// was opened for a specific one: doing that silently here meant "Add it as
+/// a new game" could finish with nothing visibly happening and no link
+/// actually made (an empty program selection sends an empty exe name, which
+/// the server correctly refuses to link — so tracking never started and
+/// there was no sign why). The caller reopens the link panel with this game
+/// preselected instead, so "Link them" is the one, explicit, always-visible
+/// step that actually starts tracking.
 #[tauri::command]
 async fn add_searched_game(
     app: AppHandle,
     igdb_id: u32,
     title: String,
-    exe_name: Option<String>,
 ) -> Result<api::IdentifyResponse, String> {
     let (base, token) = {
         let config = app.state::<Tracker>().snapshot_config();
@@ -254,7 +291,7 @@ async fn add_searched_game(
         &base,
         &token,
         api::IdentifyBy::IgdbId { id: igdb_id, title: &title },
-        exe_name.as_deref().unwrap_or(""),
+        "",
         "PC (Windows)",
     )
     .await?;
@@ -313,15 +350,26 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 /// `remember` is the difference between "not a game" and "not now". Only an
 /// outright no is written to `asked.json`, which is permanent; sending the
 /// question to the link panel merely stops it coming back this run, so an
-/// abandoned link still gets another chance tomorrow.
+/// abandoned link still gets another chance tomorrow. An outright no is also
+/// told to the server (`ignored_executables`), so it shows up and is
+/// reversible from Settings rather than living only in this machine's local
+/// file — best-effort: a failure here still leaves `asked.json` doing its job
+/// locally.
 #[tauri::command]
-fn dismiss_prompt(app: AppHandle, remember: Option<bool>) {
+async fn dismiss_prompt(app: AppHandle, remember: Option<bool>) {
+    // TEMP DIAG
+    log::info!("DIAG dismiss_prompt entered remember={remember:?}");
     let tracker = app.state::<Tracker>();
     let dir = tracker.data_dir.clone();
+    let (base, token) = {
+        let config = tracker.snapshot_config();
+        (config.base(), config.token.clone().unwrap_or_default())
+    };
     let prompt = {
         let mut shared = tracker.shared.lock().unwrap();
         let prompt = shared.pending_prompt.take();
         if let Some(prompt) = &prompt {
+            log::info!("DIAG CLEAR path=dismiss_prompt exe={} remember={remember:?}", prompt.exe_name);
             shared.skip_for_now.insert(prompt.exe_name.clone());
         }
         prompt
@@ -332,10 +380,110 @@ fn dismiss_prompt(app: AppHandle, remember: Option<bool>) {
     {
         log::info!("{} is not a game; not asking again", prompt.exe_name);
         config::add_asked(&dir, &prompt.exe_name);
+        match api::post_ignore(&base, &token, &prompt.exe_name).await {
+            Ok(()) => tracker.shared.lock().unwrap().force_refresh = true,
+            Err(err) => log::warn!("could not record ignore for {}: {err}", prompt.exe_name),
+        }
     }
     // As in `confirm_prompt`: whichever window answered, the other one is
     // still showing the question.
     let _ = app.emit("status-changed", ());
+}
+
+/// Record that the user closed the toast window with its × — without
+/// answering anything.
+///
+/// The question deliberately stays pending (closing the × is not an answer,
+/// and may well be a misclick), so this only says "don't put this particular
+/// toast back up". That distinction is the whole point: without it, a
+/// pending question whose window had gone was indistinguishable from one the
+/// user had waved away, so `maybe_prompt` never re-showed either — and a
+/// toast lost to anything but the × silently never came back.
+#[tauri::command]
+fn dismiss_toast(app: AppHandle) {
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    if let Some(prompt) = &shared.pending_prompt {
+        let exe_name = prompt.exe_name.clone();
+        shared.toast_dismissed.insert(exe_name);
+    }
+}
+
+/// Save the platform the platform-confirm prompt is showing, and clear it.
+///
+/// Takes the stored prompt's `game_id` rather than one passed in from the
+/// frontend: the prompt already names exactly which game this is about, and
+/// trusting the caller for that would let a stale or mistimed call touch the
+/// wrong game.
+#[tauri::command]
+async fn set_platform(app: AppHandle, platform: String) -> Result<(), String> {
+    let (base, token, prompt) = {
+        let tracker = app.state::<Tracker>();
+        let config = tracker.snapshot_config();
+        let prompt = tracker.shared.lock().unwrap().pending_platform_prompt.clone();
+        (config.base(), config.token.unwrap_or_default(), prompt)
+    };
+    let Some(prompt) = prompt else { return Ok(()) };
+
+    api::post_platform(&base, &token, &prompt.game_id, &platform).await?;
+
+    let tracker = app.state::<Tracker>();
+    config::remove_unconfirmed_platform(&tracker.data_dir, &prompt.game_id);
+    tracker.shared.lock().unwrap().pending_platform_prompt = None;
+    let _ = app.emit("status-changed", ());
+    Ok(())
+}
+
+/// Answer the "is this a replay?" / "are you resuming?" / "set to Playing or
+/// Ambient?" prompt.
+///
+/// `status` is the target chosen for the backlog case specifically — the
+/// other two kinds have exactly one possible outcome, so the frontend never
+/// sends it for those, and the server never asks for it either.
+///
+/// `accept: false` is deliberately not written anywhere permanent — unlike
+/// "not a game", declining says nothing about whether the program is a
+/// game (it plainly is, already in the library), only that today isn't the
+/// day for this. `skip_for_now` just quiets this run; a fresh launch asks
+/// again.
+#[tauri::command]
+async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<String>) -> Result<(), String> {
+    let tracker = app.state::<Tracker>();
+    let prompt = tracker.shared.lock().unwrap().pending_resume_prompt.clone();
+    let Some(prompt) = prompt else { return Ok(()) };
+
+    if !accept {
+        let mut shared = tracker.shared.lock().unwrap();
+        shared.pending_resume_prompt = None;
+        shared.skip_for_now.insert(prompt.exe_name.clone());
+        drop(shared);
+        let _ = app.emit("status-changed", ());
+        return Ok(());
+    }
+
+    let (base, token) = {
+        let config = tracker.snapshot_config();
+        (config.base(), config.token.unwrap_or_default())
+    };
+    let response = api::post_resume(&base, &token, &prompt.game_id, &prompt.kind, status.as_deref(), &prompt.exe_name).await?;
+    log::info!(
+        "{} {} ({})",
+        match prompt.kind.as_str() {
+            "dnf" => "resumed",
+            "backlog" => "started tracking",
+            _ => "replaying",
+        },
+        response.title,
+        response.game_id,
+    );
+
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    shared.pending_resume_prompt = None;
+    shared.force_refresh = true;
+    drop(shared);
+    let _ = app.emit("status-changed", ());
+    Ok(())
 }
 
 /// The toast has painted: show the window it was built hidden in.
@@ -430,6 +578,7 @@ pub fn run() {
             start_pairing,
             confirm_prompt,
             dismiss_prompt,
+            dismiss_toast,
             toast_ready,
             close_toast,
             open_app,
@@ -446,6 +595,8 @@ pub fn run() {
             sign_out,
             set_api_base,
             install_update,
+            set_platform,
+            respond_to_resume_prompt,
         ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
@@ -500,6 +651,19 @@ pub fn run() {
                 }
             }
 
+            // A debug build and the installed release share the same app
+            // identifier, so the single-instance guard below treats them as
+            // one and the same — running this while the real app is already
+            // up just refocuses *that* window instead of starting a new one.
+            // The title and tray tooltip say so plainly, in case that
+            // happens anyway; the in-window "DEV" badge (`get_status`'s
+            // `is_dev`) is the same signal once the page itself has loaded.
+            if cfg!(debug_assertions) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_title("GamesList (DEV)");
+                }
+            }
+
             // ── Tray ────────────────────────────────────────────────────────
             let open = MenuItem::with_id(app, "open", "Open GamesList", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -507,7 +671,7 @@ pub fn run() {
 
             TrayIconBuilder::with_id("tray")
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("GamesList")
+                .tooltip(if cfg!(debug_assertions) { "GamesList (DEV)" } else { "GamesList" })
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -547,7 +711,7 @@ pub fn run() {
                     Some(prompt.clone());
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    toast::show(&handle, &prompt);
+                    toast::show(&handle, &prompt.exe_name);
                 });
             }
             if std::env::args().any(|a| a == "--pair") {

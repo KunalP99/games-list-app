@@ -7,14 +7,13 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::api::{self, AgentState, PlayingGame};
-use crate::battlenet;
 use crate::config::{self, AppConfig};
 use crate::detect;
 use crate::ea;
@@ -74,6 +73,50 @@ pub struct PendingPrompt {
     pub confident: bool,
 }
 
+/// A game just filed for the first time, waiting on the platform-confirm
+/// prompt. First set right after a successful identification (`"added"`) —
+/// the opposite moment from `PendingPrompt`, which only exists when
+/// identification *failed* — so the two are always mutually exclusive.
+///
+/// Unlike `PendingPrompt`/`PendingResumePrompt`, this one is also re-set on
+/// every tick the game is matched as running (see `run_loop`'s start/stop
+/// block) for as long as `config::load_unconfirmed_platforms` still lists its
+/// `game_id` — so closing the × on the toast (which leaves the prompt
+/// pending, same as the other two) doesn't mean it follows the user around:
+/// it disappears the moment the game closes, and comes back the next time
+/// it's launched, until `set_platform` actually answers it and removes the
+/// game from that list for good.
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingPlatformPrompt {
+    pub game_id: String,
+    pub title: String,
+    /// Whatever the identify call already set — "Steam", "Epic Games",
+    /// "EA App", or "PC (Windows)" when there was no stronger signal. The
+    /// prompt's dropdown starts here so confirming it is a single click.
+    pub current_platform: String,
+}
+
+/// A running game that's already in the library as Completed, DNF, or
+/// Backlog — identified, but not currently trackable, so moving it is
+/// asked about rather than done silently. Set right after an
+/// `/api/agent/identify` call comes back `untracked` with its `resumable`
+/// field set; cleared the moment the user answers
+/// (`respond_to_resume_prompt`), never cached as asked/skipped the way an
+/// ordinary `untracked` match is, so an unanswered prompt simply re-asks on
+/// the next poll rather than going silent.
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingResumePrompt {
+    pub exe_name: String,
+    pub game_id: String,
+    pub title: String,
+    /// `"completed"` — accepting creates a brand-new row (a replay).
+    /// `"dnf"` — accepting updates this same row in place (resuming).
+    /// `"backlog"` — accepting updates this same row in place too, but the
+    /// target status (`"playing"` or `"ambient"`) is the user's own choice,
+    /// since unlike the other two there's no single obvious answer.
+    pub kind: String,
+}
+
 #[derive(Default)]
 pub struct Shared {
     pub state: Option<AgentState>,
@@ -82,6 +125,8 @@ pub struct Shared {
     pub queued: usize,
     pub last_error: Option<String>,
     pub pending_prompt: Option<PendingPrompt>,
+    pub pending_platform_prompt: Option<PendingPlatformPrompt>,
+    pub pending_resume_prompt: Option<PendingResumePrompt>,
     /// Executables not to ask about again *this run*.
     ///
     /// Separate from `asked.json`, which is forever and is written only when
@@ -91,12 +136,43 @@ pub struct Shared {
     /// answered still comes back next time the app starts.
     pub skip_for_now: HashSet<String>,
     /// Steam app ids already put to the site this run, so a game that is
-    /// running but owned-and-not-trackable (completed, say) is not asked about
-    /// on every single poll.
+    /// running but owned-and-not-trackable (backlog, say) is not asked about
+    /// on every single poll. Cleared alongside `state` on every refresh
+    /// (`run_loop`'s `stale`/`forced` block), not held for the rest of the
+    /// process — a game owned-and-not-trackable a minute ago can become
+    /// trackable because the user changed its status on the website while
+    /// this kept running in the background, and nothing else would notice
+    /// that short of a restart. Confirmed live: flipping a DNF game straight
+    /// back to Playing on the website, while the agent was already running,
+    /// was silently invisible to it until this was added — the exact "is
+    /// the game ignored entirely?" scenario this guards against.
     pub identified: HashSet<u32>,
     /// The same, for executables identified by a launcher-reported title
     /// rather than a Steam app id — keyed by exe name, since there is no id.
     pub identified_titles: HashSet<String>,
+    /// Exe names checked against the global exe-link catalog this refresh
+    /// cycle and found to have no row. Separate from `identified_titles`
+    /// (which is only for an exe the catalog *did* resolve, just not to a
+    /// currently-trackable game): this is what keeps `identify_global_exe_links`
+    /// from hitting the server every single poll for a program that was
+    /// never going to be in the catalog, now that it no longer requires the
+    /// full heuristic judge first. Cleared alongside `identified`/
+    /// `identified_titles` on every state refresh, so an admin adding a row
+    /// is picked up within the same ~60-second window as everything else.
+    pub catalog_unknown: HashSet<String>,
+    /// Executables whose *toast* the user closed with its × — the question
+    /// itself stays pending on the status screen, deliberately, so an
+    /// accidental close doesn't lose it.
+    ///
+    /// This exists so `maybe_prompt` can tell the two reasons a toast window
+    /// might be gone apart. Before it, a pending prompt whose window had
+    /// closed was never re-shown — `maybe_prompt` returns early for as long
+    /// as the program keeps running — so a toast lost to anything other than
+    /// being answered (the ×, or the window closing on a `status-changed`
+    /// race just as a new prompt was raised) left the question alive but
+    /// completely invisible, with no toast ever appearing again. Only a real
+    /// × belongs here; anything else gets the toast put back.
+    pub toast_dismissed: HashSet<String>,
     /// Set when something happened off-app that the cached state cannot
     /// know about — linking a game on the website, for instance. The loop
     /// re-reads on its next tick instead of waiting out the cache.
@@ -127,6 +203,77 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 /// Tell the UI to re-read the status.
 fn ping_ui(app: &AppHandle) {
     let _ = app.emit("status-changed", ());
+}
+
+/// Shared by every identify path's `"untracked"` arm, since all three land
+/// in the exact same server-side logic and so see the exact same response
+/// shape. Surfaces the replay/resume prompt when the match is Completed or
+/// DNF; does nothing (so the caller falls back to its own "remember, don't
+/// ask again this cycle" bookkeeping) for Backlog, where there's nothing
+/// to resume.
+///
+/// Returns true when a prompt was shown — the caller treats that exactly
+/// like a successful identification for this tick, so the ordinary
+/// "is this a game?" toast doesn't also fire for the same program.
+fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, exe_name: &str) -> bool {
+    let Some(kind) = response.resumable.as_deref() else { return false };
+    let Some(game_id) = response.game_id.clone() else { return false };
+    let title = response.title.clone().unwrap_or_else(|| exe_name.to_string());
+    log::info!(
+        "\"{title}\" is {kind}; asking whether to {}",
+        match kind {
+            "dnf" => "resume",
+            "backlog" => "start tracking",
+            _ => "replay",
+        },
+    );
+    app.state::<Tracker>().shared.lock().unwrap().pending_resume_prompt = Some(PendingResumePrompt {
+        exe_name: exe_name.to_string(),
+        game_id,
+        title: title.clone(),
+        kind: kind.to_string(),
+    });
+    toast::show(app, &title);
+    true
+}
+
+/// Shows the platform-confirm prompt again for a game that's running and
+/// still listed in `config::load_unconfirmed_platforms` — the "reappears
+/// when the game is open again" half of the prompt's lifecycle (the other
+/// half, clearing it when the game closes, is `clear_platform_prompt_for`
+/// below). A no-op once the game isn't in that list any more (answered via
+/// `set_platform`) or the prompt is already showing for this exact game.
+fn maybe_reinstate_platform_prompt(app: &AppHandle, dir: &Path, game: &PlayingGame) {
+    if !config::load_unconfirmed_platforms(dir).contains(&game.id) {
+        return;
+    }
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    if shared.pending_platform_prompt.as_ref().is_some_and(|p| p.game_id == game.id) {
+        return;
+    }
+    shared.pending_platform_prompt = Some(PendingPlatformPrompt {
+        game_id: game.id.clone(),
+        title: game.title.clone(),
+        current_platform: game.platform.clone().unwrap_or_else(|| "PC (Windows)".into()),
+    });
+    drop(shared);
+    ping_ui(app);
+}
+
+/// The "disappears when the game closes" half — called whenever tracking for
+/// a game stops, so an unanswered prompt doesn't keep showing on the status
+/// screen once there's nothing running for it to be about. The game stays in
+/// `unconfirmed-platforms.json` regardless, so the prompt comes right back
+/// the next time it's launched, until `set_platform` actually answers it.
+fn clear_platform_prompt_for(app: &AppHandle, game_id: &str) {
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    if shared.pending_platform_prompt.as_ref().is_some_and(|p| p.game_id == game_id) {
+        shared.pending_platform_prompt = None;
+        drop(shared);
+        ping_ui(app);
+    }
 }
 
 pub async fn run_loop(app: AppHandle) {
@@ -167,6 +314,13 @@ pub async fn run_loop(app: AppHandle) {
                     let mut shared = tracker.shared.lock().unwrap();
                     shared.state = Some(state);
                     shared.last_error = None;
+                    // A fresh read of the world is exactly the signal that
+                    // anything "already settled" needs re-checking — see
+                    // the doc comment on `identified` for why this can't be
+                    // held for the rest of the process.
+                    shared.identified.clear();
+                    shared.identified_titles.clear();
+                    shared.catalog_unknown.clear();
                     drop(shared);
                     ping_ui(&app);
                 }
@@ -182,7 +336,20 @@ pub async fn run_loop(app: AppHandle) {
         flush_queue(&app, &base, &token).await;
 
         // ── What is running? ────────────────────────────────────────────────
-        let candidates = detect::candidates(&mut system);
+        let mut candidates = detect::candidates(&mut system);
+        // Programs the user has said to never auto-track. Filtered here,
+        // before anything else sees them, so an ignored exe is fully inert:
+        // never judged, never identified, never prompted about — this is
+        // what makes "ignore" actually stop something already (wrongly)
+        // being tracked, not just stop the question about it.
+        {
+            let shared = tracker.shared.lock().unwrap();
+            if let Some(state) = &shared.state {
+                if !state.ignored_executables.is_empty() {
+                    candidates.retain(|c| !state.ignored_executables.contains(&c.exe_name));
+                }
+            }
+        }
         judge.retain_running(&candidates.iter().map(|c| c.pid).collect());
         let steam_app_id = detect::steam_running_app_id();
 
@@ -215,8 +382,28 @@ pub async fn run_loop(app: AppHandle) {
         // ── Start / stop ────────────────────────────────────────────────────
         let current_game_id = tracker.shared.lock().unwrap().session.as_ref().map(|s| s.game_id.clone());
 
+        // TEMP DIAG: one line per tick when wow.exe is seen running.
+        if let Some(c) = candidates.iter().find(|c| c.exe_name == "wow.exe") {
+            let shared = tracker.shared.lock().unwrap();
+            log::info!(
+                "DIAG wow pid={} run={}s path={:?} plausible={} judged={} pending={:?} dismissed={} toast_up={} session={:?}",
+                c.pid,
+                c.run_time_secs,
+                c.path,
+                detect::plausible_candidate(c),
+                judge.judge(c),
+                shared.pending_prompt.as_ref().map(|p| &p.exe_name),
+                shared.toast_dismissed.contains("wow.exe"),
+                app.get_webview_window(toast::LABEL).is_some(),
+                current_game_id,
+            );
+        }
+
+
         match (&matched, &current_game_id) {
-            (Some((game, _, _)), Some(current)) if &game.id == current => {}
+            (Some((game, _, _)), Some(current)) if &game.id == current => {
+                maybe_reinstate_platform_prompt(&app, &tracker.data_dir, game);
+            }
             (Some((game, app_id, exe)), _) => {
                 if current_game_id.is_some() {
                     stop_session(&app, &base, &token).await;
@@ -239,25 +426,43 @@ pub async fn run_loop(app: AppHandle) {
                 // up to checkpoint_minutes later. Sent immediately so a "now
                 // playing" badge means something close to the moment it starts.
                 checkpoint(&app, &base, &token).await;
+                maybe_reinstate_platform_prompt(&app, &tracker.data_dir, game);
                 ping_ui(&app);
             }
-            (None, Some(_)) => {
+            (None, Some(current)) => {
+                clear_platform_prompt_for(&app, current);
                 stop_session(&app, &base, &token).await;
             }
             (None, None) => {
                 // A Steam game can be identified exactly, so try that first:
-                // it needs no executable link and no question. An admin-
-                // curated global link is the next most trustworthy thing —
-                // someone has already vetted it, for everyone — ahead of
-                // Epic/EA/Battle.net's own local records, which are real but
+                // it needs no executable link and no question. The global
+                // exe-link table is the next most trustworthy thing — an
+                // admin-reviewed row is vetted for everyone, and even a
+                // bulk-imported one is only ever trusted when the exe name
+                // is unambiguous (or the install path narrows it down) —
+                // ahead of Epic/EA's own local records, which are real but
                 // per-launcher. Only when all of these come to nothing is the
-                // user asked anything.
-                let identified = identify_steam_games(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_global_exe_links(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_ea_games(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_battlenet_games(&app, &base, &token, &candidates, &mut judge).await
-                    || identify_guessed_titles(&app, &base, &token, &candidates, &mut judge).await;
+                // user asked anything. Battle.net has no install-record
+                // lookup of its own — its games (Overwatch, WoW, ...) just
+                // fall through to the generic exe-name guess below, same as
+                // any other unrecognised launcher.
+                // TEMP DIAG: time each step
+                let t0 = std::time::Instant::now();
+                let s = identify_steam_games(&app, &base, &token, &candidates, &mut judge).await;
+                log::info!("DIAG CHAIN steam={s} elapsed={:?}", t0.elapsed());
+                let t1 = std::time::Instant::now();
+                let c = !s && identify_global_exe_links(&app, &base, &token, &candidates).await;
+                log::info!("DIAG CHAIN catalog={c} elapsed={:?}", t1.elapsed());
+                let t2 = std::time::Instant::now();
+                let e = !s && !c && identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
+                log::info!("DIAG CHAIN epic={e} elapsed={:?}", t2.elapsed());
+                let t3 = std::time::Instant::now();
+                let ea = !s && !c && !e && identify_ea_games(&app, &base, &token, &candidates, &mut judge).await;
+                log::info!("DIAG CHAIN ea={ea} elapsed={:?}", t3.elapsed());
+                let t4 = std::time::Instant::now();
+                let g = !s && !c && !e && !ea && identify_guessed_titles(&app, &base, &token, &candidates, &mut judge).await;
+                log::info!("DIAG CHAIN guess={g} elapsed={:?}", t4.elapsed());
+                let identified = s || c || e || ea || g;
                 if identified {
                     // Something was filed; re-read so the next tick can track
                     // it rather than waiting out the state cache.
@@ -266,6 +471,16 @@ pub async fn run_loop(app: AppHandle) {
                     maybe_prompt(&app, &candidates, &playing, &executables, &mut judge);
                 }
             }
+        }
+
+        // TEMP DIAG: pending state at end of tick
+        {
+            let shared = tracker.shared.lock().unwrap();
+            log::info!(
+                "DIAG END-OF-TICK pending={:?} toast_up={}",
+                shared.pending_prompt.as_ref().map(|p| &p.exe_name),
+                app.get_webview_window(toast::LABEL).is_some(),
+            );
         }
 
         // ── Checkpoint ──────────────────────────────────────────────────────
@@ -483,6 +698,12 @@ async fn identify_steam_games(
                 // the link is ever removed — the user deletes the game to
                 // retest, say — this must be free to try again, not stuck
                 // believing it already settled the question.
+                if let Some(game_id) = response.game_id.clone() {
+                    config::add_unconfirmed_platform(&dir, &game_id);
+                    tracker.shared.lock().unwrap().pending_platform_prompt =
+                        Some(PendingPlatformPrompt { game_id, title: title.clone(), current_platform: "Steam".into() });
+                    toast::show(app, &title);
+                }
                 notify(
                     app,
                     "Now tracking",
@@ -497,11 +718,13 @@ async fn identify_steam_games(
             }
             "untracked" => {
                 // Owned, but completed, dropped or still in the backlog.
-                // Moving it is the user's call, so say nothing and do not ask
-                // about it again this run. Worth remembering here, unlike
-                // above: there is no link, and nothing about this will change
-                // without the user acting on the site, so asking again next
-                // poll would just be noise.
+                // Backlog is genuinely the user's call, so say nothing and
+                // remember not to ask again until the next state refresh.
+                // Completed/DNF get a prompt instead (`resumable`) — those
+                // are "already played before", worth asking about.
+                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                    return true;
+                }
                 log::info!(
                     "steam app {app_id} is owned but {}; leaving it alone",
                     response.status.as_deref().unwrap_or("not trackable"),
@@ -516,19 +739,32 @@ async fn identify_steam_games(
     false
 }
 
-/// Admin-curated exe → game links (`/admin/exe-links`), checked purely by
-/// name — no launcher data, no guess, so unlike every other identify
-/// function here this needs no `candidate.path` at all. That matters: a
-/// real running game's path can be unreadable by every method tried
-/// (confirmed live against Star Citizen's own `StarCitizen.exe` on one run),
-/// which is exactly the kind of case an admin would curate a link for in the
-/// first place.
+/// The global exe-link table (`/admin/exe-links`): admin-curated rows plus a
+/// much larger bulk-imported catalog (`scripts/import-exe-catalog.mjs`),
+/// checked by name. Unlike every other identify function here this needs no
+/// `candidate.path` to look the exe up at all — only to disambiguate an exe
+/// name shared by more than one title, which the path is sent along for.
+/// That path-optional lookup matters on its own: a real running game's path
+/// can be unreadable by every method tried (confirmed live against Star
+/// Citizen's own `StarCitizen.exe` on one run), which is exactly the kind of
+/// case an admin would curate an unambiguous link for in the first place.
+///
+/// Also the one identify path that does **not** go through
+/// `detect::GameJudge` first, using the looser `detect::plausible_candidate`
+/// instead. Being on the catalog *is* the evidence that something is a game
+/// — an admin promoted it, or it came from a reviewed import — so requiring
+/// the local heuristic to independently agree only ever subtracted. It
+/// actively broke real cases: confirmed live against Dead by Daylight, whose
+/// anti-cheat leaves both its install path and its loaded modules
+/// unreadable, so the judge never settles on `Game` — and a game on the
+/// catalog would still have fallen through to the generic "is this a game?"
+/// toast on every user's PC, which is exactly what the catalog exists to
+/// prevent.
 async fn identify_global_exe_links(
     app: &AppHandle,
     base: &str,
     token: &str,
     candidates: &[detect::Candidate],
-    judge: &mut detect::GameJudge,
 ) -> bool {
     let tracker = app.state::<Tracker>();
     let dir = tracker.data_dir.clone();
@@ -540,16 +776,18 @@ async fn identify_global_exe_links(
         }
         {
             let shared = tracker.shared.lock().unwrap();
-            if shared.identified_titles.contains(&candidate.exe_name) {
+            if shared.identified_titles.contains(&candidate.exe_name)
+                || shared.catalog_unknown.contains(&candidate.exe_name)
+            {
                 continue;
             }
         }
-        if !judge.judge(candidate) {
+        if !detect::plausible_candidate(candidate) {
             continue;
         }
 
         let response = match api::post_identify(
-            base, token, api::IdentifyBy::LookupExe, &candidate.exe_name, "PC (Windows)",
+            base, token, api::IdentifyBy::LookupExe { path: candidate.path.as_deref() }, &candidate.exe_name, "PC (Windows)",
         ).await {
             Ok(r) => r,
             Err(err) => {
@@ -562,11 +800,20 @@ async fn identify_global_exe_links(
             "added" => {
                 let title = response.title.unwrap_or_else(|| candidate.exe_name.clone());
                 log::info!("added {title} as an ambient game (global exe link: \"{}\")", candidate.exe_name);
+                if let Some(game_id) = response.game_id.clone() {
+                    config::add_unconfirmed_platform(&dir, &game_id);
+                    tracker.shared.lock().unwrap().pending_platform_prompt =
+                        Some(PendingPlatformPrompt { game_id, title: title.clone(), current_platform: "PC (Windows)".into() });
+                    toast::show(app, &title);
+                }
                 notify(app, "Now tracking", &format!("{title} — added to your Ambient games."));
                 return true;
             }
             "tracked" => return true,
             "untracked" => {
+                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                    return true;
+                }
                 log::info!(
                     "\"{}\" is owned but {}; leaving it alone",
                     candidate.exe_name,
@@ -574,9 +821,14 @@ async fn identify_global_exe_links(
                 );
                 tracker.shared.lock().unwrap().identified_titles.insert(candidate.exe_name.clone());
             }
-            // "unknown": no global link for this exe yet. Never remembered —
-            // an admin could add one moments later.
-            _ => {}
+            // "unknown": no global link for this exe yet — remembered only
+            // until the next state refresh, so an admin adding a row is
+            // picked up within a minute rather than needing a restart, while
+            // an ordinary program that will never be on the catalog is not
+            // asked about on every single ten-second poll.
+            _ => {
+                tracker.shared.lock().unwrap().catalog_unknown.insert(candidate.exe_name.clone());
+            }
         }
     }
     false
@@ -647,6 +899,12 @@ async fn identify_by_title(
                 // re-asked, not identified_titles — which must stay
                 // retryable if that link ever goes away (deleted to retest,
                 // say; confirmed live, twice, the night this was fixed).
+                if let Some(game_id) = response.game_id.clone() {
+                    config::add_unconfirmed_platform(&dir, &game_id);
+                    tracker.shared.lock().unwrap().pending_platform_prompt =
+                        Some(PendingPlatformPrompt { game_id, title: shown.clone(), current_platform: platform.to_string() });
+                    toast::show(app, &shown);
+                }
                 notify(app, "Now tracking", &format!("{shown} — added to your Ambient games."));
                 return true;
             }
@@ -654,6 +912,9 @@ async fn identify_by_title(
                 return true;
             }
             "untracked" => {
+                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                    return true;
+                }
                 // Worth remembering: no link exists, and nothing changes here
                 // without the user acting on the site.
                 log::info!(
@@ -705,30 +966,16 @@ async fn identify_ea_games(
     .await
 }
 
-async fn identify_battlenet_games(
-    app: &AppHandle,
-    base: &str,
-    token: &str,
-    candidates: &[detect::Candidate],
-    judge: &mut detect::GameJudge,
-) -> bool {
-    let games = battlenet::battlenet_games();
-    if games.is_empty() {
-        return false;
-    }
-    identify_by_title(app, base, token, candidates, judge, "Battle.net", |path| {
-        battlenet::display_name_for_exe(path, &games)
-    })
-    .await
-}
-
 /// Last resort: no launcher's own install record said what this is, so guess
 /// from the executable's own name — "DeadSpace.exe" to "Dead Space" — and let
 /// the server's exact-IGDB-match rule decide whether that guess is real.
+/// Battle.net games (Overwatch, WoW, ...) land here too — there's no
+/// install-record lookup for that launcher, so a guessed title plus the
+/// server's exact-match check is simply how they get identified.
 ///
-/// Reached only once Steam, Epic, EA and Battle.net have all already had
-/// their (strictly more trustworthy) chance this tick and found nothing, so
-/// this never pre-empts an identification backed by real install data.
+/// Reached only once Steam, Epic and EA have all already had their (strictly
+/// more trustworthy) chance this tick and found nothing, so this never
+/// pre-empts an identification backed by real install data.
 async fn identify_guessed_titles(
     app: &AppHandle,
     base: &str,
@@ -758,6 +1005,16 @@ fn maybe_prompt(
             // Still up — stay quiet rather than asking about something else
             // while an answerable question is sitting on the status screen.
             if candidates.iter().any(|c| c.exe_name == prompt.exe_name) {
+                // ...but if the toast window is gone and the user never
+                // actually dismissed it, the question is only on the status
+                // screen, where nobody is looking mid-game. Put it back.
+                let exe_name = prompt.exe_name.clone();
+                let dismissed = shared.toast_dismissed.contains(&exe_name);
+                drop(shared);
+                if !dismissed && app.get_webview_window(toast::LABEL).is_none() {
+                    log::info!("re-showing the lost toast for {exe_name}");
+                    toast::show(app, &exe_name);
+                }
                 return;
             }
             // The program the prompt was about has closed, so the question no
@@ -766,6 +1023,7 @@ fn maybe_prompt(
             // doesn't lose the question) and then launching something
             // completely different silently asked about nothing at all —
             // indistinguishable from the app simply being broken.
+            log::info!("DIAG CLEAR path=no_longer_running exe={}", prompt.exe_name);
             log::info!("{} is no longer running; dropping its unanswered prompt", prompt.exe_name);
             shared.pending_prompt = None;
             drop(shared);
@@ -830,7 +1088,7 @@ fn maybe_prompt(
         tracker.shared.lock().unwrap().pending_prompt = Some(prompt.clone());
         // Asked in the corner of the screen, with the buttons on it. The
         // status screen keeps the same question, for anyone who misses it.
-        toast::show(app, &prompt);
+        toast::show(app, &prompt.exe_name);
         ping_ui(app);
         return;
     }

@@ -211,6 +211,20 @@ main { flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 14px;
 .pill.linked { color: rgb(var(--brand-600)); background: rgb(var(--brand-600) / 0.12); }
 .pill.unlinked { color: var(--fg-muted); background: var(--surface-sunken); }
 
+/* Debug-build marker in the topbar — amber rather than the brand colour, so
+   it reads as a warning ("not the real app") rather than just more chrome. */
+.dev-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #92400e;
+  background: #fde68a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .footer {
   margin-top: auto;
@@ -265,6 +279,10 @@ button { font: inherit; cursor: pointer; border-radius: 8px; transition: backgro
   font-size: 12px;
 }
 .prompt-actions { display: flex; gap: 8px; }
+/* The platform-confirm prompt's dropdown sits directly above its Save
+   button with nothing else (no .prompt-question) to add space between
+   them — unlike every other prompt. */
+#platform-ask-select, #platform-prompt-select { margin-bottom: 10px; }
 
 /* ── In-app "link a game" panel ──────────────────────────────────────────── */
 .link-panel { display: flex; flex-direction: column; gap: 6px; }

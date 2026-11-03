@@ -11,19 +11,23 @@ type Picked = { igdbId: number; title: string; coverImageUrl: string | null }
 type Props = {
   /**
    * Present only when editing an existing row: the exe name is then fixed
-   * (it's the table's primary key, not something a save can change) and
-   * only the game it points at is being re-picked.
+   * (it's half of the row's real identity, alongside `folderHint`, not
+   * something a save can change) and only the game it points at is being
+   * re-picked.
    */
   exeName?: string
+  /** Fixed alongside `exeName` in edit mode — see above. '' means no hint. */
+  folderHint?: string
   /** Current title, shown above the search box in edit mode as a reminder of what's being replaced. */
   currentTitle?: string
   onSaved?: (picked: Picked) => void
   onCancel?: () => void
 }
 
-export default function AddGlobalExeLinkForm({ exeName: fixedExeName, currentTitle, onSaved, onCancel }: Props) {
+export default function AddGlobalExeLinkForm({ exeName: fixedExeName, folderHint: fixedFolderHint, currentTitle, onSaved, onCancel }: Props) {
   const isEdit = fixedExeName != null
   const [exeName, setExeName] = useState('')
+  const [folderHint, setFolderHint] = useState('')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<RawgSearchResult[]>([])
   const [picked, setPicked] = useState<RawgSearchResult | null>(null)
@@ -49,11 +53,12 @@ export default function AddGlobalExeLinkForm({ exeName: fixedExeName, currentTit
 
   function save() {
     const name = isEdit ? fixedExeName! : exeName.trim()
+    const hint = isEdit ? (fixedFolderHint ?? '') : folderHint.trim()
     if (!name || !picked) return
     setError(null)
     startTransition(async () => {
       const coverImageUrl = picked.cover_image ?? picked.background_image ?? null
-      const res = await addGlobalExeLink(name, picked.id, picked.name, coverImageUrl)
+      const res = await addGlobalExeLink(name, picked.id, picked.name, coverImageUrl, hint)
       if (!res.success) {
         setError(res.error)
         return
@@ -62,8 +67,9 @@ export default function AddGlobalExeLinkForm({ exeName: fixedExeName, currentTit
         onSaved?.({ igdbId: picked.id, title: picked.name, coverImageUrl })
         return
       }
-      setSuccess(`"${name}" → ${picked.name} saved.`)
+      setSuccess(`"${name}"${hint ? ` (in "${hint}")` : ''} → ${picked.name} saved.`)
       setExeName('')
+      setFolderHint('')
       setQuery('')
       setResults([])
       setPicked(null)
@@ -77,22 +83,36 @@ export default function AddGlobalExeLinkForm({ exeName: fixedExeName, currentTit
       {isEdit ? (
         <p className="text-sm text-fg-base">
           Editing <code className="text-fg-muted">{fixedExeName}</code>
+          {fixedFolderHint && <> (in <code className="text-fg-muted">{fixedFolderHint}</code>)</>}
           {currentTitle && <> (currently <span className="font-medium">{currentTitle}</span>)</>}
         </p>
       ) : (
-        <div>
-          <label className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Executable name</label>
-          <input
-            className="mt-1 w-full rounded-lg border border-edge-base bg-surface-sunken px-3 py-2 text-sm text-fg-base"
-            placeholder="starcitizen.exe"
-            value={exeName}
-            onChange={e => setExeName(e.target.value)}
-          />
-          {warnGeneric && (
-            <p className="mt-1 text-xs text-amber-600">
-              This looks like a generic name many unrelated programs could share — double check before saving.
-            </p>
-          )}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Executable name</label>
+            <input
+              className="mt-1 w-full rounded-lg border border-edge-base bg-surface-sunken px-3 py-2 text-sm text-fg-base"
+              placeholder="starcitizen.exe"
+              value={exeName}
+              onChange={e => setExeName(e.target.value)}
+            />
+            {warnGeneric && (
+              <p className="mt-1 text-xs text-amber-600">
+                This looks like a generic name many unrelated programs could share — double check before saving.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-fg-muted uppercase tracking-wider">
+              Install folder hint <span className="font-normal text-fg-subtle">(optional)</span>
+            </label>
+            <input
+              className="mt-1 w-full rounded-lg border border-edge-base bg-surface-sunken px-3 py-2 text-sm text-fg-base"
+              placeholder="Only needed if this exe name is already in use for a different game"
+              value={folderHint}
+              onChange={e => setFolderHint(e.target.value)}
+            />
+          </div>
         </div>
       )}
 

@@ -146,8 +146,7 @@ const SEARCH_POOL_SIZE = 50
 type IgdbRankedGame = IgdbGame & RankCandidate
 
 /**
- * Three result sets in one round trip (IGDB's `multiquery`, so the 4 req/s
- * limit sees a single request):
+ * Three result sets, ranked together:
  *
  *   search — IGDB's own full-text search, the broad net.
  *   exact  — case-insensitive exact title. Full-text ranking can bury an
@@ -156,27 +155,31 @@ type IgdbRankedGame = IgdbGame & RankCandidate
  *            "Cyber" reaches Cyberpunk 2077 even where full-text search would
  *            rather match whole words.
  *
- * Falls back to the plain search alone if the multiquery itself fails, so a
- * problem here degrades to the old behaviour rather than to no results.
+ * Two requests, not one. `search` cannot go in a `multiquery`: IGDB answers
+ * any multiquery containing it with an empty array and a 200 — verified live,
+ * even with `search` as the only sub-query — so bundling all three silently
+ * turned every search into zero results. `exact` and `prefix` are plain
+ * `where` clauses and multiquery fine.
+ *
+ * Each half degrades on its own: a failed search still leaves the exact and
+ * prefix sets, and a failed multiquery still leaves the plain search — the
+ * old behaviour — rather than nothing.
  */
 async function searchPool(query: string): Promise<IgdbRankedGame[]> {
   const q = apicalypseString(query)
   const fields = `fields ${DETAIL_FIELDS}, ${RANK_FIELDS};`
   const fullGame = `game_type = (${FULL_GAME_TYPES.join(',')}) & version_parent = null`
-  const body = [
-    `query games "search" { search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE}; };`,
+
+  const search = await igdbQuery<IgdbRankedGame>('games', `search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE};`)
+  const sets = await igdbQuery<{ name: string; result: IgdbRankedGame[] }>('multiquery', [
     `query games "exact" { ${fields} where name ~ "${q}"; limit 10; };`,
     `query games "prefix" { ${fields} where name ~ "${q}"* & ${fullGame}; sort total_rating_count desc; limit 20; };`,
-  ].join('\n')
+  ].join('\n'))
+  const set = (name: string) => sets.find(r => r.name === name)?.result ?? []
 
-  const multi = await igdbTry<{ name: string; result: IgdbRankedGame[] }>('multiquery', body)
-  if (multi.ok) {
-    const set = (name: string) => multi.rows.find(r => r.name === name)?.result ?? []
-    // Search first: mergeById keeps the first copy, and the ranking's final
-    // tie-break is position, so IGDB's own relevance order survives for ties.
-    return mergeById(set('search'), set('exact'), set('prefix'))
-  }
-  return igdbQuery<IgdbRankedGame>('games', `search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE};`)
+  // Search first: mergeById keeps the first copy, and the ranking's final
+  // tie-break is position, so IGDB's own relevance order survives for ties.
+  return mergeById(search, set('exact'), set('prefix'))
 }
 
 export async function searchGames(query: string, page = 1): Promise<RawgSearchResult[]> {

@@ -11,7 +11,7 @@ Related: `website-code-review.md` (C1, C2, M3), `tracker-code-review.md` (T-H1, 
 |---|---|
 | `7aeb653` | Phase 0: security hardening (C1, C2, M3) + H5 (removed `/api/admin/import-tickets`). Code + `db/security-hardening.sql`. |
 | `c0f28d9` | The two reviews and this plan. |
-| `4679817` | Unrelated **WIP**: IGDB search ranking (`lib/search-ranking.ts`). Its `popularity()` still has a `TODO(human)` placeholder. |
+| `4679817` | Unrelated: IGDB search ranking (`lib/search-ranking.ts`). **Finished on the dev machine** (uncommitted): `popularity()` = ratings + hypes, and a live-only bug fixed — IGDB returns `[]` for any multiquery containing `search`, which made every search empty; the full-text search is now a separate request. Verified against the live API. |
 
 Verified on the laptop: `npm test` 380/380 passing, `tsc --noEmit` clean. **Not yet tested against a database.**
 

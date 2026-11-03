@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rankSearchResults, mergeById, apicalypseString, isFullGame, type RankCandidate } from '../search-ranking'
+import { rankSearchResults, mergeById, apicalypseString, isFullGame, popularity, type RankCandidate } from '../search-ranking'
 
 type G = RankCandidate & { id: number }
 const names = (gs: G[]) => gs.map(g => g.name)
@@ -47,13 +47,30 @@ describe('rankSearchResults', () => {
       { id: 2, name: 'Some Unrelated Game', game_type: 0, total_rating_count: 9000 },
       { id: 3, name: 'The Witcher 3: Wild Hunt', game_type: 0, total_rating_count: 4000 },
     ]
-    // IGDB only returned the unrelated one via some alternative name: a full
-    // game whose words actually match outranks it regardless of popularity.
+    // IGDB only returned the unrelated one via some alternative name: anything
+    // whose words actually match outranks it regardless of popularity.
     expect(names(rankSearchResults('witcher 3', pool))).toEqual([
       'The Witcher 3: Wild Hunt',
-      'Some Unrelated Game',
       'The Witcher 3: Wild Hunt - Blood and Wine',
+      'Some Unrelated Game',
     ])
+  })
+
+  it('puts a far more popular partial match above an obscure exact title', () => {
+    // Store-search behaviour: "Cyber" means Cyberpunk, not a game called Cyber.
+    const pool: G[] = [
+      { id: 1, name: 'Cyber', game_type: 0, total_rating_count: 4 },
+      { id: 2, name: 'Cyberpunk 2077', game_type: 0, total_rating_count: 5000 },
+    ]
+    expect(names(rankSearchResults('Cyber', pool))).toEqual(['Cyberpunk 2077', 'Cyber'])
+  })
+
+  it('keeps an exact title first against anything less than ten times as popular', () => {
+    const pool: G[] = [
+      { id: 1, name: 'Portal Knights', game_type: 0, total_rating_count: 900 },
+      { id: 2, name: 'Portal', game_type: 0, total_rating_count: 100 },
+    ]
+    expect(rankSearchResults('portal', pool)[0].name).toBe('Portal')
   })
 
   it('ignores punctuation and case when deciding a title is exact', () => {
@@ -72,6 +89,23 @@ describe('rankSearchResults', () => {
     expect(names(rankSearchResults('doom', pool))).toEqual(['Doom Eternal', 'Doom 64'])
   })
 
+  it('ranks an anticipated unreleased game by its hype, not as unrated', () => {
+    // No ratings yet, so ratings alone would sink it below any released game.
+    const pool: G[] = [
+      { id: 1, name: 'Grand Theft Auto: Obscure Fan Game', game_type: 0, total_rating_count: 3 },
+      { id: 2, name: 'Grand Theft Auto VI', game_type: 0, total_rating_count: 0, hypes: 2500 },
+    ]
+    expect(rankSearchResults('grand theft auto', pool)[0].name).toBe('Grand Theft Auto VI')
+  })
+
+  it('treats missing ratings and hype as zero rather than failing', () => {
+    const pool: G[] = [
+      { id: 1, name: 'Celeste', game_type: 0 },
+      { id: 2, name: 'Celeste Classic', game_type: 0, hypes: 5 },
+    ]
+    expect(names(rankSearchResults('celeste', pool))).toEqual(['Celeste', 'Celeste Classic'])
+  })
+
   it('does not punish a result whose game type is unknown', () => {
     const pool: G[] = [
       { id: 1, name: 'Hades: Soundtrack', game_type: 1, total_rating_count: 50 },
@@ -87,6 +121,14 @@ describe('rankSearchResults', () => {
       { id: 3, name: 'C' },
     ]
     expect(rankSearchResults('x', pool).map(g => g.id).sort()).toEqual([1, 2, 3])
+  })
+})
+
+describe('popularity', () => {
+  it('adds ratings and hype, counting missing values as zero', () => {
+    expect(popularity({ name: 'a', total_rating_count: 100, hypes: 20 })).toBe(120)
+    expect(popularity({ name: 'b', hypes: 40 })).toBe(40)
+    expect(popularity({ name: 'c', total_rating_count: null, hypes: null })).toBe(0)
   })
 })
 

@@ -21,6 +21,8 @@ pub struct PlayingGame {
     pub hours: f64,
     #[serde(default)]
     pub linked: bool,
+    #[serde(default)]
+    pub platform: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +32,12 @@ pub struct AgentState {
     /// exe name -> game id
     #[serde(default)]
     pub executables: HashMap<String, String>,
+    /// Executables the user has said to never auto-track, from Settings or
+    /// the toast's "Not a game" answer on another machine. Checked before
+    /// anything else in `run_loop` — an ignored exe is never judged, never
+    /// identified, never prompted about.
+    #[serde(rename = "ignoredExecutables", default)]
+    pub ignored_executables: std::collections::HashSet<String>,
     #[serde(rename = "displayName")]
     pub display_name: Option<String>,
     #[serde(default = "default_theme")]
@@ -156,7 +164,7 @@ pub async fn post_unlink(base: &str, token: &str, exe_name: &str) -> Result<(), 
 /// `result` is one of: `notAGame` (IGDB has no such game — never ask again),
 /// `unknown` (the lookup did not get through — try later), `added` (a new
 /// Ambient game was created), `tracked` (already trackable) or `untracked`
-/// (owned, but completed/backlog, so left alone).
+/// (owned, but completed/backlog/dnf, so left alone).
 #[derive(Debug, Clone, Serialize, serde::Deserialize)]
 pub struct IdentifyResponse {
     pub result: String,
@@ -166,6 +174,13 @@ pub struct IdentifyResponse {
     pub status: Option<String>,
     #[serde(rename = "gameId", default)]
     pub game_id: Option<String>,
+    /// Only meaningful on an `untracked` result: `"completed"`, `"dnf"` or
+    /// `"backlog"` naming exactly which of the three non-trackable statuses
+    /// this is, so the agent can ask the matching question — "is this a
+    /// replay?" / "resuming?" / "set to Playing or Ambient?". `None`
+    /// otherwise.
+    #[serde(default)]
+    pub resumable: Option<String>,
 }
 
 /// What to identify a running game by — however the agent came to recognise it.
@@ -180,9 +195,13 @@ pub enum IdentifyBy<'a> {
     /// A person picked this exact game themselves, from a real search result
     /// (`search_games` below) — nothing left to resolve or verify.
     IgdbId { id: u32, title: &'a str },
-    /// No local signal at all — just the exe name, checked against the
-    /// admin-curated `global_exe_links` table server-side.
-    LookupExe,
+    /// No local signal beyond the exe name itself (plus, where known, the
+    /// install path it's running from) — checked against `global_exe_links`
+    /// server-side, which holds both admin-curated rows and a much larger
+    /// bulk-imported catalog. The path is what lets the server tell apart
+    /// two different games sharing one exe name, by matching it against
+    /// each candidate's `folder_hint`.
+    LookupExe { path: Option<&'a str> },
 }
 
 /// Ask what a running game is, and have it filed if it is new.
@@ -203,7 +222,13 @@ pub async fn post_identify(
         IdentifyBy::SteamAppId(id) => serde_json::json!({ "steamAppId": id }),
         IdentifyBy::Title(title) => serde_json::json!({ "titleGuess": title }),
         IdentifyBy::IgdbId { id, title } => serde_json::json!({ "igdbId": id, "title": title }),
-        IdentifyBy::LookupExe => serde_json::json!({ "lookupExe": true }),
+        IdentifyBy::LookupExe { path } => {
+            let mut b = serde_json::json!({ "lookupExe": true });
+            if let Some(path) = path {
+                b["installPath"] = serde_json::json!(path);
+            }
+            b
+        }
     };
     body["exeName"] = serde_json::json!(exe_name);
     body["platform"] = serde_json::json!(platform);
@@ -320,6 +345,88 @@ pub async fn create_device_token(base: &str, token: &str, label: &str) -> Result
     Ok(res.json::<NewDeviceResponse>().await.map_err(|e| e.to_string())?.token)
 }
 
+
+/// Record that an executable should never be auto-tracked — the toast's
+/// "Not a game" answer, mirrored to the server so it shows up in Settings
+/// rather than living only in this machine's local asked.json.
+pub async fn post_ignore(base: &str, token: &str, exe_name: &str) -> Result<(), String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/ignore"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "exeName": exe_name }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("ignore request failed: {}", res.status()))
+    }
+}
+
+/// Confirm or correct a game's platform, from the platform-confirm prompt.
+pub async fn post_platform(base: &str, token: &str, game_id: &str, platform: &str) -> Result<(), String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/platform"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "gameId": game_id, "platform": platform }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if res.status().is_success() {
+        Ok(())
+    } else {
+        Err(format!("platform request failed: {}", res.status()))
+    }
+}
+
+/// What `/api/agent/resume` actually did — the game that's now live, which
+/// may be the same `game_id` the prompt named (DNF, updated in place) or a
+/// brand-new one (Completed, a fresh row for the replay).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ResumeResponse {
+    #[serde(rename = "gameId")]
+    pub game_id: String,
+    pub title: String,
+}
+
+/// Act on the "is this a replay?" / "are you resuming?" / "set to Playing or
+/// Ambient?" prompt. `status` is only meaningful (and required by the
+/// server) when `kind` is `"backlog"` — the other two kinds have exactly
+/// one possible outcome, so there's nothing for the caller to choose.
+pub async fn post_resume(
+    base: &str,
+    token: &str,
+    game_id: &str,
+    kind: &str,
+    status: Option<&str>,
+    exe_name: &str,
+) -> Result<ResumeResponse, String> {
+    let mut body = serde_json::json!({ "gameId": game_id, "kind": kind });
+    if let Some(status) = status {
+        body["status"] = serde_json::json!(status);
+    }
+    if !exe_name.is_empty() {
+        body["exeName"] = serde_json::json!(exe_name);
+    }
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}/api/agent/resume"))
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+        return Err(format!("resume request failed: {}", res.status()));
+    }
+    res.json::<ResumeResponse>().await.map_err(|e| e.to_string())
+}
 
 /// Revoke a paired PC — including, legitimately, this very one.
 pub async fn revoke_device(base: &str, token: &str, device_id: &str) -> Result<(), String> {

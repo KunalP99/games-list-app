@@ -6,6 +6,7 @@
 // same payload the status screen reads.
 
 import { applyTheme } from './theme.js'
+import { populatePlatformSelect } from './platforms.js'
 
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
@@ -17,6 +18,10 @@ const ACKNOWLEDGEMENT_MS = 6000
 
 /** The prompt being shown, so the buttons know what they are answering. */
 let current = null
+/** The platform-confirm prompt being shown, if that's what this toast is for. */
+let currentPlatform = null
+/** The resume/replay prompt being shown, if that's what this toast is for. */
+let currentResume = null
 
 /**
  * True once answered.
@@ -34,8 +39,14 @@ function close() {
 
 // The × button: only the window goes away. `pending_prompt` is untouched, so
 // the same question is still sitting on the status screen for anyone who
-// closed this by mistake and actually meant to answer it.
-el('ask-dismiss').addEventListener('click', close)
+// closed this by mistake and actually meant to answer it. `dismiss_toast`
+// records that this was a real × though — without it the watcher cannot tell
+// a waved-away toast from one that vanished for any other reason, and so
+// never put either back.
+el('ask-dismiss').addEventListener('click', async () => {
+  await invoke('dismiss_toast').catch(() => {})
+  close()
+})
 
 function render(prompt) {
   current = prompt
@@ -63,18 +74,62 @@ function render(prompt) {
 
   el('ask').hidden = false
   el('said-no').hidden = true
+  el('platform-ask').hidden = true
+  el('resume-ask').hidden = true
+}
+
+/** Mirrors renderPlatformPrompt in main.js — see there for why the three
+ *  prompts here never overlap. */
+function renderPlatform(prompt) {
+  currentPlatform = prompt
+  el('platform-ask-title').textContent = prompt.title
+  el('platform-ask-error').hidden = true
+  populatePlatformSelect(el('platform-ask-select'), prompt.current_platform)
+  el('ask').hidden = true
+  el('said-no').hidden = true
+  el('platform-ask').hidden = false
+  el('resume-ask').hidden = true
+}
+
+/** Mirrors renderResumePrompt in main.js. */
+function renderResume(prompt) {
+  currentResume = prompt
+  el('resume-ask-error').hidden = true
+  const ambientButton = el('resume-ask-ambient')
+  if (prompt.kind === 'dnf') {
+    el('resume-ask-heading').textContent = `You dropped ${prompt.title} before — are you resuming it?`
+    el('resume-ask-yes').textContent = 'Resume'
+    ambientButton.hidden = true
+  } else if (prompt.kind === 'backlog') {
+    el('resume-ask-heading').textContent = `You have ${prompt.title} in your backlog — set it to:`
+    el('resume-ask-yes').textContent = 'Set to Playing'
+    ambientButton.hidden = false
+  } else {
+    el('resume-ask-heading').textContent = `You already completed ${prompt.title} — is this a replay?`
+    el('resume-ask-yes').textContent = 'Yes, replay'
+    ambientButton.hidden = true
+  }
+  el('ask').hidden = true
+  el('said-no').hidden = true
+  el('platform-ask').hidden = true
+  el('resume-ask').hidden = false
 }
 
 async function load() {
   const status = await invoke('get_status').catch(() => null)
   applyTheme(status ?? {})
 
-  if (!status?.pending_prompt) {
+  if (status?.pending_prompt) {
+    render(status.pending_prompt)
+  } else if (status?.pending_platform_prompt) {
+    renderPlatform(status.pending_platform_prompt)
+  } else if (status?.pending_resume_prompt) {
+    renderResume(status.pending_resume_prompt)
+  } else {
     // Answered elsewhere between the window opening and this running.
     close()
     return
   }
-  render(status.pending_prompt)
 
   // Built hidden, so nothing can appear as a white box over a game: this is
   // what puts it on screen, once there is something to see.
@@ -143,17 +198,82 @@ el('no-open').addEventListener('click', async () => {
   close()
 })
 
+el('platform-ask-save').addEventListener('click', async () => {
+  if (!currentPlatform) return
+  answered = true
+  const platform = el('platform-ask-select').value
+  el('platform-ask-save').disabled = true
+  try {
+    await invoke('set_platform', { platform })
+  } catch (err) {
+    answered = false
+    el('platform-ask-save').disabled = false
+    el('platform-ask-error').textContent = String(err)
+    el('platform-ask-error').hidden = false
+    return
+  }
+  close()
+})
+
+el('resume-ask-yes').addEventListener('click', async () => {
+  if (!currentResume) return
+  answered = true
+  el('resume-ask-yes').disabled = true
+  try {
+    const status = currentResume.kind === 'backlog' ? 'playing' : undefined
+    await invoke('respond_to_resume_prompt', { accept: true, status })
+  } catch (err) {
+    answered = false
+    el('resume-ask-yes').disabled = false
+    el('resume-ask-error').textContent = String(err)
+    el('resume-ask-error').hidden = false
+    return
+  }
+  close()
+})
+el('resume-ask-ambient').addEventListener('click', async () => {
+  if (!currentResume) return
+  answered = true
+  el('resume-ask-ambient').disabled = true
+  try {
+    await invoke('respond_to_resume_prompt', { accept: true, status: 'ambient' })
+  } catch (err) {
+    answered = false
+    el('resume-ask-ambient').disabled = false
+    el('resume-ask-error').textContent = String(err)
+    el('resume-ask-error').hidden = false
+    return
+  }
+  close()
+})
+el('resume-ask-no').addEventListener('click', async () => {
+  if (!currentResume) return
+  answered = true
+  await invoke('respond_to_resume_prompt', { accept: false }).catch(() => {})
+  close()
+})
+
 // Answered on the status screen instead, or the watcher dropped the prompt:
 // either way there is nothing left to ask.
 listen('status-changed', async () => {
   if (answered) return
   const status = await invoke('get_status').catch(() => null)
-  if (!status?.pending_prompt) {
-    close()
+  if (status?.pending_prompt) {
+    applyTheme(status)
+    if (status.pending_prompt.exe_name !== current?.exe_name) render(status.pending_prompt)
     return
   }
-  applyTheme(status)
-  if (status.pending_prompt.exe_name !== current?.exe_name) render(status.pending_prompt)
+  if (status?.pending_platform_prompt) {
+    applyTheme(status)
+    if (status.pending_platform_prompt.game_id !== currentPlatform?.game_id) renderPlatform(status.pending_platform_prompt)
+    return
+  }
+  if (status?.pending_resume_prompt) {
+    applyTheme(status)
+    if (status.pending_resume_prompt.game_id !== currentResume?.game_id) renderResume(status.pending_resume_prompt)
+    return
+  }
+  close()
 })
 
 load()

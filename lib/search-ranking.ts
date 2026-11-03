@@ -4,20 +4,23 @@
  * IGDB's own full-text search ranks on text relevance alone, so "Cyber"
  * happily puts an obscure DLC or a bundle ahead of Cyberpunk 2077, and an
  * exact title can be buried below its own expansions. This re-ranks a pool of
- * candidates (gathered by `searchGames` in `lib/igdb.ts`) into groups, best
- * first:
+ * candidates (gathered by `searchGames` in `lib/igdb.ts`) the way store
+ * searches (Steam, Epic…) behave: text match decides *whether* something is a
+ * contender, popularity decides the order among contenders.
  *
- *   0. Exact title, full game    — "World of Warcraft" for "world of warcraft"
- *   1. Exact title, anything else — searching a DLC by its full name still
- *                                   finds that DLC first
- *   2. Full game whose words match the query — every query word starts a word
- *                                   of the title, so "Cyber" → "Cyberpunk 2077"
- *                                   and "witcher 3" → "The Witcher 3: Wild Hunt"
- *   3. Full game IGDB matched some other way (an alternative name, say)
- *   4. Everything else — DLC, expansions, bundles, packs, alternate editions
+ * Two groups, best first:
  *
- * Within a group, most popular first (rating count, plus hype for games not
- * out yet), and IGDB's own order breaks any remaining tie.
+ *   0. Titles the query matches — exact, or every query word starts a word of
+ *      the title, so "Cyber" → "Cyberpunk 2077", "witcher 3" → "The Witcher 3"
+ *   1. Everything else IGDB returned (matched on an alternative name, say)
+ *
+ * Within a group, highest `score` first: popularity on a log scale, so each
+ * ×10 in popularity is worth one point, plus a point for an exact title and
+ * minus a point for an add-on (DLC, bundle, edition…). An exact title therefore
+ * beats anything less than ten times as popular — "World of Warcraft" stays
+ * above "World of Warcraft Classic" — but an obscure game that happens to be
+ * called "Cyber" no longer outranks Cyberpunk 2077. IGDB's own order breaks
+ * any remaining tie.
  *
  * Pure: no IGDB access here, so every case is a unit test.
  */
@@ -63,11 +66,18 @@ function wordsMatch(queryWords: string[], name: string): boolean {
   return queryWords.every(q => nameWords.some(n => n.startsWith(q)))
 }
 
-function group(c: RankCandidate, target: string, queryWords: string[]): number {
-  const full = isFullGame(c)
-  if (target && normaliseTitle(c.name) === target) return full ? 0 : 1
-  if (!full) return 4
-  return wordsMatch(queryWords, c.name) ? 2 : 3
+/** Worth one ×10 step of popularity each — see the header comment. */
+const EXACT_TITLE_BONUS = 1
+const ADD_ON_PENALTY = 1
+
+/**
+ * Popularity on a log scale, nudged by exactness and game type. Only compared
+ * within one group, never across.
+ */
+export function score(c: RankCandidate, exact: boolean): number {
+  return Math.log10(popularity(c) + 1)
+    + (exact ? EXACT_TITLE_BONUS : 0)
+    - (isFullGame(c) ? 0 : ADD_ON_PENALTY)
 }
 
 /**
@@ -77,11 +87,15 @@ function group(c: RankCandidate, target: string, queryWords: string[]): number {
  *   established games (Cyberpunk 2077 is in the thousands), 0 for new ones.
  * `hypes` — how many people follow it before release. The only signal an
  *   unreleased game has, and it stops growing once the game is out.
+ *
+ * Summed: both count people paying attention to a game, and each covers the
+ * other's blind spot. Ratings alone scored every unreleased game 0, sinking a
+ * heavily anticipated title below any obscure released one; hype alone ignores
+ * everything that has shipped. A released game keeps its pre-launch hype, which
+ * is fair — it was real interest — and is small next to its ratings anyway.
  */
-function popularity(c: RankCandidate): number {
-  // TODO(human): combine total_rating_count and hypes into one score.
-  // Placeholder: ratings alone, so the file works until this is decided.
-  return c.total_rating_count ?? 0
+export function popularity(c: RankCandidate): number {
+  return (c.total_rating_count ?? 0) + (c.hypes ?? 0)
 }
 
 /**
@@ -93,8 +107,12 @@ export function rankSearchResults<T extends RankCandidate>(query: string, candid
   const target = normaliseTitle(query)
   const queryWords = words(query)
   return candidates
-    .map((c, index) => ({ c, index, group: group(c, target, queryWords), pop: popularity(c) }))
-    .sort((a, b) => a.group - b.group || b.pop - a.pop || a.index - b.index)
+    .map((c, index) => {
+      const exact = target !== '' && normaliseTitle(c.name) === target
+      const group = exact || wordsMatch(queryWords, c.name) ? 0 : 1
+      return { c, index, group, score: score(c, exact) }
+    })
+    .sort((a, b) => a.group - b.group || b.score - a.score || a.index - b.index)
     .map(x => x.c)
 }
 

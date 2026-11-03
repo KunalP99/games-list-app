@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, revokeDevice } from './actions'
+import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, revokeDevice, ignoreExecutable, unignoreExecutable } from './actions'
 import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
 
@@ -26,7 +26,7 @@ function StatusMessage({ msg }: { msg: { ok: boolean; text: string } | null }) {
 
 export type DeviceRow = { id: string; label: string; last_seen_at: string | null; created_at: string }
 
-export default function SettingsForms({ profile, email, devices = [] }: { profile: Profile; email: string; devices?: DeviceRow[] }) {
+export default function SettingsForms({ profile, email, devices = [], ignoredExecutables = [] }: { profile: Profile; email: string; devices?: DeviceRow[]; ignoredExecutables?: string[] }) {
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
@@ -38,6 +38,11 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
 
   const [deviceMsg, setDeviceMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [deviceLoading, setDeviceLoading] = useState(false)
+
+  const [ignored, setIgnored] = useState<string[]>(ignoredExecutables)
+  const [ignoreInput, setIgnoreInput] = useState('')
+  const [ignoreMsg, setIgnoreMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [ignoreLoading, setIgnoreLoading] = useState<string | null>(null)
 
   const [wheelMsg, setWheelMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [wheelLoading, setWheelLoading] = useState(false)
@@ -75,6 +80,31 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
       ? { ok: true, text: `Removed ${label}. That device can no longer log hours.` }
       : { ok: false, text: result.error })
     setDeviceLoading(false)
+  }
+
+  async function handleAddIgnore(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const name = ignoreInput.trim()
+    if (!name) return
+    setIgnoreLoading(name)
+    setIgnoreMsg(null)
+    const result = await ignoreExecutable(name)
+    if (result.success) {
+      setIgnored(prev => (prev.includes(name.toLowerCase()) ? prev : [...prev, name.toLowerCase()]))
+      setIgnoreInput('')
+    } else {
+      setIgnoreMsg({ ok: false, text: result.error })
+    }
+    setIgnoreLoading(null)
+  }
+
+  async function handleUnignore(exeName: string) {
+    setIgnoreLoading(exeName)
+    setIgnoreMsg(null)
+    const result = await unignoreExecutable(exeName)
+    if (result.success) setIgnored(prev => prev.filter(e => e !== exeName))
+    else setIgnoreMsg({ ok: false, text: result.error })
+    setIgnoreLoading(null)
   }
 
   async function handleWheelToggle(next: boolean) {
@@ -382,6 +412,54 @@ export default function SettingsForms({ profile, email, devices = [] }: { profil
         )}
 
         <StatusMessage msg={deviceMsg} />
+      </section>
+
+      {/* Ignored Programs — the escape hatch for a wrong identification, like
+          a launcher misidentified as an unrelated game. Never deletes a
+          game entry that may already exist; it only stops future tracking. */}
+      <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Ignored Programs</h2>
+        <p className="text-xs text-fg-subtle leading-relaxed">
+          Programs that will never be auto-tracked as a game, even if the tracker app thinks they look like one.
+          If a program was wrongly tracked already, any game it created stays in your library for you to review —
+          ignoring it only stops future tracking.
+        </p>
+
+        {ignored.length > 0 && (
+          <ul className="divide-y divide-edge-subtle border border-edge-base rounded-lg">
+            {ignored.map(exe => (
+              <li key={exe} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                <code className="text-sm text-fg-secondary truncate">{exe}</code>
+                <button
+                  type="button"
+                  onClick={() => handleUnignore(exe)}
+                  disabled={ignoreLoading === exe}
+                  className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-md border border-edge-base text-fg-muted hover:text-brand-600 hover:border-brand-300 transition-colors disabled:opacity-50"
+                >
+                  {ignoreLoading === exe ? 'Un-ignoring…' : 'Un-ignore'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form onSubmit={handleAddIgnore} className="flex items-center gap-2">
+          <input
+            value={ignoreInput}
+            onChange={e => setIgnoreInput(e.target.value)}
+            placeholder="e.g. riot.exe"
+            className={input}
+          />
+          <button
+            type="submit"
+            disabled={!ignoreInput.trim() || ignoreLoading !== null}
+            className="shrink-0 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50"
+          >
+            Ignore
+          </button>
+        </form>
+
+        <StatusMessage msg={ignoreMsg} />
       </section>
 
     </div>

@@ -23,13 +23,26 @@ export default async function SettingsPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: true }) as { data: { id: string; label: string; last_seen_at: string | null; created_at: string }[] | null }
 
+  // Programs the user has said to never auto-track. Tolerates the table not
+  // existing yet, same as devices above.
+  const { data: ignored } = await supabase
+    .from('ignored_executables')
+    .select('exe_name')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true }) as { data: { exe_name: string }[] | null }
+
   return (
     <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-fg-base">Settings</h1>
         <p className="text-sm text-fg-muted mt-0.5">Manage your account and preferences</p>
       </div>
-      <SettingsForms profile={profile} email={user.email ?? ''} devices={devices ?? []} />
+      <SettingsForms
+        profile={profile}
+        email={user.email ?? ''}
+        devices={devices ?? []}
+        ignoredExecutables={(ignored ?? []).map(i => i.exe_name)}
+      />
     </div>
   )
 }

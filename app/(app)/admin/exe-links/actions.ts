@@ -19,12 +19,19 @@ async function requireAdmin() {
   return profile?.is_admin ? user : null
 }
 
-/** Add or replace a global exe -> game link, picked from a real search result. */
+/**
+ * Add or replace a global exe -> game link, picked from a real search
+ * result. `folderHint` disambiguates an exe name already in use under a
+ * different title — '' (the default) means "no hint", the common case —
+ * and together with `exeName` is the row's real identity: this always
+ * upserts onto that pair, never onto `exeName` alone.
+ */
 export async function addGlobalExeLink(
   exeName: string,
   igdbId: number,
   title: string,
   coverImageUrl: string | null,
+  folderHint: string = '',
 ): Promise<Result> {
   const user = await requireAdmin()
   if (!user) return { success: false, error: 'Admins only.' }
@@ -35,11 +42,13 @@ export async function addGlobalExeLink(
   const sb = createAdminClient()
   const { error } = await (sb.from('global_exe_links') as any).upsert({
     exe_name: normalised,
+    folder_hint: folderHint.trim().toLowerCase(),
     igdb_id: igdbId,
     title,
     cover_image_url: coverImageUrl,
+    source: 'admin',
     created_by: user.id,
-  }, { onConflict: 'exe_name' })
+  }, { onConflict: 'exe_name,folder_hint' })
 
   if (error) return { success: false, error: error.message }
   revalidatePath('/admin/exe-links')
@@ -51,7 +60,8 @@ export async function addGlobalExeLink(
  * global list. Bound directly to a plain `<form action>` on the review
  * queue, so (unlike `addGlobalExeLink`) this returns nothing for the UI to
  * read — a failure here is rare enough, and low-stakes enough, that logging
- * it server-side is enough.
+ * it server-side is enough. `game_executables` carries no folder info, so
+ * this always lands in the no-hint slot for that exe name.
  */
 export async function promoteExeLink(exeName: string, igdbId: number, title: string): Promise<void> {
   const result = await addGlobalExeLink(exeName, igdbId, title, null)
@@ -59,7 +69,7 @@ export async function promoteExeLink(exeName: string, igdbId: number, title: str
 }
 
 /** Bound to a plain `<form action>` on the global-links list — see `promoteExeLink`. */
-export async function removeGlobalExeLink(exeName: string): Promise<void> {
+export async function removeGlobalExeLink(exeName: string, folderHint: string = ''): Promise<void> {
   const user = await requireAdmin()
   if (!user) {
     console.error('removeGlobalExeLink: admins only')
@@ -70,6 +80,7 @@ export async function removeGlobalExeLink(exeName: string): Promise<void> {
   const { error } = await (sb.from('global_exe_links') as any)
     .delete()
     .eq('exe_name', normaliseExeName(exeName))
+    .eq('folder_hint', folderHint)
 
   if (error) {
     console.error(`removeGlobalExeLink(${exeName}): ${error.message}`)

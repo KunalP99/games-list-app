@@ -100,6 +100,37 @@ pub fn add_asked(dir: &Path, exe_name: &str) {
     }
 }
 
+// ── Games awaiting platform confirmation ────────────────────────────────────
+// A game just auto-filed still shows the platform-confirm prompt the next
+// time (and every time) it's seen running, until the user actually answers
+// it — unlike `asked.json`, this is not "never ask again", it's "ask again
+// on each run until answered". Persisted (rather than held only in memory)
+// so quitting the app mid-answer doesn't lose the question, same reasoning
+// as `asked.json`.
+
+pub fn load_unconfirmed_platforms(dir: &Path) -> HashSet<String> {
+    read_json::<Vec<String>>(&path_in(dir, "unconfirmed-platforms.json"))
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
+pub fn add_unconfirmed_platform(dir: &Path, game_id: &str) {
+    let mut set = load_unconfirmed_platforms(dir);
+    if set.insert(game_id.to_string()) {
+        let list: Vec<String> = set.into_iter().collect();
+        write_json(&path_in(dir, "unconfirmed-platforms.json"), &list);
+    }
+}
+
+pub fn remove_unconfirmed_platform(dir: &Path, game_id: &str) {
+    let mut set = load_unconfirmed_platforms(dir);
+    if set.remove(game_id) {
+        let list: Vec<String> = set.into_iter().collect();
+        write_json(&path_in(dir, "unconfirmed-platforms.json"), &list);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -193,3 +193,55 @@ export async function unlinkExecutable(exeName: string): Promise<ActionResult> {
   revalidatePath('/settings/devices/link')
   return { success: true, data: undefined }
 }
+
+// ── Ignored executables ──────────────────────────────────────────────────────
+// The escape hatch for a wrong identification (a launcher misidentified as an
+// unrelated game, say): never touches the game row that may already have been
+// created, only stops a program from ever being auto-tracked again.
+
+/**
+ * Stop a program from ever being tracked. Removes any current link for it
+ * too, so something already (wrongly) being tracked actually stops, rather
+ * than just going un-asked-about.
+ */
+export async function ignoreExecutable(exeName: string): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const normalised = normaliseExeName(exeName)
+  if (!normalised) return { success: false, error: 'No executable given' }
+
+  await supabase
+    .from('game_executables')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('exe_name', normalised)
+
+  const { error } = await (supabase.from('ignored_executables') as any).upsert({
+    user_id: user.id,
+    exe_name: normalised,
+  }, { onConflict: 'user_id,exe_name' })
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings')
+  revalidatePath('/settings/devices/link')
+  return { success: true, data: undefined }
+}
+
+/** Undo `ignoreExecutable` — the program can be detected again from here on. */
+export async function unignoreExecutable(exeName: string): Promise<ActionResult> {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('ignored_executables')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('exe_name', normaliseExeName(exeName))
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/settings')
+  return { success: true, data: undefined }
+}

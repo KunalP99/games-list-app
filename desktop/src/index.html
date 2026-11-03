@@ -20,6 +20,10 @@
         </svg>
       </span>
       <span class="wordmark-text">Games<span class="wordmark-accent">List</span></span>
+      <!-- Only ever shown by a debug build (cfg!(debug_assertions) on the
+           Rust side) — never present in the real installed app, so there's
+           no way to mistake this window for the production one. -->
+      <span class="dev-badge" id="dev-badge" hidden>DEV</span>
     </div>
     <div class="who" id="who">Connecting…</div>
   </header>
@@ -70,6 +74,44 @@
         <p class="toast-error" id="prompt-error" hidden></p>
       </section>
 
+      <!-- Shown right after a game is auto-filed for the first time — never
+           at the same time as the card above, since that only appears when
+           identification *failed* and this only appears right after it
+           *succeeded*. Pre-selected to whatever the identify step already
+           set (Steam, Epic Games, EA App, or PC (Windows) when nothing more
+           specific was known), so confirming is a single click. -->
+      <section class="card prompt" id="platform-prompt-card" hidden>
+        <p class="toast-heading">What platform are you playing <strong id="platform-prompt-title"></strong> on?</p>
+        <select id="platform-prompt-select" class="field"></select>
+        <div class="prompt-actions">
+          <button class="primary" id="platform-prompt-save">Save</button>
+        </div>
+        <p class="toast-error" id="platform-prompt-error" hidden></p>
+      </section>
+
+      <!-- Shown when a running game is found already in the library as
+           Completed, DNF, or Backlog — identified, but not currently
+           trackable, so moving it out of there is asked about rather than
+           done silently. Never alongside the cards above: this only
+           appears on an "untracked" match (identification succeeded, the
+           game just isn't currently trackable), the opposite moment from
+           either. Backlog is the one case with a genuine choice of target
+           status, which is what #resume-prompt-ambient is for — Completed
+           and DNF each have exactly one possible outcome, so it stays
+           hidden for those. -->
+      <section class="card prompt" id="resume-prompt-card" hidden>
+        <p class="toast-heading" id="resume-prompt-heading"></p>
+        <p class="prompt-question" id="resume-prompt-warning">
+          If this isn't right, this session's hours won't be tracked.
+        </p>
+        <div class="prompt-actions">
+          <button class="primary" id="resume-prompt-yes"></button>
+          <button class="primary" id="resume-prompt-ambient" hidden>Set to Ambient</button>
+          <button class="ghost" id="resume-prompt-no">Not now</button>
+        </div>
+        <p class="toast-error" id="resume-prompt-error" hidden></p>
+      </section>
+
       <!-- Linking happens here rather than in a website window: the app
            already knows what is running and which games are Playing, so a
            second window (and a webview session that can expire) buys nothing. -->
@@ -82,6 +124,9 @@
 
         <label class="field-label" for="link-game">Game</label>
         <select id="link-game" class="field"></select>
+
+        <label class="field-label" for="link-platform">Platform</label>
+        <select id="link-platform" class="field"></select>
 
         <!-- The only way out when the real game isn't in the dropdown at all
              — nothing already in the library resembles it, which is the

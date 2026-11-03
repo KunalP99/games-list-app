@@ -6,7 +6,14 @@ import AddGlobalExeLinkForm from '@/components/admin/AddGlobalExeLinkForm'
 import GlobalExeLinkRow from '@/components/admin/GlobalExeLinkRow'
 import { promoteExeLink } from './actions'
 
-type GlobalLink = { exe_name: string; igdb_id: number; title: string; cover_image_url: string | null }
+type GlobalLink = {
+  exe_name: string
+  folder_hint: string
+  igdb_id: number | null
+  title: string
+  cover_image_url: string | null
+  source: 'admin' | 'import'
+}
 type ReviewRow = { exeName: string; gameTitle: string; igdbId: number | null; users: string[] }
 
 export default async function ExeLinksAdminPage() {
@@ -27,7 +34,7 @@ export default async function ExeLinksAdminPage() {
 
   const [{ data: globalLinks }, { data: personalLinks }, { data: games }, { data: profiles }] = await Promise.all([
     (admin.from('global_exe_links') as any)
-      .select('exe_name, igdb_id, title, cover_image_url')
+      .select('exe_name, folder_hint, igdb_id, title, cover_image_url, source')
       .order('created_at', { ascending: false }) as Promise<{ data: GlobalLink[] | null }>,
     (admin.from('game_executables') as any).select('exe_name, game_id, user_id') as Promise<{ data: { exe_name: string; game_id: string; user_id: string }[] | null }>,
     (admin.from('games') as any).select(`id, title, ${PROVIDER_ID_COLUMN}`) as Promise<{ data: { id: string; title: string; [key: string]: unknown }[] | null }>,
@@ -36,7 +43,9 @@ export default async function ExeLinksAdminPage() {
 
   const gameById = new Map((games ?? []).map(g => [g.id, g]))
   const usernameById = new Map((profiles ?? []).map(p => [p.id, p.username]))
-  const globalExeNames = new Set((globalLinks ?? []).map(l => l.exe_name))
+  // A hinted row existing doesn't claim the plain (no-hint) slot a promoted
+  // personal link would land in — only a no-hint row does.
+  const globalExeNames = new Set((globalLinks ?? []).filter(l => l.folder_hint === '').map(l => l.exe_name))
 
   // Group everyone's personal links by (exe, game), skipping anything
   // already global — nothing to promote there.
@@ -67,7 +76,10 @@ export default async function ExeLinksAdminPage() {
       <div>
         <h1 className="text-2xl font-bold text-fg-base">Global exe links</h1>
         <p className="mt-1 text-fg-muted text-sm">
-          Admin-curated — once an executable is linked here, every user's agent recognises it automatically, with no toast.
+          Admin-curated and bulk-imported (<code className="text-fg-subtle">scripts/import-exe-catalog.mjs</code>) —
+          once an executable is linked here, every user's agent recognises it automatically, with no toast. A
+          "Not yet resolved" row is a bulk-imported one nobody's agent has looked up yet; it resolves itself on
+          first use.
         </p>
       </div>
 
@@ -84,11 +96,13 @@ export default async function ExeLinksAdminPage() {
           <div className="bg-surface-base border border-edge-base rounded-xl divide-y divide-edge-subtle">
             {globalLinks.map(link => (
               <GlobalExeLinkRow
-                key={link.exe_name}
+                key={`${link.exe_name}|${link.folder_hint}`}
                 exeName={link.exe_name}
+                folderHint={link.folder_hint}
                 title={link.title}
                 igdbId={link.igdb_id}
                 coverImageUrl={link.cover_image_url}
+                source={link.source}
               />
             ))}
           </div>

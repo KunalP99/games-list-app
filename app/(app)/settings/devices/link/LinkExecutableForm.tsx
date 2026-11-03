@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { linkExecutable, unlinkExecutable } from '../../actions'
+import { linkExecutable, unlinkExecutable, ignoreExecutable } from '../../actions'
 import { describeKnownSoftware } from '@/lib/known-software'
 
 type Game = { id: string; title: string; platform: string | null; hours_played: number | null; cover_image_url: string | null }
@@ -28,6 +28,7 @@ export default function LinkExecutableForm({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [current, setCurrent] = useState<ExeLink[]>(links)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [ignoring, setIgnoring] = useState<string | null>(null)
 
   // Null for anything unrecognised — which includes every real game — so the
   // absence of a warning means nothing either way. Never a block: an unusual
@@ -61,6 +62,22 @@ export default function LinkExecutableForm({
     setRemoving(null)
   }
 
+  /** For when a link is just plain wrong — a launcher misidentified as an
+   *  unrelated game, say — rather than just no longer current. Unlike
+   *  Remove, this also stops it from ever being auto-tracked again. */
+  async function handleIgnore(name: string) {
+    setIgnoring(name)
+    setMsg(null)
+    const result = await ignoreExecutable(name)
+    if (result.success) {
+      setCurrent(prev => prev.filter(l => l.exeName !== name))
+      setMsg({ ok: true, text: `${name} will never be tracked automatically again. Manage this from Settings.` })
+    } else {
+      setMsg({ ok: false, text: result.error })
+    }
+    setIgnoring(null)
+  }
+
   return (
     <div className="space-y-4">
       {current.length > 0 && (
@@ -80,14 +97,25 @@ export default function LinkExecutableForm({
                         rather than rendering a blank. */}
                     {game?.title ?? <span className="text-fg-subtle">a game no longer listed as Playing</span>}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(link.exeName)}
-                    disabled={removing === link.exeName}
-                    className="shrink-0 px-2.5 py-1 text-xs font-medium rounded-md border border-edge-base text-fg-muted hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50"
-                  >
-                    {removing === link.exeName ? 'Removing…' : 'Remove'}
-                  </button>
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(link.exeName)}
+                      disabled={removing === link.exeName || ignoring === link.exeName}
+                      className="px-2.5 py-1 text-xs font-medium rounded-md border border-edge-base text-fg-muted hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50"
+                    >
+                      {removing === link.exeName ? 'Removing…' : 'Remove'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleIgnore(link.exeName)}
+                      disabled={removing === link.exeName || ignoring === link.exeName}
+                      title="Stop this from ever being auto-tracked again"
+                      className="px-2.5 py-1 text-xs font-medium rounded-md border border-edge-base text-fg-muted hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50"
+                    >
+                      {ignoring === link.exeName ? 'Ignoring…' : 'Ignore'}
+                    </button>
+                  </div>
                 </li>
               )
             })}

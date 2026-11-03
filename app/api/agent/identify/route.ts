@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { resolveSteamApp } from '@/lib/steam-games'
 import { findGameByExactName } from '@/lib/name-games'
+import { resolveExeCandidate } from '@/lib/exe-catalog'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent } from '@/lib/igdb'
@@ -25,12 +26,21 @@ export const dynamic = 'force-dynamic'
  *   igdbId     — a specific game a person picked themselves from the agent's
  *                own search panel. Nothing to resolve: they already chose it,
  *                so this skips straight to "already owned? else file it".
- *   lookupExe  — no local signal of any kind, just the raw exe name. Checked
- *                against `global_exe_links`, the admin-curated table any
- *                agent can consult once someone has vetted that exe for
- *                everyone (`/admin/exe-links`). A miss is `unknown`, exactly
- *                like a title-guess miss — nothing is remembered, since an
- *                admin could add the mapping moments later.
+ *   lookupExe  — no local signal of any kind, just the raw exe name (plus,
+ *                optionally, the install `installPath` the agent found it
+ *                running from). Checked against `global_exe_links`, which
+ *                holds both admin-curated rows and a much larger bulk-
+ *                imported catalog (`scripts/import-exe-catalog.mjs`). An exe
+ *                name used by more than one title (an unrelated launcher and
+ *                an unrelated game sharing a name, say) is only trusted when
+ *                `installPath` disambiguates to exactly one row's
+ *                `folder_hint` — otherwise it's `unknown`, same as a miss,
+ *                rather than risk guessing between two different games. A
+ *                catalog row with no `igdb_id` yet (every bulk-imported row
+ *                starts this way) is resolved via the same exact-match title
+ *                search as `titleGuess`, and the result is cached back onto
+ *                the row — so every subsequent user hitting that exe gets the
+ *                instant path, and the resolution only ever happens once.
  *
  * The answer decides everything that follows:
  *
@@ -43,8 +53,15 @@ export const dynamic = 'force-dynamic'
  *                because a search miss is not proof of anything.
  *   tracked    — already in the library as Playing or Ambient. Just track it.
  *   untracked  — in the library, but completed, dropped or still in the
- *                backlog. Left alone: moving it is the user's call, not a
- *                background program's.
+ *                backlog. Never moved without being asked — a background
+ *                program silently deciding "this counts as Playing now"
+ *                would be the wrong kind of automatic. Instead carries a
+ *                `resumable` flag (`'completed'` | `'dnf'` | `'backlog'` |
+ *                `null`) naming exactly which of the three it is, and the
+ *                agent turns that into the matching prompt: "replay?" /
+ *                "resuming?" / "set to Playing or Ambient?". Accepting any
+ *                of them calls `/api/agent/resume`, which is what actually
+ *                acts on it.
  *   added      — not in the library at all, so an Ambient row was created and
  *                tracking can start immediately.
  *
@@ -115,7 +132,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const exeName = typeof body?.exeName === 'string' && body.exeName.trim() && body.exeName.length <= 260
     ? normaliseExeName(body.exeName)
     : null
-  const platform = typeof body?.platform === 'string' && body.platform.trim() ? body.platform.trim().slice(0, 100) : 'PC'
+  const platform = typeof body?.platform === 'string' && body.platform.trim() ? body.platform.trim().slice(0, 100) : 'PC (Windows)'
 
   // All three paths resolve to the same shape, so everything below is shared.
   let igdbId: number
@@ -132,13 +149,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     igdbId = lookup.igdbId
     resolvedName = lookup.name
   } else if (hasLookup) {
-    const { data: globalLink } = await (sb.from('global_exe_links') as any)
-      .select('igdb_id, title')
+    const { data: rows } = await (sb.from('global_exe_links') as any)
+      .select('id, igdb_id, title, folder_hint')
       .eq('exe_name', normaliseExeName(body.exeName))
-      .maybeSingle()
-    if (!globalLink) return NextResponse.json({ result: 'unknown' })
-    igdbId = globalLink.igdb_id
-    resolvedName = globalLink.title
+    const installPath = typeof body?.installPath === 'string' ? body.installPath : null
+    const match = resolveExeCandidate(rows ?? [], installPath)
+    if (!match) return NextResponse.json({ result: 'unknown' })
+
+    if (match.igdb_id != null) {
+      igdbId = match.igdb_id
+      resolvedName = match.title
+    } else {
+      const lookup = await findGameByExactName(match.title)
+      if (lookup.kind === 'noMatch') return NextResponse.json({ result: 'unknown' })
+      igdbId = lookup.igdbId
+      resolvedName = lookup.name
+      // Self-optimising: every subsequent user hitting this exe gets the
+      // instant igdb_id path, so this resolution only has to happen once.
+      await (sb.from('global_exe_links') as any).update({ igdb_id: igdbId }).eq('id', match.id)
+    }
   } else {
     // Picked directly from a search result — nothing to resolve or verify,
     // the person already chose this exact game.
@@ -172,6 +201,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .order('updated_at', { ascending: false })
     .limit(1)
   let existing = (owned ?? [])[0] as { id: string; title: string; status: string } | undefined
+  // Picking the most-recently-updated matching row (above and in the
+  // version_parent fallback below) is also what makes a replay the user has
+  // already created by hand on the website — via the Add Game form's own
+  // replay detection — take over automatically: that row is newer than the
+  // original Completed one, so it's the one found here, already Playing,
+  // with nothing special needed to recognise it.
   // Backfilled onto the matched row below, only when the match came from
   // this fallback — an exact `existing` match already has the right id.
   let editionSteamAppId: number | null = null
@@ -218,6 +253,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       title: existing.title,
       status: existing.status,
       igdbId,
+      // Only meaningful when untracked — and since `trackable` is exactly
+      // `status === 'playing' || status === 'ambient'`, `!trackable` always
+      // means status is one of these three, with nothing else to filter.
+      resumable: !trackable ? existing.status : null,
     })
   }
 

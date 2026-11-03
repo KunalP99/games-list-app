@@ -37,6 +37,17 @@ const IGNORED: &[&str] = &[
     // screen first, and that is the wrong thing to be asked about — worse, say
     // yes and every minute the launcher is open counts as play time.
     "rockstarlauncher.exe", "riotclientservices.exe", "riotclientux.exe", "leagueclient.exe",
+    // The Riot Games launcher's own visible process, confirmed live as
+    // `riot client.exe` (not `riot.exe` — a real, unrelated game ships that
+    // one, "RIOT: Civil Unrest", so it stays identifiable and off this list).
+    // This is the exact bug that motivated the exe-catalog ambiguity check
+    // in tracker.rs, except this specific collision isn't something that
+    // check alone can catch: the catalog's own `riot.exe` row is perfectly
+    // unambiguous on its own, so without excluding the launcher's real exe
+    // name here it would still get confidently auto-linked to a game it has
+    // nothing to do with. Launcher exes always win here regardless of what
+    // any catalog says.
+    "riot client.exe",
     "bethesdanetlauncher.exe", "amazongameslauncher.exe", "minecraftlauncher.exe",
     "itch.exe", "playnite.desktopapp.exe", "heroic.exe", "legendary.exe", "gameoverlayui.exe",
 ];
@@ -69,12 +80,30 @@ const GRAPHICS_MODULES: &[&str] = &[
 /// asked.
 const MIN_RUN_TIME_SECS: u64 = 20;
 
-/// After this long, a program we still cannot vouch for is written off.
+/// After this long with no graphics module loaded, the module probe is
+/// throttled rather than run on every single poll — see
+/// `RECHECK_INTERVAL_SECS`.
 ///
 /// A game loads its graphics runtime while it starts, so "no 3D modules yet"
-/// a few seconds in means nothing. Re-checking gives it time to get going;
-/// this bounds how long we keep paying for that on something that never will.
+/// a few seconds in means nothing — and nor does it minutes in: confirmed
+/// live with a private World of Warcraft server client that sits on its
+/// login and character-select screens well past this mark before ever
+/// loading `d3d11.dll`. This used to be a flat cutoff that gave up and wrote
+/// the process off as "not a game" forever once it elapsed; it no longer
+/// does, since that meant exactly this kind of slow-starting game could
+/// never be recognised, however long it kept running.
 const SETTLES_AFTER_SECS: u64 = 120;
+
+/// Once a candidate is past `SETTLES_AFTER_SECS`, how long to wait before
+/// walking its modules again.
+///
+/// The module probe means opening a Toolhelp32 snapshot; re-running that on
+/// every ten-second poll for the rest of a long-running program's life, on
+/// the chance it eventually turns out to be a game, is real, recurring cost
+/// for something that's usually just ordinary software. Throttling it keeps
+/// that cost small and bounded, rather than solving the same problem the old
+/// cutoff did by giving up on a real answer altogether.
+const RECHECK_INTERVAL_SECS: u64 = 60;
 
 /// Names that are part of installing or repairing a game rather than playing
 /// one. They sit in the same folders games do and load the same graphics
@@ -160,12 +189,21 @@ enum Verdict {
 /// loaded its graphics runtime yet. Keeping those answers meant a game was
 /// written off at first sight, seconds after launching, and never looked at
 /// again. The three-minute settle therefore never elapsed for anything; it
-/// just silenced the prompt.
+/// just silenced the prompt. The same reasoning now also applies past
+/// `SETTLES_AFTER_SECS`: a module probe that still hasn't found a graphics
+/// runtime is throttled (`last_probed_at`), not settled as a permanent "no".
 #[derive(Default)]
 pub struct GameJudge {
     /// pid -> (exe name, verdict). The exe name guards against the OS reusing
     /// a pid for a different program.
     verdicts: HashMap<u32, (String, bool)>,
+    /// pid -> the candidate's `run_time_secs` the last time its modules were
+    /// actually walked, once it's old enough that the probe is throttled
+    /// rather than run on every poll. Keyed on the candidate's own run time
+    /// rather than wall-clock time, so the next probe is determined purely by
+    /// how long the process has been running, not by when the app happens to
+    /// poll it.
+    last_probed_at: HashMap<u32, u64>,
 }
 
 impl GameJudge {
@@ -173,16 +211,28 @@ impl GameJudge {
         self.judge_with(candidate, loads_graphics_runtime)
     }
 
-    fn judge_with(&mut self, candidate: &Candidate, modules: impl FnMut(u32) -> bool) -> bool {
+    fn judge_with(&mut self, candidate: &Candidate, mut modules: impl FnMut(u32) -> bool) -> bool {
         if let Some((exe, verdict)) = self.verdicts.get(&candidate.pid) {
             if exe == &candidate.exe_name {
                 return *verdict;
             }
         }
-        match looks_like_game_with(candidate, modules) {
-            // Still starting up: decide next time round rather than writing it
+
+        let due_to_probe = candidate.run_time_secs < SETTLES_AFTER_SECS
+            || self.last_probed_at.get(&candidate.pid).is_none_or(|&t| {
+                candidate.run_time_secs.saturating_sub(t) >= RECHECK_INTERVAL_SECS
+            });
+
+        match looks_like_game_with(candidate, due_to_probe, &mut modules) {
+            // Still starting up, or past the settle window with nothing
+            // conclusive yet: decide next time round rather than writing it
             // off for the life of the process.
-            Verdict::NotYet => false,
+            Verdict::NotYet => {
+                if candidate.run_time_secs >= SETTLES_AFTER_SECS && due_to_probe {
+                    self.last_probed_at.insert(candidate.pid, candidate.run_time_secs);
+                }
+                false
+            }
             settled => {
                 let verdict = settled == Verdict::Game;
                 self.verdicts.insert(candidate.pid, (candidate.exe_name.clone(), verdict));
@@ -191,33 +241,31 @@ impl GameJudge {
         }
     }
 
-    /// Drop processes that have exited, so the map cannot grow without bound.
+    /// Drop processes that have exited, so the maps cannot grow without bound.
     pub fn retain_running(&mut self, alive: &HashSet<u32>) {
         self.verdicts.retain(|pid, _| alive.contains(pid));
+        self.last_probed_at.retain(|pid, _| alive.contains(pid));
     }
 }
 
-/// Is this worth interrupting the user about?
-///
-/// Deliberately conservative: it would rather miss a game — which the user can
-/// link from the website whenever they like — than prompt about a spreadsheet.
-/// Every gate here earned its place; the Windows-directory one in particular,
-/// because `TextInputHost` loads `dxgi.dll` and was the single false positive
-/// when this was tested against every windowed app on a real desktop.
-fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> Verdict {
+/// The identity-only gates: everything that is instantly true or false about
+/// a process regardless of how long it has been running or what it has
+/// loaded. Shared by [`looks_like_game_with`] and [`plausible_candidate`],
+/// which only adds an age gate on top of this.
+fn is_not_obviously_excluded(c: &Candidate) -> bool {
     if !c.has_window {
-        return Verdict::NotAGame;
+        return false;
     }
     if IGNORED.contains(&c.exe_name.as_str()) {
-        return Verdict::NotAGame;
+        return false;
     }
     // An installer sits in the game's own folder and loads the same graphics
     // runtime, so no later gate would tell them apart.
     if NOT_THE_GAME.iter().any(|part| c.exe_name.contains(part)) {
-        return Verdict::NotAGame;
+        return false;
     }
 
-    // A path lets the next two gates run, but its absence is not itself
+    // A path lets some later gates run, but its absence is not itself
     // suspicious — a real running game can have one unreadable by every
     // method tried (confirmed live, if intermittently: sysinfo, WMI and
     // .NET's own `Process` class all came back empty for Star Citizen's own
@@ -229,9 +277,48 @@ fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> 
         if let Some(windows_dir) = std::env::var_os("SystemRoot") {
             let windows_dir = windows_dir.to_string_lossy().to_lowercase();
             if path.starts_with(&windows_dir) {
-                return Verdict::NotAGame;
+                return false;
             }
         }
+    }
+
+    true
+}
+
+/// Worth checking against the global exe-link catalog, regardless of
+/// whether the local heuristic below can confirm it is a game on its own.
+///
+/// Deliberately looser than [`looks_like_game_with`]: it skips the
+/// folder-hint and module-probe checks entirely and just rules out what
+/// plainly is not worth a network round-trip (everyday software, installers,
+/// anything inside the Windows folder, anything too young to have finished
+/// launching), leaving the rest to the catalog's own answer. This exists
+/// because a real game can actively block the two signals the full judge
+/// depends on — confirmed live against Dead by Daylight, whose anti-cheat
+/// makes both its install path *and* its loaded modules unreadable, so the
+/// judge never settles on `Game` and the catalog (which needs neither) would
+/// otherwise never even be asked. A miss here just means "not on the list
+/// yet", the same as it already did for a judge-confirmed game — not a
+/// "this is not a game" verdict of any kind.
+pub fn plausible_candidate(c: &Candidate) -> bool {
+    is_not_obviously_excluded(c) && c.run_time_secs >= MIN_RUN_TIME_SECS
+}
+
+/// Is this worth interrupting the user about?
+///
+/// Deliberately conservative: it would rather miss a game — which the user can
+/// link from the website whenever they like — than prompt about a spreadsheet.
+/// Every gate here earned its place; the Windows-directory one in particular,
+/// because `TextInputHost` loads `dxgi.dll` and was the single false positive
+/// when this was tested against every windowed app on a real desktop.
+///
+/// `due_to_probe` gates the one gate that costs real time to check (walking
+/// a process's modules) — see `RECHECK_INTERVAL_SECS`. When it's false, the
+/// probe is skipped and this returns `NotYet` without an opinion either way,
+/// exactly as if the probe had been run and had not (yet) found anything.
+fn looks_like_game_with(c: &Candidate, due_to_probe: bool, mut modules: impl FnMut(u32) -> bool) -> Verdict {
+    if !is_not_obviously_excluded(c) {
+        return Verdict::NotAGame;
     }
 
     // Everything above is about what a program *is*, and settles immediately.
@@ -247,17 +334,18 @@ fn looks_like_game_with(c: &Candidate, mut modules: impl FnMut(u32) -> bool) -> 
     }
 
     // Only reached once everything above has passed, so the cost of walking a
-    // process's modules is paid rarely — and a settled verdict is remembered,
-    // so a long-running program is not walked forever.
-    if modules(c.pid) {
+    // process's modules is paid rarely — a settled `Game` verdict is
+    // remembered permanently, and once past `SETTLES_AFTER_SECS` the probe
+    // itself is throttled (`due_to_probe`) rather than skipped forever, so a
+    // slow-starting game still gets found eventually instead of being
+    // written off the moment the clock runs out.
+    if due_to_probe && modules(c.pid) {
         return Verdict::Game;
     }
-    if c.run_time_secs < SETTLES_AFTER_SECS {
-        // It may still be loading its graphics runtime.
-        Verdict::NotYet
-    } else {
-        Verdict::NotAGame
-    }
+    // It may still be loading its graphics runtime — or, past the settle
+    // window, just hasn't been due for a re-check this tick. Either way,
+    // there's no verdict yet, never a settled "no" purely from time.
+    Verdict::NotYet
 }
 
 // ── Windows specifics ───────────────────────────────────────────────────────
@@ -410,6 +498,27 @@ mod tests {
     }
 
     #[test]
+    fn the_riot_launcher_is_never_asked_about() {
+        // Confirmed live: the Riot Games launcher's own visible process runs
+        // as "riot client.exe", a distinct name from riot.exe — which a
+        // real, unrelated game ("RIOT: Civil Unrest") ships, and which stays
+        // identifiable precisely because it is *not* on this list. The
+        // exe-catalog's own ambiguity check can't catch the launcher's own
+        // collision risk (its real exe name isn't in the catalog at all),
+        // so it has to be excluded here, unconditionally.
+        let c = candidate("riot client.exe", Some("c:\\riot games\\riot client\\riot client.exe"), 9000, true);
+        assert!(!GameJudge::default().judge_with(&c, |_| true));
+    }
+
+    #[test]
+    fn riotexe_itself_is_still_a_recognisable_game_not_a_blocked_launcher() {
+        // The actual game that exe name belongs to must stay recognisable —
+        // only the launcher's own distinct exe name is excluded above.
+        let c = candidate("riot.exe", Some("c:\\games\\riot civil unrest\\riot.exe"), 9000, true);
+        assert!(GameJudge::default().judge_with(&c, |_| true));
+    }
+
+    #[test]
     fn a_background_process_with_no_window_is_ignored() {
         let c = candidate("someservice.exe", Some("c:\\tools\\someservice.exe"), 9000, false);
         assert!(!GameJudge::default().judge_with(&c, |_| false));
@@ -452,20 +561,43 @@ mod tests {
     }
 
     #[test]
-    fn a_program_that_never_loads_one_is_eventually_left_alone() {
-        let c = candidate("someapp.exe", Some("d:\\apps\\someapp\\someapp.exe"), 600, true);
+    fn a_program_past_the_settle_window_has_its_module_probe_throttled_not_abandoned() {
+        // The bug this guards against: a flat cutoff at SETTLES_AFTER_SECS
+        // used to write a process off as "not a game" forever the moment it
+        // crossed that mark with no graphics module loaded yet — confirmed
+        // live against a private World of Warcraft server client that sits
+        // on its login/character-select screens well past two minutes
+        // before ever loading d3d11.dll. It must keep being re-checked,
+        // just throttled rather than on every single poll.
+        let path = "d:\\apps\\someapp\\someapp.exe";
         let mut judge = GameJudge::default();
         let mut walks = 0;
-        assert!(!judge.judge_with(&c, |_| {
+
+        let old_enough = candidate("someapp.exe", Some(path), 600, true);
+        assert!(!judge.judge_with(&old_enough, |_| {
             walks += 1;
             false
         }));
-        assert!(!judge.verdicts.is_empty(), "old enough to be a settled no");
-        judge.judge_with(&c, |_| {
+        assert!(judge.verdicts.is_empty(), "no verdict yet, not written off permanently");
+        assert_eq!(walks, 1);
+
+        // Still the same age: inside the throttle window, so the module walk
+        // is skipped rather than repeated.
+        assert!(!judge.judge_with(&old_enough, |_| {
             walks += 1;
             false
-        });
-        assert_eq!(walks, 1, "and not walked again once settled");
+        }));
+        assert_eq!(walks, 1, "should not re-walk modules inside the throttle window");
+
+        // Old enough now that the throttle window has passed — and this
+        // time its renderer has actually loaded.
+        let later = candidate("someapp.exe", Some(path), 600 + RECHECK_INTERVAL_SECS, true);
+        assert!(judge.judge_with(&later, |_| {
+            walks += 1;
+            true
+        }));
+        assert_eq!(walks, 2);
+        assert!(judge.verdicts.get(&later.pid).is_some(), "now settled as a real game");
     }
 
     #[test]
@@ -550,6 +682,34 @@ mod tests {
         // was never even reached.
         let c = candidate("starcitizen.exe", None, 600, true);
         assert!(GameJudge::default().judge_with(&c, |_| true));
+    }
+
+    #[test]
+    fn a_catalog_lookup_does_not_need_a_path_or_a_graphics_module() {
+        // The actual bug this guards against: Dead by Daylight's anti-cheat
+        // leaves both its install path and its loaded modules unreadable, so
+        // the full judge never settles on "Game" — which used to mean the
+        // global exe-link catalog, which needs neither of those things, was
+        // never even asked, and a catalogued game still fell through to the
+        // generic "is this a game?" toast on every user's PC.
+        let c = candidate("deadbydaylight-win64-shipping.exe", None, 600, true);
+        assert!(!GameJudge::default().judge_with(&c, |_| false), "judge has nothing to go on");
+        assert!(plausible_candidate(&c), "but the catalog should still be asked");
+    }
+
+    #[test]
+    fn a_catalog_lookup_still_skips_everyday_software_and_installers() {
+        // Looser than the judge, not open season: there is no point spending
+        // a network round-trip per poll on a browser or an installer.
+        for (name, path) in [
+            ("chrome.exe", "c:\\program files\\google\\chrome\\chrome.exe"),
+            ("vcredist_x64.exe", "d:\\steamlibrary\\steamapps\\common\\game\\vcredist_x64.exe"),
+        ] {
+            assert!(!plausible_candidate(&candidate(name, Some(path), 600, true)), "{name}");
+        }
+        // Nor on something with no window, or that only just started.
+        assert!(!plausible_candidate(&candidate("mygame.exe", None, 600, false)));
+        assert!(!plausible_candidate(&candidate("mygame.exe", None, 5, true)));
     }
 
     #[test]

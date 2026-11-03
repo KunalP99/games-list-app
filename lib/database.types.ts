@@ -308,6 +308,28 @@ export type Database = {
         }
         Relationships: []
       }
+      ignored_executables: {
+        Row: {
+          id: string
+          user_id: string
+          /** Lowercased basename, e.g. "riot.exe" — never auto-tracked for this user. */
+          exe_name: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          exe_name: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          exe_name?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       ticket_transactions: {
         Row: {
           id: string

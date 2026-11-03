@@ -5,6 +5,7 @@
 // point without stopping anything.
 
 import { applyTheme } from './theme.js'
+import { populatePlatformSelect } from './platforms.js'
 
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
@@ -95,6 +96,8 @@ function renderPlaying(games) {
 
 /** The prompt currently shown here, so the buttons know what they're answering. */
 let currentPrompt = null
+/** The platform-confirm prompt currently shown, if any — see renderPlatformPrompt. */
+let currentPlatformPrompt = null
 
 // Mirrors toast.js's render() exactly — the toast's × leaves this card as the
 // only place the question is still answerable, so the two must read as the
@@ -133,6 +136,55 @@ function renderPrompt(prompt) {
  * without needing anything persisted here.
  */
 let updateDismissed = false
+
+/**
+ * Mirrors toast.js's own platform-prompt rendering exactly — same reasoning
+ * as `renderPrompt` above: whichever window is open has to ask the same
+ * question the same way.
+ */
+function renderPlatformPrompt(prompt) {
+  const card = el('platform-prompt-card')
+  currentPlatformPrompt = prompt
+  if (!prompt) {
+    card.hidden = true
+    return
+  }
+  card.hidden = false
+  el('platform-prompt-title').textContent = prompt.title
+  el('platform-prompt-error').hidden = true
+  populatePlatformSelect(el('platform-prompt-select'), prompt.current_platform)
+}
+
+/** The resume/replay prompt currently shown here, if any. */
+let currentResumePrompt = null
+
+/** Mirrors toast.js's own rendering exactly — same reasoning as renderPrompt. */
+function renderResumePrompt(prompt) {
+  const card = el('resume-prompt-card')
+  currentResumePrompt = prompt
+  if (!prompt) {
+    card.hidden = true
+    return
+  }
+  card.hidden = false
+  el('resume-prompt-error').hidden = true
+  const ambientButton = el('resume-prompt-ambient')
+  if (prompt.kind === 'dnf') {
+    el('resume-prompt-heading').textContent = `You dropped ${prompt.title} before — are you resuming it?`
+    el('resume-prompt-yes').textContent = 'Resume'
+    ambientButton.hidden = true
+  } else if (prompt.kind === 'backlog') {
+    // The one case with a real choice — the other two have exactly one
+    // possible outcome, so they only ever show the single primary button.
+    el('resume-prompt-heading').textContent = `You have ${prompt.title} in your backlog — set it to:`
+    el('resume-prompt-yes').textContent = 'Set to Playing'
+    ambientButton.hidden = false
+  } else {
+    el('resume-prompt-heading').textContent = `You already completed ${prompt.title} — is this a replay?`
+    el('resume-prompt-yes').textContent = 'Yes, replay'
+    ambientButton.hidden = true
+  }
+}
 
 function renderUpdateModal(pendingUpdate) {
   const modal = el('update-modal')
@@ -173,6 +225,7 @@ async function refresh() {
 
   apiBase = status.api_base ?? apiBase
   applyTheme(status)
+  el('dev-badge').hidden = !status.is_dev
 
   el('signed-out').hidden = status.paired
   el('signed-in').hidden = !status.paired
@@ -201,6 +254,8 @@ async function refresh() {
 
   renderPlaying(status.playing ?? [])
   renderPrompt(status.pending_prompt)
+  renderPlatformPrompt(status.pending_platform_prompt)
+  renderResumePrompt(status.pending_resume_prompt)
   renderUpdateModal(status.pending_update)
   el('sync-line').textContent = formatSync(status.last_sync, status.queued, status.last_error)
 }
@@ -258,6 +313,63 @@ el('update-now').addEventListener('click', async () => {
 el('update-later').addEventListener('click', () => {
   updateDismissed = true
   el('update-modal').hidden = true
+})
+
+el('platform-prompt-save').addEventListener('click', async () => {
+  if (!currentPlatformPrompt) return
+  const platform = el('platform-prompt-select').value
+  const button = el('platform-prompt-save')
+  const error = el('platform-prompt-error')
+  error.hidden = true
+  button.disabled = true
+  try {
+    await invoke('set_platform', { platform })
+    refresh()
+  } catch (err) {
+    error.textContent = String(err)
+    error.hidden = false
+  } finally {
+    button.disabled = false
+  }
+})
+
+el('resume-prompt-yes').addEventListener('click', async () => {
+  if (!currentResumePrompt) return
+  const button = el('resume-prompt-yes')
+  const error = el('resume-prompt-error')
+  error.hidden = true
+  button.disabled = true
+  try {
+    const status = currentResumePrompt.kind === 'backlog' ? 'playing' : undefined
+    await invoke('respond_to_resume_prompt', { accept: true, status })
+    refresh()
+  } catch (err) {
+    error.textContent = String(err)
+    error.hidden = false
+  } finally {
+    button.disabled = false
+  }
+})
+el('resume-prompt-ambient').addEventListener('click', async () => {
+  if (!currentResumePrompt) return
+  const button = el('resume-prompt-ambient')
+  const error = el('resume-prompt-error')
+  error.hidden = true
+  button.disabled = true
+  try {
+    await invoke('respond_to_resume_prompt', { accept: true, status: 'ambient' })
+    refresh()
+  } catch (err) {
+    error.textContent = String(err)
+    error.hidden = false
+  } finally {
+    button.disabled = false
+  }
+})
+el('resume-prompt-no').addEventListener('click', async () => {
+  if (!currentResumePrompt) return
+  await invoke('respond_to_resume_prompt', { accept: false }).catch(() => {})
+  refresh()
 })
 
 function formatLastSeen(iso) {
@@ -423,10 +535,18 @@ async function openLinkPanel(preselectExe = null) {
     gameSelect.appendChild(opt)
   }
 
+  // Kept so the game-select handler below (a separate listener, fired later)
+  // can look up the platform a just-picked game already has.
+  lastLinkPlaying = status?.playing ?? []
+  populatePlatformSelect(el('link-platform'), 'PC (Windows)')
+
   renderLinked(status)
   showExeWarning()
   panel.hidden = false
 }
+
+/** The games list from the most recent `openLinkPanel` call — see above. */
+let lastLinkPlaying = []
 
 function showExeWarning() {
   const exe = el('link-exe').value
@@ -518,9 +638,26 @@ function renderSearchResults(results) {
       add.disabled = true
       add.textContent = 'Adding…'
       try {
-        await invoke('add_searched_game', { igdbId: game.id, title: game.name, exeName: searchExe })
+        const response = await invoke('add_searched_game', { igdbId: game.id, title: game.name })
         el('search-panel').hidden = true
-        refresh()
+        // Back to the link panel with this game ready to go — "Link them" is
+        // the one explicit step that actually starts tracking, same as any
+        // other game picked there. Added directly as an option rather than
+        // waiting on the next background state refresh to surface it: that
+        // poll can be up to ten seconds away, during which the dropdown would
+        // show no sign the add just worked.
+        await openLinkPanel(searchExe)
+        const gameSelect = el('link-game')
+        if (response.gameId && !Array.from(gameSelect.options).some(o => o.value === response.gameId)) {
+          const opt = document.createElement('option')
+          opt.value = response.gameId
+          opt.textContent = response.title || game.name
+          gameSelect.appendChild(opt)
+        }
+        if (response.gameId) {
+          gameSelect.value = response.gameId
+          gameSelect.dispatchEvent(new Event('change'))
+        }
       } catch (err) {
         add.disabled = false
         add.textContent = 'Add'
@@ -590,6 +727,11 @@ el('link-exe').addEventListener('change', showExeWarning)
 el('link-game').addEventListener('change', async () => {
   const option = el('link-game').selectedOptions[0]
   if (!option || !option.value) return // the "— Select a game —" placeholder
+  // The game it already has, if it has one — never defaults the dropdown
+  // away from a real value just because this game happens to list last.
+  const game = lastLinkPlaying.find(g => g.id === option.value)
+  if (game?.platform) populatePlatformSelect(el('link-platform'), game.platform)
+
   const title = option.textContent.replace(' (already linked)', '')
   const exe = await invoke('suggest_program', { title }).catch(() => null)
   if (exe) {
@@ -635,9 +777,11 @@ el('link-save').addEventListener('click', async () => {
     msg.hidden = false
     return
   }
+  const platform = el('link-platform').value
+  const currentPlatform = lastLinkPlaying.find(g => g.id === gameId)?.platform ?? null
   el('link-save').disabled = true
   try {
-    await invoke('link_executable', { exeName: exe, gameId })
+    await invoke('link_executable', { exeName: exe, gameId, platform, currentPlatform })
     msg.textContent = `Linked. ${exe} will be tracked from now on.`
     msg.className = 'panel-msg ok'
     msg.hidden = false

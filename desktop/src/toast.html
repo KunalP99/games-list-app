@@ -47,6 +47,34 @@
         <button class="ghost" id="no-open">Open GamesList</button>
       </div>
     </section>
+
+    <!-- Shown in place of #ask right after a game is auto-filed for the
+         first time — the two never overlap, since one only exists when
+         identification failed and the other only right after it succeeded.
+         Mirrors #platform-prompt-card in index.html. -->
+    <section id="platform-ask" hidden>
+      <p class="toast-heading">What platform are you playing <strong id="platform-ask-title"></strong> on?</p>
+      <select id="platform-ask-select" class="field"></select>
+      <div class="prompt-actions">
+        <button class="primary" id="platform-ask-save">Save</button>
+      </div>
+      <p class="toast-error" id="platform-ask-error" hidden></p>
+    </section>
+
+    <!-- Mirrors #resume-prompt-card in index.html — see there for when this
+         shows instead of #ask or #platform-ask. -->
+    <section id="resume-ask" hidden>
+      <p class="toast-heading" id="resume-ask-heading"></p>
+      <p class="prompt-question" id="resume-ask-warning">
+        If this isn't right, this session's hours won't be tracked.
+      </p>
+      <div class="prompt-actions">
+        <button class="primary" id="resume-ask-yes"></button>
+        <button class="primary" id="resume-ask-ambient" hidden>Set to Ambient</button>
+        <button class="ghost" id="resume-ask-no">Not now</button>
+      </div>
+      <p class="toast-error" id="resume-ask-error" hidden></p>
+    </section>
   </div>
 
   <script type="module" src="toast.js"></script>
