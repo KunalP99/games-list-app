@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { type ActivityItem, activityVerb, activitySuffix, formatActivityDate, getInitials } from '@/lib/activity'
+import { type ActivityItem, activityVerb, activitySuffix, activityLiveTag, hasSessionToggle, formatActivityDate, getInitials } from '@/lib/activity'
 import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
+import { PlaySessions, PlaySessionsToggle, PlaySessionsList } from '@/components/activity/PlaySessionList'
 
 // Two rather than the activity page's three: this card is half-width and a
 // denser type scale, so three chips would wrap on ordinary titles.
@@ -46,8 +47,9 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
             )}
 
             {/* Text */}
+            <PlaySessions sessions={item.sessions}>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-fg-base leading-snug truncate">
+              <p className={`text-xs text-fg-base leading-snug ${hasSessionToggle(item) ? '' : 'truncate'}`}>
                 <span className="font-semibold">{item.displayName}</span>
                 {' '}
                 {/* "added to backlog" reads wrong with a count after it, so a
@@ -56,7 +58,7 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
                   {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
                 </span>
                 {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && (
-                  <>{' '}<span className="font-medium">{item.gameTitle}</span>{activitySuffix(item)}</>
+                  <>{' '}<span className="font-medium">{item.gameTitle}</span>{activitySuffix(item)}<PlaySessionsToggle />{activityLiveTag(item)}</>
                 )}
                 {isBatch && (
                   <>
@@ -70,9 +72,11 @@ export default function FriendActivityFeed({ items }: { items: ActivityItem[] })
               </p>
 
               {isBatch && <ActivityBatchChips entries={batch} shown={BATCH_SHOWN} />}
+              <PlaySessionsList />
 
               <p className="text-[11px] text-fg-subtle mt-0.5">{formatActivityDate(item.date)}</p>
             </div>
+            </PlaySessions>
 
             {/* Right-side rewards */}
             {(item.ticketsEarned != null && item.ticketsEarned > 0) || item.xpEarned != null ? (

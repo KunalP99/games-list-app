@@ -1,4 +1,5 @@
-import { activityVerb, activitySuffix, formatActivityDate, type ActivityItem } from '@/lib/activity'
+import { activityVerb, activitySuffix, activityLiveTag, hasSessionToggle, formatActivityDate, type ActivityItem } from '@/lib/activity'
+import { PlaySessions, PlaySessionsToggle, PlaySessionsList } from '@/components/activity/PlaySessionList'
 
 // A compact recap of this one person's recent activity — built on the same
 // lib/activity.ts helpers as the full /activity page, but a single-user card
@@ -29,16 +30,19 @@ function Row({ item }: { item: ActivityItem }) {
         {TYPE_ICON[item.type]}
       </span>
 
+      <PlaySessions sessions={item.sessions}>
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-fg-secondary truncate">
+        <p className={`text-sm text-fg-secondary ${hasSessionToggle(item) ? '' : 'truncate'}`}>
           <span>{activityVerb(item)}</span>
-          {showGameTitle && <> <span className="font-medium text-fg-base">{item.gameTitle}</span>{activitySuffix(item)}</>}
+          {showGameTitle && <> <span className="font-medium text-fg-base">{item.gameTitle}</span>{activitySuffix(item)}<PlaySessionsToggle />{activityLiveTag(item)}</>}
           {item.achievementName && (
             <> <span className="font-medium text-fg-base">{item.achievementIcon} {item.achievementName}</span></>
           )}
         </p>
+        <PlaySessionsList />
         <p className="text-xs text-fg-subtle">{formatActivityDate(item.date)}</p>
       </div>
+      </PlaySessions>
 
       {(item.ticketsEarned || item.xpEarned != null) && (
         <div className="shrink-0 text-xs font-medium text-right">

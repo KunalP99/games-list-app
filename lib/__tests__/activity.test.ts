@@ -8,6 +8,12 @@ import {
   getInitials,
   groupActivityItems,
   suppressRepeatedStarts,
+  londonDay,
+  formatSessionTime,
+  activityLiveTag,
+  hasSessionToggle,
+  activityDayHeading,
+  groupItemsByDay,
   type ActivityItem,
   type RawAchievementUnlock,
   type RawPlaySession,
@@ -740,5 +746,171 @@ describe('suppressRepeatedStarts', () => {
   it('keeps a session with no history at all passed in', () => {
     const session = ongoing('2024-04-01T10:00:00Z')
     expect(suppressRepeatedStarts([session], [])).toEqual([session])
+  })
+})
+
+// ─── Same-day play sessions ──────────────────────────────────────────────────
+
+describe('buildActivityItems: same-day play sessions', () => {
+  const game = { ...baseGame, id: 'amb-1', status: 'ambient' }
+  const other = { ...baseGame, id: 'amb-2', title: 'Hades', status: 'ambient' }
+  const s = (start: string, end: string | null, minutes: number, extra: Partial<RawPlaySession> = {}): RawPlaySession =>
+    ({ user_id: 'user-1', game_id: 'amb-1', started_at: start, ended_at: end, minutes, ...extra })
+  const build = (sessions: RawPlaySession[], games = [game]) =>
+    buildActivityItems(games, [], profiles, {}, 'user-2', [], sessions).filter(i => i.type === 'play_session')
+
+  it('combines one game\'s finished sessions on the same day into one row with the total', () => {
+    const items = build([
+      s('2024-01-10T18:00:00Z', '2024-01-10T18:45:00Z', 45),
+      s('2024-01-10T09:00:00Z', '2024-01-10T10:30:00Z', 90),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0].sessionMinutes).toBe(135)
+    expect(items[0].date).toBe('2024-01-10T18:45:00Z')
+    expect(items[0].sessions?.map(x => x.startedAt)).toEqual(['2024-01-10T09:00:00Z', '2024-01-10T18:00:00Z'])
+    expect(activityVerb(items[0])).toBe('played')
+    expect(activitySuffix(items[0])).toBe(' for 2h 15m')
+  })
+
+  it('keeps different days, different games and different people apart', () => {
+    expect(build([s('2024-01-10T09:00:00Z', '2024-01-10T10:00:00Z', 60), s('2024-01-11T09:00:00Z', '2024-01-11T10:00:00Z', 60)])).toHaveLength(2)
+    expect(build([s('2024-01-10T09:00:00Z', '2024-01-10T10:00:00Z', 60), s('2024-01-10T11:00:00Z', '2024-01-10T12:00:00Z', 60, { game_id: 'amb-2' })], [game, other])).toHaveLength(2)
+    expect(build([s('2024-01-10T09:00:00Z', '2024-01-10T10:00:00Z', 60), s('2024-01-10T11:00:00Z', '2024-01-10T12:00:00Z', 60, { user_id: 'user-2' })])).toHaveLength(2)
+  })
+
+  it('splits days at UK midnight, not UTC, in summer', () => {
+    // 23:30 BST on 1 July is 22:30 UTC; 00:30 BST on 2 July is 23:30 UTC on 1 July.
+    // Same UTC day — but two different days on a UK clock.
+    const items = build([
+      s('2024-07-01T22:30:00Z', '2024-07-01T22:50:00Z', 20),
+      s('2024-07-01T23:30:00Z', '2024-07-01T23:50:00Z', 20),
+    ])
+    expect(items).toHaveLength(2)
+  })
+
+  it('folds a live session into the day\'s row: "played … today · playing now"', () => {
+    const items = build([
+      s('2024-01-10T09:00:00Z', '2024-01-10T10:30:00Z', 90),
+      s('2024-01-10T18:00:00Z', null, 15),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0].sessionLive).toBe(true)
+    expect(items[0].sessionMinutes).toBe(105)
+    expect(items[0].date).toBe('2024-01-10T18:00:00Z')
+    expect(activityVerb(items[0])).toBe('played')
+    expect(activitySuffix(items[0])).toBe(' for 1h 45m today')
+    expect(activityLiveTag(items[0])).toBe(' · playing now')
+    expect(hasSessionToggle(items[0])).toBe(true)
+    expect(items[0].sessions?.[1].endedAt).toBeNull()
+  })
+
+  it('leaves a lone live session as a plain "started playing"', () => {
+    const [item] = build([s('2024-01-10T18:00:00Z', null, 15)])
+    expect(item.sessionMinutes).toBeUndefined()
+    expect(activityVerb(item)).toBe('started playing')
+    expect(activitySuffix(item)).toBe('')
+    expect(activityLiveTag(item)).toBe('')
+    expect(hasSessionToggle(item)).toBe(false)
+  })
+
+  it('leaves a sub-minute session out of both the total and the list', () => {
+    const [item] = build([
+      s('2024-01-10T09:00:00Z', '2024-01-10T10:00:00Z', 60),
+      s('2024-01-10T11:00:00Z', '2024-01-10T11:00:30Z', 0),
+    ])
+    expect(item.sessionMinutes).toBe(60)
+    expect(item.sessions).toHaveLength(1)
+  })
+})
+
+describe('suppressRepeatedStarts: same-day company', () => {
+  const live: RawPlaySession = { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-05T18:00:00Z', ended_at: null, minutes: 0 }
+  const history = [
+    { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-01T10:00:00Z' },
+    { user_id: 'user-1', game_id: 'amb-1', started_at: '2024-04-05T18:00:00Z' },
+  ]
+
+  it('keeps a repeat live session when the same game was played earlier that day', () => {
+    const earlier: RawPlaySession = { ...live, started_at: '2024-04-05T09:00:00Z', ended_at: '2024-04-05T10:00:00Z', minutes: 60 }
+    expect(suppressRepeatedStarts([live, earlier], history)).toEqual([live, earlier])
+  })
+
+  it('still drops it when the only earlier session that day was under a minute', () => {
+    const blip: RawPlaySession = { ...live, started_at: '2024-04-05T09:00:00Z', ended_at: '2024-04-05T09:00:30Z', minutes: 0 }
+    expect(suppressRepeatedStarts([live, blip], history)).toEqual([blip])
+  })
+
+  it('still drops it when the earlier session was on another day', () => {
+    const yesterday: RawPlaySession = { ...live, started_at: '2024-04-04T09:00:00Z', ended_at: '2024-04-04T10:00:00Z', minutes: 60 }
+    expect(suppressRepeatedStarts([live, yesterday], history)).toEqual([yesterday])
+  })
+})
+
+describe('UK time helpers', () => {
+  it('reads times on a UK clock in summer and winter', () => {
+    expect(formatSessionTime('2024-07-01T17:02:00Z')).toBe('18:02')
+    expect(formatSessionTime('2024-01-10T17:02:00Z')).toBe('17:02')
+  })
+
+  it('puts a moment on its UK calendar day', () => {
+    expect(londonDay('2024-07-01T23:30:00Z')).toBe('2024-07-02')
+    expect(londonDay('2024-01-10T23:30:00Z')).toBe('2024-01-10')
+  })
+})
+
+// ─── Day headings on the Activity page ───────────────────────────────────────
+
+describe('activityDayHeading', () => {
+  const now = new Date('2025-11-05T10:00:00Z') // a Wednesday
+
+  it('names today, yesterday and the rest of the past week', () => {
+    expect(activityDayHeading('2025-11-05', now)).toBe('Today')
+    expect(activityDayHeading('2025-11-04', now)).toBe('Yesterday')
+    expect(activityDayHeading('2025-11-02', now)).toBe('Sunday')
+    expect(activityDayHeading('2025-10-30', now)).toBe('Thursday')
+  })
+
+  it('gives a full date from a week back, with the year only when it differs', () => {
+    expect(activityDayHeading('2025-10-29', now)).toBe('Wednesday 29 October')
+    expect(activityDayHeading('2024-12-31', now)).toBe('Tuesday 31 December 2024')
+  })
+
+  it('counts "today" on a UK clock', () => {
+    // 00:30 BST on 2 July is still 1 July in UTC.
+    const justAfterMidnight = new Date('2024-07-01T23:30:00Z')
+    expect(activityDayHeading('2024-07-02', justAfterMidnight)).toBe('Today')
+    expect(activityDayHeading('2024-07-01', justAfterMidnight)).toBe('Yesterday')
+  })
+})
+
+describe('groupItemsByDay', () => {
+  const at = (date: string, gameTitle: string): ActivityItem =>
+    ({ type: 'completed', userId: 'user-1', displayName: 'A', username: 'a', accentColour: null, gameTitle, date, isSelf: false })
+
+  it('splits newest-first items into UK days, keeping their order', () => {
+    const days = groupItemsByDay([
+      at('2024-07-01T23:30:00Z', 'A'), // 00:30 BST, 2 July
+      at('2024-07-01T22:00:00Z', 'B'), // 23:00 BST, 1 July
+      at('2024-07-01T09:00:00Z', 'C'),
+      at('2024-06-29T12:00:00Z', 'D'),
+    ])
+    expect(days.map(d => [d.dayKey, d.items.map(i => i.gameTitle)])).toEqual([
+      ['2024-07-02', ['A']],
+      ['2024-07-01', ['B', 'C']],
+      ['2024-06-29', ['D']],
+    ])
+  })
+
+  it('is empty for no items', () => {
+    expect(groupItemsByDay([])).toEqual([])
+  })
+})
+
+describe('groupActivityItems: UK days', () => {
+  it('does not stack two unlocks either side of UK midnight in summer', () => {
+    const unlock = (id: string, date: string): ActivityItem =>
+      ({ type: 'achievement_unlock', userId: 'user-1', displayName: 'A', username: 'a', accentColour: null, achievementId: id, achievementName: id, date, isSelf: false })
+    const out = groupActivityItems([unlock('a1', '2024-07-01T23:30:00Z'), unlock('a2', '2024-07-01T22:30:00Z')])
+    expect(out).toHaveLength(2)
   })
 })

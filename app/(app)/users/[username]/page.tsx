@@ -99,7 +99,7 @@ export default async function UserProfilePage({
       .select('user_id, game_id, started_at, ended_at, minutes')
       .eq('user_id', profile.id)
       .order('started_at', { ascending: false })
-      .limit(10),
+      .limit(25),
     computeUserStats(supabase, profile.id),
     getRecentlyPlayed(supabase, profile.id),
     getLiveSessions(supabase, [profile.id]),

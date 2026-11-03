@@ -1,6 +1,74 @@
 /** One member of a stacked row — an achievement, or a game added to backlog. */
 export type ActivityBatchEntry = { id: string; label: string; icon?: string }
 
+/** One play session inside a day's combined `play_session` row. `endedAt` null = still playing. */
+export type PlaySessionEntry = { startedAt: string; endedAt: string | null; minutes: number }
+
+/**
+ * Play sessions are grouped, and their times shown, on UK time — the server
+ * runs in UTC, which would put a session after 11pm in summer on the next day
+ * and show every time an hour early.
+ */
+const UK_TIME_ZONE = 'Europe/London'
+
+const ukDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: UK_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
+const ukTimeFormat = new Intl.DateTimeFormat('en-GB', { timeZone: UK_TIME_ZONE, hour: '2-digit', minute: '2-digit', hour12: false })
+
+/** The UK calendar day a moment falls on, as `YYYY-MM-DD`. */
+export function londonDay(iso: string): string {
+  return ukDayFormat.format(new Date(iso))
+}
+
+/**
+ * The UK day an activity happened on — `londonDay`, but an unparseable date
+ * keys on itself instead of throwing, so one bad row can't break the feed.
+ */
+export function activityDayKey(iso: string): string {
+  return isNaN(new Date(iso).getTime()) ? iso : londonDay(iso)
+}
+
+const DAY_MS = 86_400_000
+const headingWeekday = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long' })
+const headingDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' })
+
+/**
+ * The heading over one day of the Activity page: "Today", "Yesterday", the
+ * weekday within the past week ("Saturday"), then "Tuesday 28 October" — with
+ * the year only when it isn't this one.
+ *
+ * Works on `YYYY-MM-DD` day keys (both UK days) read as UTC midnight, so the
+ * gap between them is a whole number of days whatever the clocks did.
+ */
+export function activityDayHeading(dayKey: string, now: Date = new Date()): string {
+  const day = Date.parse(`${dayKey}T00:00:00Z`)
+  if (isNaN(day)) return dayKey
+  const today = londonDay(now.toISOString())
+  const daysAgo = Math.round((Date.parse(`${today}T00:00:00Z`) - day) / DAY_MS)
+  if (daysAgo === 0) return 'Today'
+  if (daysAgo === 1) return 'Yesterday'
+  const date = new Date(day)
+  if (daysAgo > 1 && daysAgo < 7) return headingWeekday.format(date)
+  const label = headingDate.format(date).replace(',', '')
+  return dayKey.slice(0, 4) === today.slice(0, 4) ? label : `${label} ${dayKey.slice(0, 4)}`
+}
+
+/** Activity items split into UK days, newest first, as they arrived — one group per heading. */
+export function groupItemsByDay(items: ActivityItem[]): { dayKey: string; items: ActivityItem[] }[] {
+  const days: { dayKey: string; items: ActivityItem[] }[] = []
+  for (const item of items) {
+    const dayKey = activityDayKey(item.date)
+    const last = days[days.length - 1]
+    if (last && last.dayKey === dayKey) last.items.push(item)
+    else days.push({ dayKey, items: [item] })
+  }
+  return days
+}
+
+/** "18:02" — a moment as read on a UK clock, for the session list. */
+export function formatSessionTime(iso: string): string {
+  return ukTimeFormat.format(new Date(iso))
+}
+
 export type ActivityItem = {
   type: 'completed' | 'dnf' | 'backlog' | 'playing' | 'wheel_spin' | 'game_chosen' | 'choose_skip' | 'achievement_unlock' | 'play_session'
   userId: string
@@ -27,6 +95,14 @@ export type ActivityItem = {
    * coarser than this wants to be.
    */
   sessionMinutes?: number
+  /**
+   * Every session folded into a `play_session` row — one person's sessions of
+   * one game on one UK day — oldest first. `sessionMinutes` is their total
+   * (so far, while one is still live).
+   */
+  sessions?: PlaySessionEntry[]
+  /** A `play_session` row whose day includes a session still in progress. */
+  sessionLive?: boolean
   /**
    * Every member of a day's batch, set by groupActivityItems. Present on the
    * groupable types (length 1 when there was only one), absent on the rest.
@@ -98,6 +174,10 @@ export type RawPlaySession = {
  * session could sit well outside that window. Pass every session for those
  * specific games instead (cheap: it's scoped to a handful of game ids, not
  * the whole table).
+ *
+ * Exception: a live session is kept whenever the same person played the same
+ * game earlier that UK day — it folds into that day's row ("played … for 2h
+ * today · playing now") rather than announcing anything new.
  */
 export function suppressRepeatedStarts(
   sessions: RawPlaySession[],
@@ -111,8 +191,14 @@ export function suppressRepeatedStarts(
     if (!existing || row.started_at < existing) firstStartedAt.set(key, row.started_at)
   }
 
+  const finishedDays = new Set(
+    // Same sub-minute rule as buildActivityItems: one of those never shows, so it's no company.
+    sessions.filter(s => s.ended_at != null && s.game_id && s.minutes >= 1).map(s => `${s.user_id}|${s.game_id}|${londonDay(s.started_at)}`),
+  )
+
   return sessions.filter(s => {
     if (s.ended_at != null || !s.game_id) return true
+    if (finishedDays.has(`${s.user_id}|${s.game_id}|${londonDay(s.started_at)}`)) return true
     const first = firstStartedAt.get(`${s.user_id}|${s.game_id}`)
     return first == null || s.started_at <= first
   })
@@ -231,22 +317,37 @@ export function buildActivityItems(
   // (the wheel, a manual add), not about actually sitting down with it —
   // this is that second, real event. Unlike every other source here, one
   // row carries both the start and (once it has one) the end.
+  //
+  // One person's sessions of one game on one UK day become a single row with
+  // their total: every launch is its own `play_sessions` row, and a game
+  // played three times in an evening shouldn't take three rows of the feed.
+  const days = new Map<string, RawPlaySession[]>()
   for (const session of playSessions) {
     if (!session.game_id) continue
     const game = gameById.get(session.game_id)
     if (!game || (game.status !== 'ambient' && game.status !== 'playing')) continue
-    const profile = profiles.get(session.user_id)
-    if (!profile) continue
-
-    const ended = session.ended_at != null
+    if (!profiles.has(session.user_id)) continue
     // A session that never reached a minute isn't worth a "played for 0m"
     // row — most likely someone glancing at a game and closing it again, not
     // a real play. The in-progress "started playing" case is untouched: that
     // fires the moment tracking begins, before there's any duration to judge.
-    if (ended && session.minutes < 1) continue
+    if (session.ended_at != null && session.minutes < 1) continue
+    const key = `${session.user_id}|${session.game_id}|${londonDay(session.started_at)}`
+    days.set(key, [...(days.get(key) ?? []), session])
+  }
+
+  for (const daySessions of Array.from(days.values())) {
+    const ordered = [...daySessions].sort((a, b) => a.started_at.localeCompare(b.started_at))
+    const first = ordered[0]
+    const game = gameById.get(first.game_id!)!
+    const profile = profiles.get(first.user_id)!
+    const finished = ordered.filter(s => s.ended_at != null)
+    const live = ordered.find(s => s.ended_at == null)
+    const finishedMinutes = finished.reduce((sum, s) => sum + s.minutes, 0)
+
     items.push({
       type: 'play_session',
-      userId: session.user_id,
+      userId: first.user_id,
       displayName: profile.displayName,
       username: profile.username,
       accentColour: profile.accentColour,
@@ -254,9 +355,16 @@ export function buildActivityItems(
       gameImageUrl: game.image_url ?? undefined,
       gameCoverUrl: game.cover_image_url ?? undefined,
       gameId: game.id,
-      sessionMinutes: ended ? session.minutes : undefined,
-      date: ended ? session.ended_at! : session.started_at,
-      isSelf: session.user_id === currentUserId,
+      // While one is live: today so far, the live session's last checkpoint
+      // included — absent for a lone live session, which stays a plain
+      // "started playing".
+      sessionMinutes: live ? (finished.length > 0 ? finishedMinutes + live.minutes : undefined) : finishedMinutes,
+      sessionLive: live ? true : undefined,
+      sessions: ordered.map(s => ({ startedAt: s.started_at, endedAt: s.ended_at, minutes: s.minutes })),
+      date: live
+        ? live.started_at
+        : finished.reduce((latest, s) => (s.ended_at! > latest ? s.ended_at! : latest), finished[0].ended_at!),
+      isSelf: first.user_id === currentUserId,
     })
   }
 
@@ -289,10 +397,10 @@ const GROUPABLE: Partial<Record<ActivityItem['type'], (item: ActivityItem) => Ac
  * depend on adjacency, because two people acting on the same day arrive
  * interleaved by timestamp.
  *
- * Grouping is by UTC day rather than the viewer's local day. Both the feed and
- * Vercel run in UTC, so this matches what the timestamps mean there; the only
- * cost is that a user in another timezone could see a late-evening item
- * grouped with the following day's.
+ * Grouping is by UK day — the same day the Activity page's date headings and
+ * the combined play-session rows use — so a stack never straddles a heading.
+ * (It used to be UTC, which in summer put anything after 11pm UK time on the
+ * next day.)
  */
 export function groupActivityItems(items: ActivityItem[]): ActivityItem[] {
   const out: ActivityItem[] = []
@@ -304,10 +412,7 @@ export function groupActivityItems(items: ActivityItem[]): ActivityItem[] {
       out.push(item)
       continue
     }
-    // Normalise through Date rather than slicing the string: a timestamp
-    // carrying a non-UTC offset would otherwise key on the wrong day.
-    const day = new Date(item.date)
-    const dayKey = isNaN(day.getTime()) ? item.date : day.toISOString().slice(0, 10)
+    const dayKey = activityDayKey(item.date)
     // Type is part of the key so a day's unlocks and backlog adds stay apart.
     const key = `${item.userId}|${item.type}|${dayKey}`
     const at = groupIndex.get(key)
@@ -337,6 +442,9 @@ export function activityVerb(item: ActivityItem): string {
     case 'game_chosen':        return item.wheelResult ? `chose ${item.wheelResult}` : 'chose a game'
     case 'choose_skip':        return 'skipped a choose game turn'
     case 'achievement_unlock': return 'unlocked'
+    // Past tense even mid-session ("played … today · playing now"): the
+    // subject can be "You", a friend's name, or nothing at all (profile
+    // card), and only a past-tense verb reads right after all three.
     case 'play_session':       return item.sessionMinutes != null ? 'played' : 'started playing'
   }
 }
@@ -351,14 +459,30 @@ export function formatSessionDuration(totalMinutes: number): string {
 
 /**
  * Trailing text after the game title — only `play_session` uses this, for
- * "played <title> for 2h 15m". Everywhere else the title is the end of the
- * sentence, so this is empty.
+ * "played <title> for 2h 15m", or "played <title> for 2h 15m today" while a
+ * session is live after earlier ones that day (see activityLiveTag). Everywhere else the title is
+ * the end of the sentence, so this is empty.
  */
 export function activitySuffix(item: ActivityItem): string {
   if (item.type === 'play_session' && item.sessionMinutes != null) {
-    return ` for ${formatSessionDuration(item.sessionMinutes)}`
+    const duration = formatSessionDuration(item.sessionMinutes)
+    return item.sessionLive ? ` for ${duration} today` : ` for ${duration}`
   }
   return ''
+}
+
+/**
+ * " · playing now" — ends a day's row while one of its sessions is still
+ * running ("played Abzu for 1h 45m today in 3 sessions · playing now").
+ * Separate from activitySuffix so the sessions toggle can sit between them.
+ */
+export function activityLiveTag(item: ActivityItem): string {
+  return item.type === 'play_session' && item.sessionLive && item.sessionMinutes != null ? ' · playing now' : ''
+}
+
+/** A row combining 2+ sessions carries an inline toggle, so its headline should wrap rather than truncate. */
+export function hasSessionToggle(item: ActivityItem): boolean {
+  return (item.sessions?.length ?? 0) > 1
 }
 
 export function formatActivityDate(dateStr: string): string {

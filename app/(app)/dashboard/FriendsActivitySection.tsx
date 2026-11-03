@@ -63,7 +63,7 @@ export default async function FriendsActivitySection({ userId, friendIds, myTitl
       .select('user_id, game_id, started_at, ended_at, minutes')
       .in('user_id', friendIds)
       .order('started_at', { ascending: false })
-      .limit(20),
+      .limit(40),
   ])
 
   const friendCompletedGames = friendCompletedGamesRes.data as { id: string; title: string; genres: string[] | null; rating: number | null; image_url: string | null; developer: string | null; user_id: string; rawg_id: number | null; igdb_id: number | null; release_date: string | null }[] | null
