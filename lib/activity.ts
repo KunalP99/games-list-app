@@ -97,7 +97,8 @@ export type ActivityItem = {
   sessionMinutes?: number
   /**
    * Every session folded into a `play_session` row — one person's sessions of
-   * one game on one UK day — oldest first. `sessionMinutes` is their total
+   * one game on one UK day (or chained across midnight, see
+   * chainPlaySessions) — oldest first. `sessionMinutes` is their total
    * (so far, while one is still live).
    */
   sessions?: PlaySessionEntry[]
@@ -159,6 +160,50 @@ export type RawPlaySession = {
 }
 
 /**
+ * How soon after one session ends the next must start to join the same row
+ * even across UK midnight. Without it, a late-night run split in two:
+ * playing 23:55–00:24, then again from 00:28, is one sitting, not two days.
+ */
+export const SESSION_CHAIN_GAP_MS = 2 * 60 * 60 * 1000
+
+/**
+ * One person's sessions of one game, split into the runs the feed shows as a
+ * single row: everything started on the same UK day, plus any session that
+ * starts within SESSION_CHAIN_GAP_MS of the previous one ending. Each run is
+ * oldest first; runs come out in no particular order.
+ */
+export function chainPlaySessions<S extends RawPlaySession>(sessions: S[]): S[][] {
+  const byPair = new Map<string, S[]>()
+  for (const s of sessions) {
+    if (!s.game_id) continue
+    const key = `${s.user_id}|${s.game_id}`
+    byPair.set(key, [...(byPair.get(key) ?? []), s])
+  }
+
+  const runs: S[][] = []
+  for (const pair of Array.from(byPair.values())) {
+    let run: S[] | null = null
+    let runDay = ''
+    let runEnd = 0
+    for (const s of [...pair].sort((a, b) => a.started_at.localeCompare(b.started_at))) {
+      const start = Date.parse(s.started_at)
+      const day = londonDay(s.started_at)
+      if (run && (day === runDay || start - runEnd <= SESSION_CHAIN_GAP_MS)) {
+        run.push(s)
+      } else {
+        run = [s]
+        runs.push(run)
+        runDay = day
+        runEnd = 0
+      }
+      // A live session has no end yet; it started, so that's the floor.
+      runEnd = Math.max(runEnd, Date.parse(s.ended_at ?? s.started_at))
+    }
+  }
+  return runs
+}
+
+/**
  * Drop an in-progress session from the feed unless it's the very first
  * session that (user, game) pair has ever had.
  *
@@ -191,14 +236,18 @@ export function suppressRepeatedStarts(
     if (!existing || row.started_at < existing) firstStartedAt.set(key, row.started_at)
   }
 
-  const finishedDays = new Set(
-    // Same sub-minute rule as buildActivityItems: one of those never shows, so it's no company.
-    sessions.filter(s => s.ended_at != null && s.game_id && s.minutes >= 1).map(s => `${s.user_id}|${s.game_id}|${londonDay(s.started_at)}`),
-  )
+  // Live sessions sharing a row with a finished one, by the same chaining
+  // buildActivityItems uses. Same sub-minute rule too: one of those never
+  // shows, so it's no company.
+  const accompanied = new Set<RawPlaySession>()
+  for (const run of chainPlaySessions(sessions.filter(s => s.ended_at == null || s.minutes >= 1))) {
+    if (!run.some(s => s.ended_at != null)) continue
+    for (const s of run) if (s.ended_at == null) accompanied.add(s)
+  }
 
   return sessions.filter(s => {
     if (s.ended_at != null || !s.game_id) return true
-    if (finishedDays.has(`${s.user_id}|${s.game_id}|${londonDay(s.started_at)}`)) return true
+    if (accompanied.has(s)) return true
     const first = firstStartedAt.get(`${s.user_id}|${s.game_id}`)
     return first == null || s.started_at <= first
   })
@@ -321,23 +370,20 @@ export function buildActivityItems(
   // One person's sessions of one game on one UK day become a single row with
   // their total: every launch is its own `play_sessions` row, and a game
   // played three times in an evening shouldn't take three rows of the feed.
-  const days = new Map<string, RawPlaySession[]>()
-  for (const session of playSessions) {
-    if (!session.game_id) continue
+  // A sitting that runs past midnight stays one row too (chainPlaySessions).
+  const eligible = playSessions.filter(session => {
+    if (!session.game_id) return false
     const game = gameById.get(session.game_id)
-    if (!game || (game.status !== 'ambient' && game.status !== 'playing')) continue
-    if (!profiles.has(session.user_id)) continue
+    if (!game || (game.status !== 'ambient' && game.status !== 'playing')) return false
+    if (!profiles.has(session.user_id)) return false
     // A session that never reached a minute isn't worth a "played for 0m"
     // row — most likely someone glancing at a game and closing it again, not
     // a real play. The in-progress "started playing" case is untouched: that
     // fires the moment tracking begins, before there's any duration to judge.
-    if (session.ended_at != null && session.minutes < 1) continue
-    const key = `${session.user_id}|${session.game_id}|${londonDay(session.started_at)}`
-    days.set(key, [...(days.get(key) ?? []), session])
-  }
+    return !(session.ended_at != null && session.minutes < 1)
+  })
 
-  for (const daySessions of Array.from(days.values())) {
-    const ordered = [...daySessions].sort((a, b) => a.started_at.localeCompare(b.started_at))
+  for (const ordered of chainPlaySessions(eligible)) {
     const first = ordered[0]
     const game = gameById.get(first.game_id!)!
     const profile = profiles.get(first.user_id)!

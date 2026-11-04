@@ -779,13 +779,42 @@ describe('buildActivityItems: same-day play sessions', () => {
   })
 
   it('splits days at UK midnight, not UTC, in summer', () => {
-    // 23:30 BST on 1 July is 22:30 UTC; 00:30 BST on 2 July is 23:30 UTC on 1 July.
-    // Same UTC day — but two different days on a UK clock.
+    // 20:00 BST on 1 July is 19:00 UTC; 00:30 BST on 2 July is 23:30 UTC on 1 July.
+    // Same UTC day — but two different days on a UK clock (and too far apart to chain).
     const items = build([
-      s('2024-07-01T22:30:00Z', '2024-07-01T22:50:00Z', 20),
+      s('2024-07-01T19:00:00Z', '2024-07-01T19:20:00Z', 20),
       s('2024-07-01T23:30:00Z', '2024-07-01T23:50:00Z', 20),
     ])
     expect(items).toHaveLength(2)
+  })
+
+  it('keeps a late-night sitting that crosses midnight as one row', () => {
+    // The real case: 23:55–00:24, then again 00:28–01:14 (UK, winter).
+    const items = build([
+      s('2026-11-03T23:55:58Z', '2026-11-04T00:24:21Z', 28),
+      s('2026-11-04T00:28:35Z', '2026-11-04T01:14:47Z', 46),
+    ])
+    expect(items).toHaveLength(1)
+    expect(items[0].sessionMinutes).toBe(74)
+    expect(items[0].date).toBe('2026-11-04T01:14:47Z')
+    expect(hasSessionToggle(items[0])).toBe(true)
+  })
+
+  it('chains across midnight only within the gap', () => {
+    // Ended 23:00, next started 01:30 — 2h30m later, a new day's row.
+    expect(build([
+      s('2026-11-03T22:00:00Z', '2026-11-03T23:00:00Z', 60),
+      s('2026-11-04T01:30:00Z', '2026-11-04T02:00:00Z', 30),
+    ])).toHaveLength(2)
+  })
+
+  it('does not drag the next afternoon into a chained late-night row', () => {
+    const items = build([
+      s('2026-11-03T23:30:00Z', '2026-11-04T00:10:00Z', 40),
+      s('2026-11-04T00:20:00Z', '2026-11-04T01:00:00Z', 40),
+      s('2026-11-04T15:00:00Z', '2026-11-04T16:00:00Z', 60),
+    ])
+    expect(items.map(i => i.sessionMinutes).sort()).toEqual([60, 80])
   })
 
   it('folds a live session into the day\'s row: "played … today · playing now"', () => {
@@ -843,6 +872,16 @@ describe('suppressRepeatedStarts: same-day company', () => {
   it('still drops it when the earlier session was on another day', () => {
     const yesterday: RawPlaySession = { ...live, started_at: '2024-04-04T09:00:00Z', ended_at: '2024-04-04T10:00:00Z', minutes: 60 }
     expect(suppressRepeatedStarts([live, yesterday], history)).toEqual([yesterday])
+  })
+
+  it('keeps it when the earlier session ended just before midnight', () => {
+    const lateLive: RawPlaySession = { ...live, started_at: '2026-11-04T00:28:00Z' }
+    const beforeMidnight: RawPlaySession = { ...live, started_at: '2026-11-03T23:55:00Z', ended_at: '2026-11-04T00:24:00Z', minutes: 28 }
+    const h = [
+      { user_id: 'user-1', game_id: 'amb-1', started_at: '2026-10-01T10:00:00Z' },
+      { user_id: 'user-1', game_id: 'amb-1', started_at: lateLive.started_at },
+    ]
+    expect(suppressRepeatedStarts([lateLive, beforeMidnight], h)).toEqual([lateLive, beforeMidnight])
   })
 })
 
