@@ -1,4 +1,5 @@
 import { formatSessionDuration, formatSessionTime } from '@/lib/activity'
+import { londonDay } from '@/lib/activity'
 import { sessionDateLabel, type TrackedSession } from '@/lib/play-sessions'
 import SessionLog, { type LogSession } from './SessionLog'
 
@@ -13,6 +14,7 @@ export default function PlaySessionsCard({ sessions }: { sessions: TrackedSessio
 
   const rows: LogSession[] = sessions.map(s => ({
     id: s.id,
+    dayKey: londonDay(s.start),
     date: sessionDateLabel(s.start),
     time: `${formatSessionTime(s.start)} – ${s.live ? 'now' : formatSessionTime(s.end)}`,
     duration: formatSessionDuration(s.minutes),

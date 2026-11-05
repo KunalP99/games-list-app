@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Play Sessions card: the date appears once per day.** When a game was played more than once on a day, the date shows only on the first session. The rest sit under it with no divider, so each day reads as one group.
 - **12 new Play Sessions achievements, earned from tracked play.** A new section on the Achievements page:
   - **Sessions tracked:** Press Start (1), Regular Visitor (50), Frequent Flyer (250), Season Ticket (1,000).
   - **Streaks:** Daily Driver (7 days in a row), Creature of Habit (30 days in a row).
