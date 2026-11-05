@@ -1,7 +1,30 @@
 import type { Game } from './types'
 
-/** A play session as the strip needs it: which game, and when it started. */
-export type SessionRow = { game_id: string | null; started_at: string }
+/** A play session as the strip needs it: which game, and when it started (and, if known, last ran). */
+export type SessionRow = {
+  game_id: string | null
+  started_at: string
+  ended_at?: string | null
+  last_checkpoint_at?: string | null
+}
+
+/** A Recently Played game, with when it was last actually running. */
+export type RecentlyPlayedGame = Game & { lastPlayedAt: string }
+
+/**
+ * When each game was last running: the end of its newest session — or, while
+ * that one is still going (or never got an end because the PC slept), its
+ * last checkpoint, then its start. Rows must arrive newest first, as for
+ * recentGameIds, so a game's first row is its newest session.
+ */
+export function lastPlayedByGame(rows: SessionRow[]): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const row of rows) {
+    if (!row.game_id || out.has(row.game_id)) continue
+    out.set(row.game_id, row.ended_at ?? row.last_checkpoint_at ?? row.started_at)
+  }
+  return out
+}
 
 /**
  * The most recently played games, newest first, one entry per game.
@@ -47,19 +70,21 @@ export async function getRecentlyPlayed(
   supabase: { from: (t: string) => any },
   userId: string,
   limit = 5,
-): Promise<Game[]> {
+): Promise<RecentlyPlayedGame[]> {
   // More sessions than games wanted, since one game can hold many of the most
   // recent rows — an evening of the same game would otherwise fill the window.
   const { data: sessions } = await supabase
     .from('play_sessions')
-    .select('game_id, started_at')
+    .select('game_id, started_at, ended_at, last_checkpoint_at')
     .eq('user_id', userId)
     .not('game_id', 'is', null)
     .order('started_at', { ascending: false })
     .limit(60)
 
-  const ids = recentGameIds((sessions ?? []) as SessionRow[], limit * 8)
+  const rows = (sessions ?? []) as SessionRow[]
+  const ids = recentGameIds(rows, limit * 8)
   if (ids.length === 0) return []
+  const lastPlayed = lastPlayedByGame(rows)
 
   const { data: games } = await supabase
     .from('games')
@@ -70,5 +95,7 @@ export async function getRecentlyPlayed(
 
   // Filtering happens after the lookup, so a game that has since been moved out
   // of Ambient drops out and the next one down takes its place.
-  return orderByIds((games ?? []) as Game[], ids).slice(0, limit)
+  return orderByIds((games ?? []) as Game[], ids)
+    .slice(0, limit)
+    .map(g => ({ ...g, lastPlayedAt: lastPlayed.get(g.id)! }))
 }

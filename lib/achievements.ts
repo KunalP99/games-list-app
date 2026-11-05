@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createAdminClient } from './supabase/admin'
+import {
+  gameKey, sessionAchievementStats,
+  type AchievementSession, type KeyedSession, type SessionAchievementStats,
+} from './session-achievements'
 
 export type AchievementRarity = 'common' | 'uncommon' | 'rare' | 'epic'
 export type AchievementCategory =
@@ -12,6 +16,7 @@ export type AchievementCategory =
   | 'dedication'
   | 'wheel'
   | 'steam_deck'
+  | 'sessions'
   | 'misc'
 
 export type Achievement = {
@@ -137,6 +142,22 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'deck_collector',        name: 'Deck Collector',       description: 'Have 20 games in your library marked Steam Deck',   icon: '📦', rarity: 'uncommon', category: 'steam_deck', xp: 150 },
   { id: 'big_screen_small_deck', name: 'Big Screen, Small Deck', description: 'Complete the same game on Steam Deck and another platform', icon: '🖥️', rarity: 'rare', category: 'steam_deck', xp: 250 },
 
+  // ── Play Sessions (desktop tracker) ─────────────────────────────────────────
+  // Worked out from play_sessions (lib/session-achievements.ts) — only time
+  // the tracker actually recorded counts, never hours typed in by hand.
+  { id: 'press_start',          name: 'Press Start',          description: 'Have your first play session tracked',          icon: '▶️', rarity: 'common',   category: 'sessions', xp: 50  },
+  { id: 'regular_visitor',      name: 'Regular Visitor',      description: 'Have 50 play sessions tracked',                 icon: '🔁', rarity: 'common',   category: 'sessions', xp: 75  },
+  { id: 'frequent_flyer',       name: 'Frequent Flyer',       description: 'Have 250 play sessions tracked',                icon: '📈', rarity: 'uncommon', category: 'sessions', xp: 150 },
+  { id: 'season_ticket',        name: 'Season Ticket',        description: 'Have 1,000 play sessions tracked',              icon: '🏟️', rarity: 'rare',     category: 'sessions', xp: 300 },
+  { id: 'daily_driver',         name: 'Daily Driver',         description: 'Play on 7 days in a row',                       icon: '📆', rarity: 'uncommon', category: 'sessions', xp: 150 },
+  { id: 'creature_of_habit',    name: 'Creature of Habit',    description: 'Play on 30 days in a row',                      icon: '🗓️', rarity: 'rare',     category: 'sessions', xp: 300 },
+  { id: 'weekend_warrior',      name: 'Weekend Warrior',      description: 'Play 6+ hours across a single weekend',         icon: '🛋️', rarity: 'uncommon', category: 'sessions', xp: 100 },
+  { id: 'bank_holiday',         name: 'Bank Holiday',         description: 'Play 10+ hours in a single day',                icon: '🎉', rarity: 'rare',     category: 'sessions', xp: 200 },
+  { id: 'channel_surfer',       name: 'Channel Surfer',       description: 'Play 3 different games in one day',             icon: '🔀', rarity: 'uncommon', category: 'sessions', xp: 100 },
+  { id: 'wanderer',             name: 'Wanderer',             description: 'Have play sessions tracked on 10 different games', icon: '🧭', rarity: 'uncommon', category: 'sessions', xp: 150 },
+  { id: 'one_true_love',        name: 'One True Love',        description: 'Have 50 hours tracked on a single game',        icon: '💍', rarity: 'rare',     category: 'sessions', xp: 250 },
+  { id: 'squad_up',             name: 'Squad Up',             description: 'Play the same game at the same time as a friend', icon: '🤝', rarity: 'uncommon', category: 'sessions', xp: 150 },
+
   // ── Misc ──────────────────────────────────────────────────────────────────
   { id: 'backlog_twenty',       name: 'Library Card',         description: 'Have 20 games in your library',          icon: '📚', rarity: 'common',   category: 'misc', xp: 50   },
   { id: 'backlog_fifty',        name: 'Collector',            description: 'Have 50 games in your library',          icon: '🗄️', rarity: 'uncommon', category: 'misc', xp: 100  },
@@ -159,6 +180,7 @@ export const CATEGORY_LABELS: Record<AchievementCategory, string> = {
   dedication: 'Dedication',
   wheel: 'Wheel',
   steam_deck: 'Steam Deck',
+  sessions: 'Play Sessions',
   misc: 'Misc',
 }
 
@@ -252,12 +274,81 @@ type Stats = {
   hasSteamDeckPerfect: boolean
   steamDeckLibraryCount: number
   hasBigScreenSmallDeck: boolean
+  sessions: SessionAchievementStats
+}
+
+const SESSION_COLUMNS = 'game_id, started_at, ended_at, last_checkpoint_at, minutes'
+
+/** Every row of a query, past PostgREST's 1,000-row cap. */
+async function fetchAllRows<T>(query: () => any): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += 1000) {
+    const { data } = await query().range(from, from + 999) as { data: T[] | null }
+    out.push(...(data ?? []))
+    if (!data || data.length < 1000) return out
+  }
+}
+
+/**
+ * The tracker-session side of the stats. For Squad Up it also reads other
+ * players' sessions — only on games this player has sessions on, and only
+ * from the same stretch of time — so it stays a small read however big the
+ * table gets.
+ */
+async function gatherSessionStats(
+  supabase: SupabaseClient,
+  userId: string,
+  games: { id: string; title: string; igdb_id: number | null; rawg_id: number | null }[],
+): Promise<SessionAchievementStats> {
+  const own = await fetchAllRows<AchievementSession>(() =>
+    (supabase.from('play_sessions') as any).select(SESSION_COLUMNS).eq('user_id', userId).order('started_at'))
+  if (own.length === 0) return sessionAchievementStats([])
+
+  const ownKeys = new Map(games.map(g => [g.id, gameKey(g)]))
+  const playedIds = new Set(own.map(s => s.game_id).filter(Boolean) as string[])
+  const played = games.filter(g => playedIds.has(g.id))
+  const wantedKeys = new Set(played.map(gameKey))
+
+  // Other people's copies of those games, found by provider id or title.
+  const igdbIds = played.map(g => g.igdb_id).filter((id): id is number => id != null)
+  const titles = played.map(g => g.title)
+  type OtherGame = { id: string; title: string; igdb_id: number | null; rawg_id: number | null }
+  const [{ data: byIgdb }, { data: byTitle }] = await Promise.all([
+    igdbIds.length
+      ? (supabase.from('games') as any).select('id, title, igdb_id, rawg_id').neq('user_id', userId).in('igdb_id', igdbIds)
+      : Promise.resolve({ data: [] }),
+    (supabase.from('games') as any).select('id, title, igdb_id, rawg_id').neq('user_id', userId).in('title', titles),
+  ]) as [{ data: OtherGame[] | null }, { data: OtherGame[] | null }]
+
+  const otherKeys = new Map<string, string>()
+  for (const g of [...(byIgdb ?? []), ...(byTitle ?? [])]) {
+    const key = gameKey(g)
+    if (wantedKeys.has(key)) otherKeys.set(g.id, key)
+  }
+
+  let others: KeyedSession[] = []
+  if (otherKeys.size > 0) {
+    const earliest = new Date(Date.parse(own[0].started_at) - 86_400_000).toISOString()
+    const rows = await fetchAllRows<AchievementSession>(() =>
+      (supabase.from('play_sessions') as any)
+        .select(SESSION_COLUMNS)
+        .neq('user_id', userId)
+        .in('game_id', Array.from(otherKeys.keys()))
+        .gte('started_at', earliest)
+        .order('started_at'))
+    others = rows.map(r => ({ ...r, gameKey: otherKeys.get(r.game_id!)! }))
+  }
+
+  return sessionAchievementStats(own, ownKeys, others)
 }
 
 async function gatherStats(supabase: SupabaseClient, userId: string): Promise<Stats> {
   const { data: games } = await (supabase.from('games') as any)
-    .select('status, title, developer, review, hours_played, achievement_progress, rating, genres, platform, is_replay, is_sequel, is_favourite, assigned_by, release_date, completion_date, created_at, steam_deck')
+    .select('id, igdb_id, rawg_id, status, title, developer, review, hours_played, achievement_progress, rating, genres, platform, is_replay, is_sequel, is_favourite, assigned_by, release_date, completion_date, created_at, steam_deck')
     .eq('user_id', userId) as { data: Array<{
+      id: string
+      igdb_id: number | null
+      rawg_id: number | null
       status: string
       title: string
       developer: string | null
@@ -449,7 +540,10 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
 
   const spins = spinRows ?? []
 
+  const sessions = await gatherSessionStats(supabase, userId, list)
+
   return {
+    sessions,
     completedCount: completed.length,
     totalHours,
     ticketsEarnedTotal,
@@ -602,8 +696,21 @@ function evaluateAchievement(id: string, s: Stats): boolean {
     case 'deck_perfect':           return s.hasSteamDeckPerfect
     case 'deck_collector':         return s.steamDeckLibraryCount >= 20
     case 'big_screen_small_deck':  return s.hasBigScreenSmallDeck
+    // Play Sessions
+    case 'press_start':            return s.sessions.sessionCount >= 1
+    case 'regular_visitor':        return s.sessions.sessionCount >= 50
+    case 'frequent_flyer':         return s.sessions.sessionCount >= 250
+    case 'season_ticket':          return s.sessions.sessionCount >= 1000
+    case 'daily_driver':           return s.sessions.longestDayStreak >= 7
+    case 'creature_of_habit':      return s.sessions.longestDayStreak >= 30
+    case 'weekend_warrior':        return s.sessions.bestWeekendMinutes >= 6 * 60
+    case 'bank_holiday':           return s.sessions.bestDayMinutes >= 10 * 60
+    case 'channel_surfer':         return s.sessions.mostGamesInADay >= 3
+    case 'wanderer':               return s.sessions.distinctGames >= 10
+    case 'one_true_love':          return s.sessions.mostMinutesOnOneGame >= 50 * 60
+    case 'squad_up':               return s.sessions.hasSquadUp
     // Misc
-    case 'backlog_twenty':         return s.libraryCount >= 20
+    case 'backlog_twenty':        return s.libraryCount >= 20
     case 'backlog_fifty':          return s.libraryCount >= 50
     case 'library_hundred':        return s.libraryCount >= 100
     case 'library_two_fifty':      return s.libraryCount >= 250

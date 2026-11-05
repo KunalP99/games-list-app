@@ -1,6 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { recentGameIds, orderByIds, type SessionRow } from '../recently-played'
+import { recentGameIds, orderByIds, lastPlayedByGame, type SessionRow } from '../recently-played'
 import type { Game } from '../types'
+
+describe('lastPlayedByGame', () => {
+  it('uses the end of each game\'s newest session', () => {
+    const rows: SessionRow[] = [
+      { game_id: 'lol', started_at: '2026-11-04T00:28:00Z', ended_at: '2026-11-04T01:14:00Z' },
+      { game_id: 'ow', started_at: '2026-11-03T19:56:00Z', ended_at: '2026-11-03T23:16:00Z' },
+      { game_id: 'lol', started_at: '2026-11-03T23:55:00Z', ended_at: '2026-11-04T00:24:00Z' },
+    ]
+    const map = lastPlayedByGame(rows)
+    expect(map.get('lol')).toBe('2026-11-04T01:14:00Z')
+    expect(map.get('ow')).toBe('2026-11-03T23:16:00Z')
+  })
+
+  it('falls back to the last checkpoint, then the start, for a session with no end', () => {
+    const map = lastPlayedByGame([
+      { game_id: 'a', started_at: '2026-11-04T10:00:00Z', ended_at: null, last_checkpoint_at: '2026-11-04T10:45:00Z' },
+      { game_id: 'b', started_at: '2026-11-04T09:00:00Z', ended_at: null, last_checkpoint_at: null },
+      { game_id: null, started_at: '2026-11-04T08:00:00Z' },
+    ])
+    expect(map.get('a')).toBe('2026-11-04T10:45:00Z')
+    expect(map.get('b')).toBe('2026-11-04T09:00:00Z')
+    expect(map.size).toBe(2)
+  })
+})
 
 const session = (gameId: string | null, startedAt: string): SessionRow => ({
   game_id: gameId,

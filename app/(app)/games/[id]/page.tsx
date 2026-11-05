@@ -17,6 +17,8 @@ import AddToBacklogButton from '@/components/users/AddToBacklogButton'
 import GameVideos from '@/components/games/GameVideos'
 import PlayedByCard from '@/components/games/PlayedByCard'
 import { mapGameVideos } from '@/lib/youtube'
+import PlaySessionsCard from '@/components/games/PlaySessionsCard'
+import { toTrackedSessions, type PlaySessionRow } from '@/lib/play-sessions'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -62,6 +64,16 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       .in('status', ['completed', 'playing'])
       .ilike('title', game.title) as unknown as Promise<{ data: { user_id: string; status: 'completed' | 'playing' }[] | null }>,
   ])
+
+  // Every session the desktop agent tracked for this game (readable by any
+  // signed-in user, like the game itself). Capped well beyond any real count.
+  const { data: sessionRows } = await supabase
+    .from('play_sessions')
+    .select('id, started_at, ended_at, last_checkpoint_at, minutes')
+    .eq('game_id', game.id)
+    .order('started_at', { ascending: false })
+    .limit(1000) as { data: PlaySessionRow[] | null }
+  const trackedSessions = toTrackedSessions(sessionRows ?? [], Date.now())
 
   const totalPlaythroughs = sameGames?.length ?? 1
   const playthroughNumber = (sameGames?.findIndex(g => g.id === game.id) ?? 0) + 1
@@ -117,7 +129,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
     extras.themes.length > 0 || Boolean(extras.franchise) || extras.engines.length > 0 ||
     steamReview != null
   const hasAbout = Boolean(game.description) || hasAboutExtras
-  const hasSidebar = hasAbout || playedBy.length > 0
+  const hasSidebar = hasAbout || playedBy.length > 0 || trackedSessions.length > 0
 
   return (
     <div className="w-[min(70rem,calc(100vw-2rem))] space-y-6">
@@ -356,6 +368,14 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </div>
       )}
 
+      {/* Hours the desktop agent tracked, session by session (small screens
+          only; the sidebar copy, above About, takes over at lg+) */}
+      {trackedSessions.length > 0 && (
+        <div className="lg:hidden">
+          <PlaySessionsCard sessions={trackedSessions} />
+        </div>
+      )}
+
       {/* About + "also played by" (small screens) — shown right under Dates; the
           sidebar copies take over at lg+ */}
       {hasAbout && (
@@ -459,9 +479,10 @@ export default async function GameDetailPage({ params }: { params: { id: string 
 
       </div>{/* /main column */}
 
-      {/* Sidebar (lg+ only) — About, then "also played by" beneath it */}
+      {/* Sidebar (lg+ only) — play sessions, About, then "also played by" */}
       {hasSidebar && (
         <aside className="hidden lg:block space-y-6 lg:sticky lg:top-24">
+          <PlaySessionsCard sessions={trackedSessions} />
           {hasAbout && <GameAbout description={game.description} extras={extras} steamReview={steamReview} />}
           {playedBy.length > 0 && <PlayedByCard players={playedBy} />}
         </aside>

@@ -28,7 +28,7 @@ export default async function AchievementsPage() {
   const progress = levelProgress(xp)
 
   // Group achievements by category, in defined order
-  const categoryOrder: AchievementCategory[] = ['completion', 'hours', 'tickets', 'perfection', 'variety', 'dedication', 'wheel', 'steam_deck', 'misc']
+  const categoryOrder: AchievementCategory[] = ['completion', 'hours', 'tickets', 'perfection', 'variety', 'dedication', 'wheel', 'steam_deck', 'sessions', 'misc']
   const groups = categoryOrder.map(cat => ({
     category: cat,
     label: CATEGORY_LABELS[cat],

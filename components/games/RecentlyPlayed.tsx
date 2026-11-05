@@ -1,12 +1,21 @@
 import Link from 'next/link'
 import LiveIndicator from './LiveIndicator'
+import DragScroller from './DragScroller'
+import { formatActivityDate } from '@/lib/activity'
 import type { Game } from '@/lib/types'
+import type { RecentlyPlayedGame } from '@/lib/recently-played'
+
+/** "2h ago", "yesterday", "28 Oct" — formatActivityDate, lower-cased to sit mid-sentence. */
+function lastPlayedLabel(iso: string): string {
+  const label = formatActivityDate(iso)
+  return label.charAt(0).toLowerCase() + label.slice(1)
+}
 
 function Cover({ game }: { game: Game }) {
   const cover = (game as { cover_image_url?: string | null }).cover_image_url ?? null
   if (cover) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={cover} alt={game.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+    return <img src={cover} alt={game.title} draggable={false} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
   }
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-2 text-center">
@@ -36,7 +45,7 @@ export default function RecentlyPlayed({
   heading = 'Recently Played',
   liveSessions = new Map(),
 }: {
-  games: Game[]
+  games: RecentlyPlayedGame[]
   heading?: string
   liveSessions?: Map<string, string>
 }) {
@@ -51,16 +60,18 @@ export default function RecentlyPlayed({
       <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
         {heading}
       </h2>
-      {/* Spans the page: the hero takes the spare width, and the covers keep
-          their portrait shape and set the row's height, which the hero
-          stretches to match. On phones the hero sits on its own row above
-          the covers. The hero's min-height is load-bearing: with only one
-          recently played game there are no covers to take the height from,
-          and it collapsed to nothing on wide screens. */}
-      <div className="grid grid-cols-4 sm:grid-cols-[minmax(0,2.8fr)_repeat(4,minmax(0,1fr))] gap-4">
+      {/* Spans the page: the hero takes ~40% and the covers the rest. The
+          covers keep their portrait shape and set the row's height, which the
+          hero stretches to match. They never get narrower than 140px: once
+          there's no room for four at that size, the cover row scrolls
+          sideways (drag or swipe) instead of squashing them. On phones the
+          hero sits on its own row above the covers. The hero's min-height is
+          only for when there are no covers to take a height from, where it
+          would otherwise collapse to nothing. */}
+      <div className="flex flex-col sm:flex-row gap-4">
         <Link
           href={`/games/${hero.id}`}
-          className="group relative block col-span-4 sm:col-span-1 h-[200px] sm:h-auto sm:min-h-[200px] rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200"
+          className={`group relative block h-[200px] sm:h-auto sm:basis-[40%] sm:flex-none sm:min-w-[260px] ${rest.length === 0 ? 'sm:min-h-[200px]' : ''} rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200`}
         >
           <div className="absolute inset-0 bg-surface-active">
             {banner ? (
@@ -86,19 +97,29 @@ export default function RecentlyPlayed({
             <div className="mt-1.5">
               {heroLive ? (
                 <LiveIndicator startedAt={heroLive} dark />
-              ) : hero.hours_played != null ? (
-                <span className="text-xs text-white/70 drop-shadow">{hero.hours_played}h logged</span>
-              ) : null}
+              ) : (
+                <span className="text-xs text-white/70 drop-shadow">
+                  {[
+                    `Last played ${lastPlayedLabel(hero.lastPlayedAt)}`,
+                    hero.hours_played != null ? `${hero.hours_played}h logged` : null,
+                  ].filter(Boolean).join(' · ')}
+                </span>
+              )}
             </div>
           </div>
         </Link>
 
+        <DragScroller className="no-scrollbar flex-1 min-w-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none">
+          {/* Always four columns, filled or not, so two games don't balloon
+              into two giant covers. */}
+          <div className="grid grid-cols-[repeat(4,minmax(140px,1fr))] gap-4">
         {rest.map(game => {
           const live = liveSessions.get(game.id) ?? null
           return (
             <Link
               key={game.id}
               href={`/games/${game.id}`}
+              draggable={false}
               // Portrait box art at 3:4 off the column width. The hero
               // stretches to this height, not the other way round, so the
               // two can't drift apart as the row's width changes.
@@ -110,17 +131,25 @@ export default function RecentlyPlayed({
                 <span className="absolute top-2 right-2 inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5">
                   <LiveIndicator startedAt={live} dark />
                 </span>
-              ) : game.hours_played != null ? (
-                // Hours, on the other hand, are only worth a hover — otherwise
-                // every cover carries a pill all the time, which is exactly
-                // the badge-clutter this redesign dropped the title row for.
-                <span className="absolute top-2 right-2 inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                  <span className="text-[11px] font-medium text-white/90">{game.hours_played}h logged</span>
-                </span>
-              ) : null}
+              ) : (
+                // When it was last played and the hours, on the other hand,
+                // are only worth a hover — otherwise every cover carries text
+                // all the time, which is exactly the badge-clutter this
+                // redesign dropped the title row for.
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent px-2.5 pb-2 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                  <p className="text-[11px] font-medium text-white leading-tight">
+                    Last played {lastPlayedLabel(game.lastPlayedAt)}
+                  </p>
+                  {game.hours_played != null && (
+                    <p className="text-[11px] text-white/70 leading-tight mt-0.5">{game.hours_played}h logged</p>
+                  )}
+                </div>
+              )}
             </Link>
           )
         })}
+          </div>
+        </DragScroller>
       </div>
     </div>
   )
