@@ -52,6 +52,17 @@ export function toTrackedSessions(rows: PlaySessionRow[], nowMs: number): Tracke
     .sort((a, b) => b.start.localeCompare(a.start))
 }
 
+/** Minutes and session count for each UK day (`YYYY-MM-DD`), by the day each session started. */
+export function dayTotals(sessions: TrackedSession[]): Map<string, { minutes: number; count: number }> {
+  const out = new Map<string, { minutes: number; count: number }>()
+  for (const s of sessions) {
+    const day = londonDay(s.start)
+    const cur = out.get(day) ?? { minutes: 0, count: 0 }
+    out.set(day, { minutes: cur.minutes + s.minutes, count: cur.count + 1 })
+  }
+  return out
+}
+
 const shortDate = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short', day: 'numeric', month: 'short' })
 
 /**

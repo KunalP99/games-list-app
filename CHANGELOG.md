@@ -7,6 +7,8 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Play Sessions card: hover a session to see its day's total.** Each day's sessions form one block, so hovering highlights the whole day as a single shape and floats a small card above it ("Tue 3 Nov · 2h 10m · 3 sessions"). The total covers every session that day, even ones hidden behind "Show all". The card is positioned against the window, so the scrolling expanded list can't clip it, and it hides when you scroll.
+- **Play Sessions card: long durations stay on one line.** A session like "14h 24m" was wider than the duration column, so it wrapped onto two lines. The column now grows to fit and never wraps.
 - **Play Sessions card: the date appears once per day.** When a game was played more than once on a day, the date shows only on the first session. The rest sit under it with no divider, so each day reads as one group.
 - **12 new Play Sessions achievements, earned from tracked play.** A new section on the Achievements page:
   - **Sessions tracked:** Press Start (1), Regular Visitor (50), Frequent Flyer (250), Season Ticket (1,000).

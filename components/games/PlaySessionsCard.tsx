@@ -1,6 +1,5 @@
-import { formatSessionDuration, formatSessionTime } from '@/lib/activity'
-import { londonDay } from '@/lib/activity'
-import { sessionDateLabel, type TrackedSession } from '@/lib/play-sessions'
+import { formatSessionDuration, formatSessionTime, londonDay } from '@/lib/activity'
+import { dayTotals, sessionDateLabel, type TrackedSession } from '@/lib/play-sessions'
 import SessionLog, { type LogSession } from './SessionLog'
 
 /**
@@ -12,14 +11,22 @@ import SessionLog, { type LogSession } from './SessionLog'
 export default function PlaySessionsCard({ sessions }: { sessions: TrackedSession[] }) {
   if (sessions.length === 0) return null
 
-  const rows: LogSession[] = sessions.map(s => ({
-    id: s.id,
-    dayKey: londonDay(s.start),
-    date: sessionDateLabel(s.start),
-    time: `${formatSessionTime(s.start)} – ${s.live ? 'now' : formatSessionTime(s.end)}`,
-    duration: formatSessionDuration(s.minutes),
-    live: s.live,
-  }))
+  // Worked out over every session, not just the ones shown before "Show
+  // all", so a day cut off part-way still shows its real total.
+  const totals = dayTotals(sessions)
+  const rows: LogSession[] = sessions.map(s => {
+    const day = totals.get(londonDay(s.start))!
+    return {
+      id: s.id,
+      dayKey: londonDay(s.start),
+      date: sessionDateLabel(s.start),
+      dayTotal: formatSessionDuration(day.minutes),
+      dayCount: day.count,
+      time: `${formatSessionTime(s.start)} – ${s.live ? 'now' : formatSessionTime(s.end)}`,
+      duration: formatSessionDuration(s.minutes),
+      live: s.live,
+    }
+  })
 
   return (
     <div className="bg-surface-base border border-edge-base rounded-xl p-4">

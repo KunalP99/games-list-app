@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest'
-import { sessionDateLabel, toTrackedSessions, type PlaySessionRow } from '../play-sessions'
+import { dayTotals, sessionDateLabel, toTrackedSessions, type PlaySessionRow } from '../play-sessions'
+
+describe('dayTotals', () => {
+  it('adds up each UK day\'s sessions and counts them', () => {
+    const now = Date.parse('2025-11-06T12:00:00Z')
+    const sessions = toTrackedSessions([
+      { id: 'a', started_at: '2025-11-05T10:00:00Z', ended_at: '2025-11-05T11:00:00Z', last_checkpoint_at: null, minutes: 60 },
+      { id: 'b', started_at: '2025-11-05T20:00:00Z', ended_at: '2025-11-05T20:30:00Z', last_checkpoint_at: null, minutes: 30 },
+      { id: 'c', started_at: '2025-11-04T20:00:00Z', ended_at: '2025-11-04T20:45:00Z', last_checkpoint_at: null, minutes: 45 },
+    ], now)
+    const totals = dayTotals(sessions)
+    expect(totals.get('2025-11-05')).toEqual({ minutes: 90, count: 2 })
+    expect(totals.get('2025-11-04')).toEqual({ minutes: 45, count: 1 })
+  })
+})
 
 const row = (id: string, start: string, end: string | null, minutes: number, checkpoint: string | null = end): PlaySessionRow =>
   ({ id, started_at: start, ended_at: end, last_checkpoint_at: checkpoint, minutes })
