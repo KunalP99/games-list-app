@@ -69,6 +69,164 @@ function StarPicker({ value, onChange }: { value: number | null; onChange: (v: n
 
 const inputClass = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
 
+export type CompletionDetails = {
+  hours: number | null
+  rating: number | null
+  achievementProgress: number | null
+  completionDate: string
+  review: string | null
+  isFavourite: boolean
+}
+
+/**
+ * The "Mark as Completed" form, on its own so the card button, the detail-page
+ * button and the games list's quick-actions menu all open the same thing.
+ * Render it only while open: it starts fresh each time it mounts.
+ */
+export function CompleteGameModal({
+  initialFavourite = false,
+  onCancel,
+  onConfirm,
+}: {
+  initialFavourite?: boolean
+  onCancel: () => void
+  onConfirm: (details: CompletionDetails) => void
+}) {
+  const [mounted, setMounted] = useState(false)
+  const [hours, setHours] = useState('')
+  const [rating, setRating] = useState<number | null>(null)
+  const [achievementProgress, setAchievementProgress] = useState('')
+  const [completionDate, setCompletionDate] = useState(() => todayIsoDate())
+  const [review, setReview] = useState('')
+  const [isFavourite, setIsFavourite] = useState(initialFavourite)
+  const [dateError, setDateError] = useState<string | null>(null)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  function handleConfirm() {
+    // A game can't be completed in the future — checked here too, not just
+    // via the date picker's own max, since that's trivial to type past.
+    if (isFutureDate(completionDate)) {
+      setDateError("Completion date can't be in the future.")
+      return
+    }
+    setDateError(null)
+    onConfirm({
+      hours: hours ? Number(hours) : null,
+      rating,
+      achievementProgress: achievementProgress ? Number(achievementProgress) : null,
+      completionDate,
+      review: review.trim() || null,
+      isFavourite,
+    })
+  }
+
+  if (!mounted) return null
+  return createPortal(
+    // Stops clicks reaching a card link this was opened from (React events
+    // bubble through portals to their React parents).
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => e.stopPropagation()} onContextMenu={e => e.stopPropagation()}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-5">
+
+        <div>
+          <h2 className="text-lg font-semibold text-fg-base">Mark as Completed</h2>
+          <p className="text-sm text-fg-muted mt-0.5">All fields are optional — fill in what you know.</p>
+        </div>
+
+        {/* Favourite */}
+        <button
+          type="button"
+          onClick={() => setIsFavourite(f => !f)}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+            isFavourite
+              ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
+              : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
+          }`}
+        >
+          <span>★</span> Favourite
+        </button>
+
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-2">Rating</label>
+          <StarPicker value={rating} onChange={setRating} />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">Hours Played</label>
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            value={hours}
+            onChange={e => setHours(e.target.value)}
+            placeholder="e.g. 25"
+            className={inputClass}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">Achievement Progress</label>
+          <div className="relative">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={achievementProgress}
+              onChange={e => setAchievementProgress(e.target.value)}
+              placeholder="0–100"
+              className={`${inputClass} pr-8`}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-fg-muted pointer-events-none">%</span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">Date Completed</label>
+          <input
+            type="date"
+            value={completionDate}
+            max={todayIsoDate()}
+            onChange={e => { setCompletionDate(e.target.value); setDateError(null) }}
+            className={inputClass}
+          />
+          {dateError && <p className="mt-1 text-sm text-red-600">{dateError}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-fg-secondary mb-1">Review</label>
+          <textarea
+            rows={3}
+            value={review}
+            onChange={e => setReview(e.target.value)}
+            placeholder="What did you think?"
+            className={inputClass}
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-fg-secondary hover:text-fg-base border border-edge-base rounded-lg hover:bg-surface-hover transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirm}
+            className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+          >
+            Mark as Completed
+          </button>
+        </div>
+
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function MarkCompletedButton({
   gameId,
   variant = 'card',
@@ -83,285 +241,47 @@ export default function MarkCompletedButton({
 }) {
   const [pending, startTransition] = useTransition()
   const [showModal, setShowModal] = useState(false)
-  const [mounted, setMounted] = useState(false)
-  const [hours, setHours] = useState('')
-  const [rating, setRating] = useState<number | null>(null)
-  const [achievementProgress, setAchievementProgress] = useState('')
-  const [completionDate, setCompletionDate] = useState(() => todayIsoDate())
-  const [review, setReview] = useState('')
-  const [isFavourite, setIsFavourite] = useState(initialFavourite)
-  const [dateError, setDateError] = useState<string | null>(null)
 
-  useEffect(() => { setMounted(true) }, [])
-
-  function handleCardClick(e: React.MouseEvent) {
+  function handleOpen(e: React.MouseEvent) {
+    // On a card this sits inside the card's link.
     e.preventDefault()
     e.stopPropagation()
     setShowModal(true)
   }
 
-  function handleConfirm() {
-    // A game can't be completed in the future — checked here too, not just
-    // via the date picker's own max, since that's trivial to type past.
-    if (isFutureDate(completionDate)) {
-      setDateError("Completion date can't be in the future.")
-      return
-    }
-    setDateError(null)
+  function handleConfirm(details: CompletionDetails) {
     setShowModal(false)
     startTransition(async () => {
-      await markAsCompleted(gameId, {
-        hours: hours ? Number(hours) : null,
-        rating,
-        achievementProgress: achievementProgress ? Number(achievementProgress) : null,
-        completionDate,
-        review: review.trim() || null,
-        isFavourite,
-      })
+      await markAsCompleted(gameId, details)
     })
   }
 
-  if (variant === 'detail') {
-    return (
-      <>
+  return (
+    <>
+      {variant === 'detail' ? (
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleOpen}
           disabled={pending}
           className="px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
         >
           {pending ? 'Saving…' : '✓ Mark as Completed'}
         </button>
+      ) : (
+        <button
+          onClick={handleOpen}
+          disabled={pending}
+          className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5 hover:bg-emerald-100 disabled:opacity-50 transition-colors dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+        >
+          {pending ? '…' : 'Mark Complete'}
+        </button>
+      )}
 
-        {showModal && mounted && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
-            <div
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={() => !pending && setShowModal(false)}
-            />
-            <div className="relative w-full max-w-md bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-5">
-
-              <div>
-                <h2 className="text-lg font-semibold text-fg-base">Mark as Completed</h2>
-                <p className="text-sm text-fg-muted mt-0.5">All fields are optional — fill in what you know.</p>
-              </div>
-
-              {/* Favourite */}
-              <button
-                type="button"
-                onClick={() => setIsFavourite(f => !f)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                  isFavourite
-                    ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
-                    : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
-                }`}
-              >
-                <span>★</span> Favourite
-              </button>
-
-              {/* Rating */}
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-2">Rating</label>
-                <StarPicker value={rating} onChange={setRating} />
-              </div>
-
-              {/* Hours */}
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Hours Played</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={hours}
-                  onChange={e => setHours(e.target.value)}
-                  placeholder="e.g. 25"
-                  className={inputClass}
-                />
-              </div>
-
-              {/* Achievement Progress */}
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Achievement Progress</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={achievementProgress}
-                    onChange={e => setAchievementProgress(e.target.value)}
-                    placeholder="0–100"
-                    className={`${inputClass} pr-8`}
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-fg-muted pointer-events-none">%</span>
-                </div>
-              </div>
-
-              {/* Completion Date */}
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Date Completed</label>
-                <input
-                  type="date"
-                  value={completionDate}
-                  max={todayIsoDate()}
-                  onChange={e => { setCompletionDate(e.target.value); setDateError(null) }}
-                  className={inputClass}
-                />
-                {dateError && <p className="mt-1 text-sm text-red-600">{dateError}</p>}
-              </div>
-
-              {/* Review */}
-              <div>
-                <label className="block text-sm font-medium text-fg-secondary mb-1">Review</label>
-                <textarea
-                  rows={3}
-                  value={review}
-                  onChange={e => setReview(e.target.value)}
-                  placeholder="What did you think?"
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  disabled={pending}
-                  className="px-4 py-2 text-sm font-medium text-fg-secondary hover:text-fg-base border border-edge-base rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  disabled={pending}
-                  className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-                >
-                  {pending ? 'Saving…' : 'Mark as Completed'}
-                </button>
-              </div>
-
-            </div>
-          </div>,
-          document.body
-        )}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <button
-        onClick={handleCardClick}
-        disabled={pending}
-        className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5 hover:bg-emerald-100 disabled:opacity-50 transition-colors dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-      >
-        {pending ? '…' : 'Mark Complete'}
-      </button>
-
-      {showModal && mounted && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => !pending && setShowModal(false)}
-          />
-          <div className="relative w-full max-w-md bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-5">
-
-            <div>
-              <h2 className="text-lg font-semibold text-fg-base">Mark as Completed</h2>
-              <p className="text-sm text-fg-muted mt-0.5">All fields are optional — fill in what you know.</p>
-            </div>
-
-            {/* Favourite */}
-            <button
-              type="button"
-              onClick={() => setIsFavourite(f => !f)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                isFavourite
-                  ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-900/30 dark:border-amber-700 dark:text-amber-300'
-                  : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
-              }`}
-            >
-              <span>★</span> Favourite
-            </button>
-
-            <div>
-              <label className="block text-sm font-medium text-fg-secondary mb-2">Rating</label>
-              <StarPicker value={rating} onChange={setRating} />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-fg-secondary mb-1">Hours Played</label>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={hours}
-                onChange={e => setHours(e.target.value)}
-                placeholder="e.g. 25"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-fg-secondary mb-1">Achievement Progress</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={achievementProgress}
-                  onChange={e => setAchievementProgress(e.target.value)}
-                  placeholder="0–100"
-                  className={`${inputClass} pr-8`}
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-fg-muted pointer-events-none">%</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-fg-secondary mb-1">Date Completed</label>
-              <input
-                type="date"
-                value={completionDate}
-                max={todayIsoDate()}
-                onChange={e => { setCompletionDate(e.target.value); setDateError(null) }}
-                className={inputClass}
-              />
-              {dateError && <p className="mt-1 text-sm text-red-600">{dateError}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-fg-secondary mb-1">Review</label>
-              <textarea
-                rows={3}
-                value={review}
-                onChange={e => setReview(e.target.value)}
-                placeholder="What did you think?"
-                className={inputClass}
-              />
-            </div>
-
-            <div className="flex justify-end gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                disabled={pending}
-                className="px-4 py-2 text-sm font-medium text-fg-secondary hover:text-fg-base border border-edge-base rounded-lg hover:bg-surface-hover transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={pending}
-                className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-              >
-                {pending ? 'Saving…' : 'Mark as Completed'}
-              </button>
-            </div>
-
-          </div>
-        </div>,
-        document.body
+      {showModal && (
+        <CompleteGameModal
+          initialFavourite={initialFavourite}
+          onCancel={() => setShowModal(false)}
+          onConfirm={handleConfirm}
+        />
       )}
     </>
   )

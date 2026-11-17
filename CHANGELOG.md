@@ -6,7 +6,22 @@ All notable changes to **GamesList** are documented here, newest first.
 
 ## [Unreleased]
 
+### Added
+- **Quick actions on the games list.** Every card (grid and cover views, and the Recently Played strip) shows a **⋯** button in its top-left corner when you hover over it, and every table row has one at the end. On phones and tablets the button is always visible, since they have no hover. **Right-clicking** a card or row opens the same menu. Shift + right-click still gives the browser's own menu, for "Open in new tab". The menu offers:
+  - **Edit**;
+  - **Add to / Remove from favourites**;
+  - a move to every other status: Mark as Completed…, Move to Playing / Backlog / Ambient, Mark as DNF…;
+  - **Delete…**.
+
+  Only your own games get the menu; a friend's profile has none. Tickets work exactly as they do from the edit page:
+  - **Completed** opens the usual Mark as Completed form.
+  - Anything that costs tickets asks first: leaving Completed takes back the completion tickets, and DNF applies the penalty.
+  - Delete confirms and keeps you on the list.
+
+  The rules live in `lib/game-quick-actions.ts` (tested); the menu is `components/games/GameActionsMenu.tsx`; there are new `setGameStatus` and `setFavourite` server actions. The Mark as Completed form is now one component (`CompleteGameModal`), shared by the card button, the detail page and the menu.
+
 ### Fixed
+- **Completing a DNF game refunds the DNF penalty**, and **DNF-ing a completed game takes back its completion tickets.** Both already happened through the edit form, but not through the Mark as Completed / Mark as DNF buttons, which assumed the game was Playing. `markAsCompleted` also refuses a game that's already completed, rather than awarding it twice.
 - **WoW Retail and WoW Forever are told apart.** Both run `Wow.exe`, from `_retail_\` and `_forever_\`, and the tracker matched programs to games by exe name alone, so whichever was linked first claimed both: Retail was logged as Forever. Links are now **per folder**. An exe can have one link per folder (`game_executables.path_suffix`), and the tracker (v0.2.2) matches with `pick_link`:
   1. a link whose folder matches wins;
   2. otherwise a link saved before folders were recorded;

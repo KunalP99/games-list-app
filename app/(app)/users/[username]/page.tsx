@@ -195,7 +195,7 @@ export default async function UserProfilePage({
           content beside it was shorter. */}
       <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />
 
-      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} />
+      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner={isOwner} />
 
       <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 

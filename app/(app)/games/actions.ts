@@ -9,6 +9,7 @@ import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
 import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 import { isFutureDate } from '@/lib/dates'
+import { isQuickStatus, statusChangeEffects } from '@/lib/game-quick-actions'
 
 type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
 
@@ -391,6 +392,17 @@ export async function markAsCompleted(
     return { error: "Completion date can't be in the future." }
   }
 
+  // The status before this call: completing a DNF game refunds its penalty
+  // (as a full edit does), and an already-completed game must not be awarded
+  // twice — the quick-actions menu can reach this from any status.
+  const { data: before } = await (supabase.from('games') as any)
+    .select('status')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single() as { data: { status: string } | null }
+  if (!before) return { error: 'Game not found' }
+  if (before.status === 'completed') return { error: 'This game is already completed.' }
+
   let hours: number | null
   let achievementProgress: number | null
   const update: Record<string, unknown> = { status: 'completed' }
@@ -416,6 +428,7 @@ export async function markAsCompleted(
     update.rating = details.rating
     update.achievement_progress = achievementProgress
     update.completion_date = details.completionDate
+    update.completion_date_precision = 'full'
     update.is_favourite = details.isFavourite
     if (details.review !== null) update.review = details.review
   } else {
@@ -437,6 +450,7 @@ export async function markAsCompleted(
 
   if (error) return { error: error.message }
 
+  if (before.status === 'dnf') await reverseDnfPenalty(supabase, user.id, id)
   await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
   await Promise.all([
     awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
@@ -479,6 +493,9 @@ export async function markAsDnf(id: string) {
   if (error) return { error: error.message }
 
   if (existing.status !== 'dnf') {
+    // Same ledger rules as a full edit: a completed game loses its completion
+    // tickets on the way to DNF.
+    if (existing.status === 'completed') await reverseGameCompletionTickets(supabase, user.id, id)
     await applyDnfPenalty(supabase, user.id, id)
     const reverted = await consumeWheelPending(supabase, user.id, id, true)
     if (reverted) revalidatePath('/wheel')
@@ -493,7 +510,9 @@ export async function markAsDnf(id: string) {
   return { success: true }
 }
 
-export async function deleteGame(id: string) {
+// `stay`: the quick-actions menu deletes from the list itself, so it skips
+// the redirect and gets a result back instead.
+export async function deleteGame(id: string, opts?: { stay?: boolean }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -517,7 +536,67 @@ export async function deleteGame(id: string) {
   revalidatePath('/games')
   revalidatePath('/dashboard')
   revalidatePath('/tickets')
+  if (opts?.stay) return { success: true }
   redirect('/games')
+}
+
+// Quick-actions menu: move a game to Playing, Backlog or Ambient without the
+// full edit form. Completed and DNF go through markAsCompleted / markAsDnf,
+// which need their own details. Ticket effects match updateGame exactly.
+export async function setGameStatus(id: string, to: string) {
+  if (!isQuickStatus(to)) return { error: 'Not a status this can set.' }
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: existing } = await (supabase.from('games') as any)
+    .select('status')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single() as { data: { status: 'backlog' | 'playing' | 'completed' | 'dnf' | 'ambient' } | null }
+  if (!existing) return { error: 'Game not found' }
+  if (existing.status === to) return { success: true }
+
+  // Same field rules as updateGame: completion/drop dates only belong to
+  // completed and DNF games, and a backlog game hasn't been started.
+  const { error } = await (supabase.from('games') as any)
+    .update({
+      status: to,
+      completion_date: null,
+      completion_date_precision: 'full',
+      ...(to === 'backlog' ? { start_date: null } : {}),
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+  if (error) return { error: error.message }
+
+  const fx = statusChangeEffects(existing.status, to)
+  if (fx.reverseCompletion) await reverseGameCompletionTickets(supabase, user.id, id)
+  if (fx.reverseDnf) await reverseDnfPenalty(supabase, user.id, id)
+  await checkAndAwardAchievements(supabase, user.id)
+
+  revalidatePath('/games')
+  revalidatePath(`/games/${id}`)
+  revalidatePath('/dashboard')
+  revalidatePath('/tickets')
+  revalidatePath('/achievements')
+  return { success: true }
+}
+
+export async function setFavourite(id: string, isFavourite: boolean) {
+  const supabase = createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { error } = await (supabase.from('games') as any)
+    .update({ is_favourite: isFavourite })
+    .eq('id', id)
+    .eq('user_id', user.id)
+  if (error) return { error: error.message }
+
+  revalidatePath('/games')
+  revalidatePath(`/games/${id}`)
+  return { success: true }
 }
 
 export async function addRecommendationToBacklog(formData: FormData): Promise<{ success: boolean; error?: string }> {

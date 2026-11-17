@@ -2,6 +2,7 @@ import Link from 'next/link'
 import StatusBadge from './StatusBadge'
 import MarkCompletedButton from './MarkCompletedButton'
 import LiveIndicator from './LiveIndicator'
+import GameActions, { GameActionsTrigger } from './GameActionsMenu'
 import type { Game } from '@/lib/types'
 
 // Formatted release date, respecting year-only precision. Null when no date.
@@ -13,7 +14,13 @@ function formatRelease(game: Game): string | null {
 }
 
 // Portrait box-art card. Cover on top, the same info GameCard shows beneath.
-export default function CoverCard({
+// The owner gets the quick-actions menu (⋯ on hover, or right-click).
+export default function CoverCard(props: Parameters<typeof CoverCardBody>[0]) {
+  const card = <CoverCardBody {...props} />
+  return props.isOwner === false ? card : <GameActions game={props.game}>{card}</GameActions>
+}
+
+function CoverCardBody({
   game,
   isOwner = true,
   showReleaseDate = false,
@@ -47,6 +54,10 @@ export default function CoverCard({
             <span className="text-xs font-medium text-fg-muted line-clamp-3">{game.title}</span>
           </div>
         )}
+        {/* Quick actions (owner only) — top left, opposite the status */}
+        <div className="absolute top-2 left-2">
+          <GameActionsTrigger tone="overlay" />
+        </div>
         <div className="absolute top-2 right-2">
           <StatusBadge status={game.status} />
         </div>

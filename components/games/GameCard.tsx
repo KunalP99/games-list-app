@@ -2,6 +2,7 @@ import Link from 'next/link'
 import StatusBadge from './StatusBadge'
 import MarkCompletedButton from './MarkCompletedButton'
 import LiveIndicator from './LiveIndicator'
+import GameActions, { GameActionsTrigger } from './GameActionsMenu'
 import type { Game } from '@/lib/types'
 
 // Formatted release date, respecting year-only precision. Null when no date.
@@ -12,7 +13,13 @@ function formatRelease(game: Game): string | null {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default function GameCard({
+// The owner gets the quick-actions menu (⋯ on hover, or right-click).
+export default function GameCard(props: Parameters<typeof GameCardBody>[0]) {
+  const card = <GameCardBody {...props} />
+  return props.isOwner === false ? card : <GameActions game={props.game}>{card}</GameActions>
+}
+
+function GameCardBody({
   game,
   isOwner = true,
   showReleaseDate = false,
@@ -45,6 +52,10 @@ export default function GameCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
 
         {/* Status — top right, so it doesn't cover the artwork */}
+        {/* Quick actions (owner only) — top left, opposite the status */}
+        <div className="absolute top-2 left-2">
+          <GameActionsTrigger tone="overlay" />
+        </div>
         <div className="absolute top-2 right-2">
           <StatusBadge status={game.status} />
         </div>
@@ -103,7 +114,7 @@ export default function GameCard({
   return (
     <Link
       href={`/games/${game.id}`}
-      className="flex flex-col justify-between bg-surface-base border border-edge-base rounded-xl p-4 min-h-[140px] hover:border-brand-300 hover:shadow-md hover:-translate-y-1 transition-all duration-200 dark:hover:border-brand-600"
+      className="group flex flex-col justify-between bg-surface-base border border-edge-base rounded-xl p-4 min-h-[140px] hover:border-brand-300 hover:shadow-md hover:-translate-y-1 transition-all duration-200 dark:hover:border-brand-600"
       style={tint ? { background: `linear-gradient(135deg, ${tint}18 0%, transparent 55%)` } : undefined}
     >
       <div className="flex items-start justify-between gap-3">
@@ -131,7 +142,10 @@ export default function GameCard({
             </p>
           )}
         </div>
-        <StatusBadge status={game.status} />
+        <div className="flex items-center gap-1.5 shrink-0">
+          <GameActionsTrigger />
+          <StatusBadge status={game.status} />
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2">

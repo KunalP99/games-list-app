@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import LiveIndicator from './LiveIndicator'
 import DragScroller from './DragScroller'
+import GameActions, { GameActionsTrigger } from './GameActionsMenu'
 import { formatActivityDate } from '@/lib/activity'
 import type { Game } from '@/lib/types'
 import type { RecentlyPlayedGame } from '@/lib/recently-played'
@@ -26,6 +27,16 @@ function Cover({ game }: { game: Game }) {
 }
 
 /**
+ * Holds one tile. For the owner it's the quick-actions wrapper (right-click
+ * menu plus the ⋯ button); for anyone else a plain box with the same sizing.
+ */
+function Tile({ game, isOwner, className, children }: { game: Game; isOwner: boolean; className: string; children: React.ReactNode }) {
+  return isOwner
+    ? <GameActions game={game} className={className}>{children}</GameActions>
+    : <div className={className}>{children}</div>
+}
+
+/**
  * The last few Ambient games played, in the spirit of a Steam profile.
  *
  * The most recent one — the one someone's actually mid-session in, most of
@@ -44,10 +55,13 @@ export default function RecentlyPlayed({
   games,
   heading = 'Recently Played',
   liveSessions = new Map(),
+  isOwner = false,
 }: {
   games: RecentlyPlayedGame[]
   heading?: string
   liveSessions?: Map<string, string>
+  /** Shows the quick-actions menu (⋯ and right-click). Only for the games' owner. */
+  isOwner?: boolean
 }) {
   if (games.length === 0) return null
 
@@ -69,9 +83,14 @@ export default function RecentlyPlayed({
           only for when there are no covers to take a height from, where it
           would otherwise collapse to nothing. */}
       <div className="flex flex-col sm:flex-row gap-4">
+        <Tile
+          game={hero}
+          isOwner={isOwner}
+          className={`h-[200px] sm:h-auto sm:basis-[40%] sm:flex-none sm:min-w-[260px] ${rest.length === 0 ? 'sm:min-h-[200px]' : ''}`}
+        >
         <Link
           href={`/games/${hero.id}`}
-          className={`group relative block h-[200px] sm:h-auto sm:basis-[40%] sm:flex-none sm:min-w-[260px] ${rest.length === 0 ? 'sm:min-h-[200px]' : ''} rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200`}
+          className={`group relative block h-full ${rest.length === 0 ? 'sm:min-h-[200px]' : ''} rounded-xl overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200`}
         >
           <div className="absolute inset-0 bg-surface-active">
             {banner ? (
@@ -87,6 +106,7 @@ export default function RecentlyPlayed({
             )}
           </div>
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+          <div className="absolute top-2 left-2"><GameActionsTrigger tone="overlay" /></div>
           <div className="absolute bottom-0 left-0 right-0 p-4">
             <h3 className="font-semibold text-white text-lg truncate drop-shadow">{hero.title}</h3>
             {(hero.developer || hero.platform) && (
@@ -108,6 +128,7 @@ export default function RecentlyPlayed({
             </div>
           </div>
         </Link>
+        </Tile>
 
         <DragScroller className="no-scrollbar flex-1 min-w-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none">
           {/* Always four columns, filled or not, so two games don't balloon
@@ -116,8 +137,8 @@ export default function RecentlyPlayed({
         {rest.map(game => {
           const live = liveSessions.get(game.id) ?? null
           return (
+            <Tile key={game.id} game={game} isOwner={isOwner} className="min-w-0">
             <Link
-              key={game.id}
               href={`/games/${game.id}`}
               draggable={false}
               // Portrait box art at 3:4 off the column width. The hero
@@ -126,6 +147,7 @@ export default function RecentlyPlayed({
               className="group relative block aspect-[3/4] rounded-lg overflow-hidden bg-surface-sunken"
             >
               <Cover game={game} />
+              <div className="absolute top-2 left-2"><GameActionsTrigger tone="overlay" /></div>
               {live ? (
                 // Live is worth seeing at a glance, not just on hover.
                 <span className="absolute top-2 right-2 inline-flex items-center rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5">
@@ -146,6 +168,7 @@ export default function RecentlyPlayed({
                 </div>
               )}
             </Link>
+            </Tile>
           )
         })}
           </div>

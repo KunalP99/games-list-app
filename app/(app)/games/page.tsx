@@ -146,7 +146,7 @@ export default async function GamesPage({
 
       {/* Ambient games, newest session first — what has actually been running,
           as opposed to what was deliberately picked up above. */}
-      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} />
+      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner />
 
       <Suspense>
         <GameFilters />
