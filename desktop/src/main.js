@@ -174,15 +174,19 @@ function renderResumePrompt(prompt) {
     el('resume-prompt-yes').textContent = 'Resume'
     ambientButton.hidden = true
   } else if (prompt.kind === 'backlog') {
-    // The one case with a real choice — the other two have exactly one
-    // possible outcome, so they only ever show the single primary button.
     el('resume-prompt-heading').textContent = `You have ${prompt.title} in your backlog — set it to:`
     el('resume-prompt-yes').textContent = 'Set to Playing'
+    ambientButton.textContent = 'Set to Ambient'
+    ambientButton.title = ''
     ambientButton.hidden = false
   } else {
+    // Completed: a replay, or — story done, now the multiplayer — its own
+    // Ambient entry, leaving the completed one untouched.
     el('resume-prompt-heading').textContent = `You already completed ${prompt.title} — is this a replay?`
     el('resume-prompt-yes').textContent = 'Yes, replay'
-    ambientButton.hidden = true
+    ambientButton.textContent = 'Track as Ambient'
+    ambientButton.title = 'Multiplayer or other ongoing play: tracked as its own Ambient game, not a replay'
+    ambientButton.hidden = false
   }
 }
 

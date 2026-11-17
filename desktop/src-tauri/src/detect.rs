@@ -115,6 +115,49 @@ const NOT_THE_GAME: &[&str] = &[
     "crashhandler", "crashreport", "launcher_installer", "updater", "patcher", "repair",
 ];
 
+/// Games that keep running in the system tray after you stop playing, so for
+/// these alone "still running" doesn't mean "still being played": a session
+/// only continues while the game has a visible window. Every other game is
+/// tracked for as long as its program runs, exactly as before.
+///
+/// Roblox earned its place live: after leaving an experience,
+/// `RobloxPlayerBeta.exe` stays alive with only a hidden tray-icon window
+/// (class `SystrayIcon`), and was being tracked as played the whole time. In
+/// an experience the same process has a visible "Roblox" window.
+const NEEDS_VISIBLE_WINDOW: &[&str] = &["robloxplayerbeta.exe"];
+
+/// How long a window-required game's window may be gone before its session
+/// ends — enough to ride out a loading screen or a teleport between
+/// experiences without splitting one play session into several.
+const WINDOW_GRACE_SECS: u64 = 45;
+
+/// Remembers when each window-required game last had a visible window.
+#[derive(Default)]
+pub struct WindowGrace {
+    last_seen: HashMap<String, std::time::Instant>,
+}
+
+impl WindowGrace {
+    /// Whether a running candidate counts as being played. Always true for
+    /// games not on `NEEDS_VISIBLE_WINDOW`.
+    pub fn is_playing(&mut self, c: &Candidate) -> bool {
+        self.is_playing_at(c, std::time::Instant::now())
+    }
+
+    fn is_playing_at(&mut self, c: &Candidate, now: std::time::Instant) -> bool {
+        if !NEEDS_VISIBLE_WINDOW.contains(&c.exe_name.as_str()) {
+            return true;
+        }
+        if c.has_window {
+            self.last_seen.insert(c.exe_name.clone(), now);
+            return true;
+        }
+        self.last_seen
+            .get(&c.exe_name)
+            .is_some_and(|t| now.duration_since(*t).as_secs() < WINDOW_GRACE_SECS)
+    }
+}
+
 pub fn new_system() -> System {
     System::new_with_specifics(RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()))
 }
@@ -457,6 +500,32 @@ pub fn steam_running_app_id() -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn roblox_counts_only_while_its_window_is_up_give_or_take_the_grace() {
+        use std::time::{Duration, Instant};
+        let mut grace = WindowGrace::default();
+        let t0 = Instant::now();
+        let roblox = |window| candidate("robloxplayerbeta.exe", None, 600, window);
+
+        // Sitting in the tray from the start: never counts.
+        assert!(!grace.is_playing_at(&roblox(false), t0));
+        // In an experience.
+        assert!(grace.is_playing_at(&roblox(true), t0));
+        // Window gone briefly (loading, teleport): still playing.
+        assert!(grace.is_playing_at(&roblox(false), t0 + Duration::from_secs(30)));
+        // Gone past the grace: back in the tray, so not playing.
+        assert!(!grace.is_playing_at(&roblox(false), t0 + Duration::from_secs(60)));
+        // Reopened from the tray: playing again.
+        assert!(grace.is_playing_at(&roblox(true), t0 + Duration::from_secs(90)));
+    }
+
+    #[test]
+    fn every_other_game_counts_while_running_window_or_not() {
+        let mut grace = WindowGrace::default();
+        assert!(grace.is_playing(&candidate("starcitizen.exe", None, 600, false)));
+        assert!(grace.is_playing(&candidate("hades.exe", None, 600, false)));
+    }
 
     fn candidate(name: &str, path: Option<&str>, secs: u64, window: bool) -> Candidate {
         Candidate {

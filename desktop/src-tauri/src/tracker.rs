@@ -95,9 +95,32 @@ pub struct Session {
     pub exe_name: Option<String>,
 }
 
+/// How old a handed-over session can be and still be carried on with. An
+/// update takes a minute or two; past this, the app was closed for long
+/// enough that it's a new sitting, not the same one.
+pub const RESUME_WITHIN: Duration = Duration::from_secs(30 * 60);
+
+/// How long quitting or updating waits on the site before giving up — the
+/// checkpoint is queued on disk if it doesn't get through, so nothing is lost.
+const HANDOVER_TIMEOUT: Duration = Duration::from_secs(5);
+
 impl Session {
     pub fn minutes(&self) -> u64 {
         self.started_instant.elapsed().as_secs() / 60
+    }
+
+    /// This session as written to disk for the next version to pick up.
+    pub fn to_saved(&self, now: DateTime<Utc>) -> config::SavedSession {
+        config::SavedSession {
+            game_id: self.game_id.clone(),
+            title: self.title.clone(),
+            client_session_id: self.client_session_id.clone(),
+            started_at: self.started_at.to_rfc3339(),
+            steam_app_id: self.steam_app_id,
+            exe_name: self.exe_name.clone(),
+            minutes: self.minutes(),
+            saved_at: now.to_rfc3339(),
+        }
     }
 
     fn payload(&self, final_write: bool) -> serde_json::Value {
@@ -167,6 +190,9 @@ pub struct PendingPlatformPrompt {
 #[derive(Debug, Clone, Serialize)]
 pub struct PendingResumePrompt {
     pub exe_name: String,
+    /// The process this prompt is about — "Not now" quiets this launch only
+    /// (`Shared::resume_declined`).
+    pub pid: u32,
     pub game_id: String,
     pub title: String,
     /// `"completed"` — accepting creates a brand-new row (a replay).
@@ -195,6 +221,14 @@ pub struct Shared {
     /// reappear the moment it is dealt with, while a question that was never
     /// answered still comes back next time the app starts.
     pub skip_for_now: HashSet<String>,
+    /// Exe name -> the process id of the launch where the user answered a
+    /// resume/replay/backlog prompt with "Not now". That launch is left alone
+    /// — never re-identified, never re-prompted — for as long as it runs; the
+    /// entry is dropped once the process is gone (`forget_closed_launches`),
+    /// so opening the game again asks again. Keyed by launch rather than by
+    /// exe name for the whole run, which is what `skip_for_now` would have
+    /// done: "not now" means this sitting, not until the tracker restarts.
+    pub resume_declined: HashMap<String, u32>,
     /// Steam app ids already put to the site this run, so a game that is
     /// running but owned-and-not-trackable (backlog, say) is not asked about
     /// on every single poll. Cleared alongside `state` on every refresh
@@ -256,12 +290,99 @@ impl Tracker {
 }
 
 fn notify(app: &AppHandle, title: &str, body: &str) {
+    log::info!("notification: {title}: {body}");
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
 /// Tell the UI to re-read the status.
 fn ping_ui(app: &AppHandle) {
     let _ = app.emit("status-changed", ());
+}
+
+/// Carry on with a session handed over across an update: same id, same start
+/// time, so the site keeps one continuous session. Its clock runs from the
+/// original start — the game was running the whole time the app updated, so
+/// that time counts. None when it's too old to be the same sitting (or its
+/// times are unreadable).
+pub fn resume_session(
+    saved: &config::SavedSession,
+    now: DateTime<Utc>,
+    now_instant: Instant,
+) -> Option<Session> {
+    let started_at = DateTime::parse_from_rfc3339(&saved.started_at).ok()?.with_timezone(&Utc);
+    let saved_at = DateTime::parse_from_rfc3339(&saved.saved_at).ok()?.with_timezone(&Utc);
+    let since_saved = (now - saved_at).to_std().unwrap_or_default();
+    if since_saved > RESUME_WITHIN {
+        return None;
+    }
+    let running_for = (now - started_at).to_std().unwrap_or_default();
+    Some(Session {
+        game_id: saved.game_id.clone(),
+        title: saved.title.clone(),
+        client_session_id: saved.client_session_id.clone(),
+        started_at,
+        started_instant: now_instant.checked_sub(running_for).unwrap_or(now_instant),
+        last_checkpoint: now_instant,
+        steam_app_id: saved.steam_app_id,
+        exe_name: saved.exe_name.clone(),
+    })
+}
+
+/// The final checkpoint for a handed-over session that won't be carried on
+/// (the game closed during the update, or too long passed): it ends when the
+/// app handed it over, with the minutes it had then.
+pub fn saved_final_payload(saved: &config::SavedSession) -> serde_json::Value {
+    let mut payload = serde_json::json!({
+        "clientSessionId": saved.client_session_id,
+        "minutes": saved.minutes,
+        "startedAt": saved.started_at,
+        "endedAt": saved.saved_at,
+    });
+    if let Some(app_id) = saved.steam_app_id {
+        payload["steamAppId"] = serde_json::json!(app_id);
+    }
+    if let Some(exe) = &saved.exe_name {
+        payload["exeName"] = serde_json::json!(exe);
+    }
+    payload
+}
+
+/// Just before an update installs and closes the app: save the session in
+/// progress for the new version to carry on with, and checkpoint it, so even
+/// if it's never picked up nothing since the last checkpoint is lost. An
+/// unreachable site queues the checkpoint on disk; the new version sends it.
+pub async fn hand_over_session(app: &AppHandle) {
+    let tracker = app.state::<Tracker>();
+    let Some(session) = tracker.shared.lock().unwrap().session.clone() else { return };
+    config::save_resume(&tracker.data_dir, &session.to_saved(Utc::now()));
+    let (base, token) = {
+        let config = tracker.snapshot_config();
+        (config.base(), config.token.unwrap_or_default())
+    };
+    log::info!("handing over {} for the update", session.title);
+    let _ = tokio::time::timeout(HANDOVER_TIMEOUT, checkpoint(app, &base, &token)).await;
+}
+
+/// Quitting from the tray: end the session properly first, as closing the
+/// game would, so the time since the last checkpoint isn't lost.
+pub async fn end_session_for_quit(app: &AppHandle) {
+    let (base, token) = {
+        let config = app.state::<Tracker>().snapshot_config();
+        (config.base(), config.token.unwrap_or_default())
+    };
+    let _ = tokio::time::timeout(HANDOVER_TIMEOUT, stop_session(app, &base, &token)).await;
+}
+
+/// Whether the user said "Not now" to a resume/replay/backlog prompt for
+/// this very launch of the program (same exe, same process).
+pub fn declined_this_launch(declined: &HashMap<String, u32>, candidate: &detect::Candidate) -> bool {
+    declined.get(&candidate.exe_name) == Some(&candidate.pid)
+}
+
+/// Drops "Not now" answers whose launch has ended, so the next launch of the
+/// same game is asked again.
+pub fn forget_closed_launches(declined: &mut HashMap<String, u32>, candidates: &[detect::Candidate]) {
+    declined.retain(|exe, pid| candidates.iter().any(|c| &c.exe_name == exe && c.pid == *pid));
 }
 
 /// Shared by every identify path's `"untracked"` arm, since all three land
@@ -274,7 +395,8 @@ fn ping_ui(app: &AppHandle) {
 /// Returns true when a prompt was shown — the caller treats that exactly
 /// like a successful identification for this tick, so the ordinary
 /// "is this a game?" toast doesn't also fire for the same program.
-fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, exe_name: &str) -> bool {
+fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, candidate: &detect::Candidate) -> bool {
+    let exe_name = candidate.exe_name.as_str();
     let Some(kind) = response.resumable.as_deref() else { return false };
     let Some(game_id) = response.game_id.clone() else { return false };
     let title = response.title.clone().unwrap_or_else(|| exe_name.to_string());
@@ -288,6 +410,7 @@ fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, exe_na
     );
     app.state::<Tracker>().shared.lock().unwrap().pending_resume_prompt = Some(PendingResumePrompt {
         exe_name: exe_name.to_string(),
+        pid: candidate.pid,
         game_id,
         title: title.clone(),
         kind: kind.to_string(),
@@ -343,9 +466,18 @@ pub async fn run_loop(app: AppHandle) {
     // Remembers which processes have been judged, so polling every ten
     // seconds does not re-walk the same programs' modules forever.
     let mut judge = detect::GameJudge::default();
+    // Roblox (and only Roblox) must have a visible window to count as being
+    // played — it lives on in the tray after you stop. See detect.rs.
+    let mut window_grace = detect::WindowGrace::default();
     let mut state_fetched: Option<Instant> = None;
     // At startup, then daily (hourly after a failure).
     let mut list_check_due = Instant::now();
+    // A session the previous version handed over when it closed for an
+    // update. Decided on the first tick that knows what's being played.
+    let mut handed_over = config::take_resume(&app.state::<Tracker>().data_dir);
+    if let Some(saved) = &handed_over {
+        log::info!("found a session handed over by the previous version ({})", saved.title);
+    }
 
     loop {
         let tracker = app.state::<Tracker>();
@@ -415,6 +547,8 @@ pub async fn run_loop(app: AppHandle) {
             }
         }
         judge.retain_running(&candidates.iter().map(|c| c.pid).collect());
+        // A "Not now" lasts only as long as the launch it was given for.
+        forget_closed_launches(&mut tracker.shared.lock().unwrap().resume_declined, &candidates);
         let steam_app_id = detect::steam_running_app_id();
 
         let (playing, executables) = {
@@ -435,6 +569,9 @@ pub async fn run_loop(app: AppHandle) {
         if matched.is_none() {
             for candidate in &candidates {
                 if let Some(game_id) = executables.get(&candidate.exe_name) {
+                    if !window_grace.is_playing(candidate) {
+                        continue;
+                    }
                     if let Some(game) = playing.iter().find(|g| &g.id == game_id) {
                         matched = Some((game.clone(), None, Some(candidate.exe_name.clone())));
                         break;
@@ -445,6 +582,27 @@ pub async fn run_loop(app: AppHandle) {
 
         // ── Start / stop ────────────────────────────────────────────────────
         let current_game_id = tracker.shared.lock().unwrap().session.as_ref().map(|s| s.game_id.clone());
+
+        // ── A session handed over across an update ──────────────────────────
+        // Only once the state has loaded — before then nothing can match, and
+        // "the game isn't running" would be a false conclusion. Same game
+        // still running: carry on with that session. Otherwise it's closed
+        // off where the previous version left it.
+        let mut resumed: Option<Session> = None;
+        let state_loaded = tracker.shared.lock().unwrap().state.is_some();
+        if state_loaded {
+            if let Some(saved) = handed_over.take() {
+                let same_game = current_game_id.is_none()
+                    && matches!(&matched, Some((game, _, _)) if game.id == saved.game_id);
+                if same_game {
+                    resumed = resume_session(&saved, Utc::now(), Instant::now());
+                }
+                if resumed.is_none() {
+                    log::info!("closing off {}, handed over but not carried on", saved.title);
+                    send_or_queue(&app, &base, &token, saved_final_payload(&saved)).await;
+                }
+            }
+        }
 
         // TEMP DIAG: one line per tick when wow.exe is seen running.
         if let Some(c) = candidates.iter().find(|c| c.exe_name == "wow.exe") {
@@ -472,19 +630,28 @@ pub async fn run_loop(app: AppHandle) {
                 if current_game_id.is_some() {
                     stop_session(&app, &base, &token).await;
                 }
-                let session = Session {
-                    game_id: game.id.clone(),
-                    title: game.title.clone(),
-                    client_session_id: uuid::Uuid::new_v4().to_string(),
-                    started_at: Utc::now(),
-                    started_instant: Instant::now(),
-                    last_checkpoint: Instant::now(),
-                    steam_app_id: *app_id,
-                    exe_name: exe.clone(),
-                };
-                tracker.shared.lock().unwrap().session = Some(session);
-                log::info!("started tracking {} (steam {:?}, exe {:?})", game.title, app_id, exe);
-                notify(&app, "Now tracking", &format!("{} — your hours are being logged.", game.title));
+                if let Some(mut session) = resumed.take() {
+                    // Carrying on across an update: the same session, quietly
+                    // — the game never stopped, so neither does the tracking.
+                    session.steam_app_id = *app_id;
+                    session.exe_name = exe.clone();
+                    log::info!("carried on tracking {} after the update ({}m so far)", game.title, session.minutes());
+                    tracker.shared.lock().unwrap().session = Some(session);
+                } else {
+                    let session = Session {
+                        game_id: game.id.clone(),
+                        title: game.title.clone(),
+                        client_session_id: uuid::Uuid::new_v4().to_string(),
+                        started_at: Utc::now(),
+                        started_instant: Instant::now(),
+                        last_checkpoint: Instant::now(),
+                        steam_app_id: *app_id,
+                        exe_name: exe.clone(),
+                    };
+                    tracker.shared.lock().unwrap().session = Some(session);
+                    log::info!("started tracking {} (steam {:?}, exe {:?})", game.title, app_id, exe);
+                    notify(&app, "Now tracking", &format!("{} — your hours are being logged.", game.title));
+                }
                 // Without this, play_sessions gets no row — and the site no
                 // sign anyone is playing — until the first periodic checkpoint,
                 // up to checkpoint_minutes later. Sent immediately so a "now
@@ -507,6 +674,13 @@ pub async fn run_loop(app: AppHandle) {
                 // is the user asked anything — and a title guessed from the
                 // exe name only ever *suggests* (the toast's search box),
                 // never files a game on its own (tracker review T-H1).
+                // A launch the user said "Not now" to is left out entirely:
+                // re-identifying it would only raise the same prompt again
+                // (and ask the site the same question every few seconds).
+                let candidates: Vec<detect::Candidate> = {
+                    let shared = tracker.shared.lock().unwrap();
+                    candidates.iter().filter(|c| !declined_this_launch(&shared.resume_declined, c)).cloned().collect()
+                };
                 // TEMP DIAG: time each step
                 let t0 = std::time::Instant::now();
                 let m = identify_master_list(&app, &base, &token, &candidates).await;
@@ -589,10 +763,10 @@ async fn checkpoint(app: &AppHandle, base: &str, token: &str) {
 
 pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
     let tracker = app.state::<Tracker>();
-    let (payload, title) = {
+    let (payload, title, minutes) = {
         let mut shared = tracker.shared.lock().unwrap();
         match shared.session.take() {
-            Some(session) => (session.payload(true), session.title),
+            Some(session) => (session.payload(true), session.title.clone(), session.minutes()),
             None => return,
         }
     };
@@ -600,14 +774,12 @@ pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
     log::info!("stopping tracking for {title}");
     let result = send_or_queue(app, base, token, payload).await;
     let (heading, body) = match result {
+        // The whole session's length, from the tracker's own clock — not the
+        // response's `added_hours`, which is only what this final checkpoint
+        // added since the previous one (a few minutes, after a long session).
         Some(res) if res.ok => (
             "Stopped tracking",
-            format!(
-                "{} — {}h added, now {}h.",
-                res.title.unwrap_or(title),
-                res.added_hours.unwrap_or(0.0),
-                res.total_hours.unwrap_or(0.0)
-            ),
+            stopped_message(&res.title.unwrap_or(title), minutes, res.total_hours),
         ),
         // The server refused it — almost always because the game is no longer
         // set to Playing. Say so, rather than claiming hours were saved.
@@ -625,6 +797,30 @@ pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
     };
     notify(app, heading, &body);
     ping_ui(app);
+}
+
+/// "45m", "2h", "2h 5m" — the same style the website uses for sessions.
+pub fn format_minutes(minutes: u64) -> String {
+    let (h, m) = (minutes / 60, minutes % 60);
+    match (h, m) {
+        (0, m) => format!("{m}m"),
+        (h, 0) => format!("{h}h"),
+        (h, m) => format!("{h}h {m}m"),
+    }
+}
+
+/// The "Stopped tracking" notification: this session's length, and the
+/// game's new total when the site sent one back.
+pub fn stopped_message(title: &str, session_minutes: u64, total_hours: Option<f64>) -> String {
+    let played = format!("{title} — played {} this session", format_minutes(session_minutes));
+    match total_hours {
+        // Rounded to the 0.1h the site stores, so a float never prints as
+        // 32.100000001. Left off below 0.1h: a brand-new game's first few
+        // minutes really are 0h on the site (it counts in 6-minute steps),
+        // but "0h in total" right after playing reads as broken.
+        Some(total) if total >= 0.05 => format!("{played}, {:.1}h in total.", total).replace(".0h in total", "h in total"),
+        _ => format!("{played}."),
+    }
 }
 
 /// Send a checkpoint, or keep it for later if the site cannot be reached.
@@ -782,7 +978,7 @@ async fn identify_steam_games(
                 // remember not to ask again until the next state refresh.
                 // Completed/DNF get a prompt instead (`resumable`) — those
                 // are "already played before", worth asking about.
-                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                if maybe_prompt_resume(app, &response, candidate) {
                     return true;
                 }
                 log::info!(
@@ -860,7 +1056,7 @@ async fn identify_master_list(
             }
             "tracked" => return true,
             "untracked" => {
-                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                if maybe_prompt_resume(app, &response, candidate) {
                     return true;
                 }
                 log::info!(
@@ -959,7 +1155,7 @@ async fn identify_by_title(
                 return true;
             }
             "untracked" => {
-                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                if maybe_prompt_resume(app, &response, candidate) {
                     return true;
                 }
                 // Worth remembering: no link exists, and nothing changes here
@@ -1114,5 +1310,105 @@ fn maybe_prompt(
         toast::show(app, &prompt.exe_name);
         ping_ui(app);
         return;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn running(exe: &str, pid: u32) -> detect::Candidate {
+        detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true }
+    }
+
+    fn saved(started_at: &str, saved_at: &str) -> config::SavedSession {
+        config::SavedSession {
+            game_id: "g1".into(),
+            title: "Hades".into(),
+            client_session_id: "abc".into(),
+            started_at: started_at.into(),
+            steam_app_id: Some(1145360),
+            exe_name: None,
+            minutes: 95,
+            saved_at: saved_at.into(),
+        }
+    }
+
+    fn at(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+    }
+
+    #[test]
+    fn an_update_carries_on_the_same_session_counting_the_time_it_took() {
+        let s = saved("2026-11-17T20:00:00Z", "2026-11-17T21:35:00Z");
+        let now_instant = Instant::now();
+        // Back two minutes later, the game still running.
+        let session = resume_session(&s, at("2026-11-17T21:37:00Z"), now_instant).expect("carried on");
+        assert_eq!(session.client_session_id, "abc");
+        assert_eq!(session.started_at, at("2026-11-17T20:00:00Z"));
+        // Its clock runs from the original start: 97 minutes, update included.
+        assert_eq!(now_instant.duration_since(session.started_instant).as_secs(), 97 * 60);
+        assert_eq!(session.steam_app_id, Some(1145360));
+    }
+
+    #[test]
+    fn a_handover_that_is_too_old_or_unreadable_is_not_carried_on() {
+        let s = saved("2026-11-17T20:00:00Z", "2026-11-17T21:35:00Z");
+        assert!(resume_session(&s, at("2026-11-17T22:06:00Z"), Instant::now()).is_none());
+        assert!(resume_session(&saved("not a date", "2026-11-17T21:35:00Z"), at("2026-11-17T21:36:00Z"), Instant::now()).is_none());
+    }
+
+    #[test]
+    fn a_handover_not_carried_on_is_closed_off_where_it_was_left() {
+        let p = saved_final_payload(&saved("2026-11-17T20:00:00Z", "2026-11-17T21:35:00Z"));
+        assert_eq!(p["clientSessionId"], "abc");
+        assert_eq!(p["minutes"], 95);
+        assert_eq!(p["endedAt"], "2026-11-17T21:35:00Z");
+        assert_eq!(p["steamAppId"], 1145360);
+        assert!(p.get("exeName").is_none());
+    }
+
+    #[test]
+    fn stopped_message_reports_the_whole_session_not_the_last_checkpoint() {
+        // A 2h 5m session whose final checkpoint only added 0.1h.
+        assert_eq!(
+            stopped_message("Mortal Kombat 1", 125, Some(32.1)),
+            "Mortal Kombat 1 — played 2h 5m this session, 32.1h in total."
+        );
+        assert_eq!(stopped_message("Hades", 45, Some(12.0)), "Hades — played 45m this session, 12h in total.");
+        assert_eq!(stopped_message("Hades", 120, None), "Hades — played 2h this session.");
+        // A brand-new game's first couple of minutes: no "0h in total".
+        assert_eq!(stopped_message("Hades", 2, Some(0.0)), "Hades — played 2m this session.");
+        // A float that isn't exactly representable still prints cleanly.
+        assert_eq!(stopped_message("Hades", 6, Some(0.1 + 0.2)), "Hades — played 6m this session, 0.3h in total.");
+    }
+
+    #[test]
+    fn not_now_quiets_only_the_launch_it_was_given_for() {
+        let mut declined = HashMap::new();
+        declined.insert("hades.exe".to_string(), 100);
+
+        // Same launch: stays quiet.
+        assert!(declined_this_launch(&declined, &running("hades.exe", 100)));
+        // A different launch of the same game: asks again.
+        assert!(!declined_this_launch(&declined, &running("hades.exe", 200)));
+        // A different game: unaffected.
+        assert!(!declined_this_launch(&declined, &running("celeste.exe", 100)));
+    }
+
+    #[test]
+    fn closing_the_game_forgets_the_not_now() {
+        let mut declined = HashMap::new();
+        declined.insert("hades.exe".to_string(), 100);
+        declined.insert("celeste.exe".to_string(), 300);
+
+        // Hades still running as the same process; Celeste closed.
+        forget_closed_launches(&mut declined, &[running("hades.exe", 100), running("other.exe", 300)]);
+        assert_eq!(declined.get("hades.exe"), Some(&100));
+        assert!(!declined.contains_key("celeste.exe"));
+
+        // Hades closed and reopened as a new process: forgotten too.
+        forget_closed_launches(&mut declined, &[running("hades.exe", 101)]);
+        assert!(declined.is_empty());
     }
 }

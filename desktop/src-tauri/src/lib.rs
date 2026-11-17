@@ -354,11 +354,19 @@ async fn revoke_device(app: AppHandle, device_id: String) -> Result<(), String> 
 /// version string here to re-resolve from. On a successful Windows install
 /// the installer takes over and this process exits before ever returning,
 /// so an `Ok(())` reaching the frontend is not the expected case there.
+///
+/// Downloaded and installed as two steps, not `download_and_install`, so a
+/// game being played can be handed over in between: tracking carries on
+/// through the download, then the session is saved for the new version to
+/// carry on with and checkpointed (`tracker::hand_over_session`), and only
+/// then does the installer close the app.
 #[tauri::command]
 async fn install_update(app: AppHandle) -> Result<(), String> {
     let update = app.state::<UpdateState>().0.lock().unwrap().take();
     let Some(update) = update else { return Err("no update is pending".into()) };
-    update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())
+    let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    tracker::hand_over_session(&app).await;
+    update.install(bytes).map_err(|e| e.to_string())
 }
 
 /// Clear the prompt.
@@ -460,8 +468,9 @@ async fn set_platform(app: AppHandle, platform: String) -> Result<(), String> {
 /// `accept: false` is deliberately not written anywhere permanent — unlike
 /// "not a game", declining says nothing about whether the program is a
 /// game (it plainly is, already in the library), only that today isn't the
-/// day for this. `skip_for_now` just quiets this run; a fresh launch asks
-/// again.
+/// day for this. It quiets this launch of the game only
+/// (`Shared::resume_declined`): close the game and open it again, and it
+/// asks again.
 #[tauri::command]
 async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<String>) -> Result<(), String> {
     let tracker = app.state::<Tracker>();
@@ -471,7 +480,7 @@ async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<S
     if !accept {
         let mut shared = tracker.shared.lock().unwrap();
         shared.pending_resume_prompt = None;
-        shared.skip_for_now.insert(prompt.exe_name.clone());
+        shared.resume_declined.insert(prompt.exe_name.clone(), prompt.pid);
         drop(shared);
         let _ = app.emit("status-changed", ());
         return Ok(());
@@ -484,9 +493,10 @@ async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<S
     let response = api::post_resume(&base, &token, &prompt.game_id, &prompt.kind, status.as_deref(), &prompt.exe_name).await?;
     log::info!(
         "{} {} ({})",
-        match prompt.kind.as_str() {
-            "dnf" => "resumed",
-            "backlog" => "started tracking",
+        match (prompt.kind.as_str(), status.as_deref()) {
+            ("dnf", _) => "resumed",
+            ("backlog", _) => "started tracking",
+            (_, Some("ambient")) => "tracking as ambient",
             _ => "replaying",
         },
         response.title,
@@ -692,7 +702,16 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
-                    "quit" => app.exit(0),
+                    // End the session properly first (a final checkpoint, as
+                    // closing the game would), so the minutes since the last
+                    // checkpoint aren't lost. Bounded, so it can't hang.
+                    "quit" => {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            tracker::end_session_for_quit(&app).await;
+                            app.exit(0);
+                        });
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
