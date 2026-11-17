@@ -7,6 +7,7 @@ import { cleanSubmittedSuffix, uniqueByBasename } from '@/lib/detectable'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent } from '@/lib/igdb'
+import { pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
 
 export const dynamic = 'force-dynamic'
 
@@ -232,20 +233,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Already theirs? Match on the Steam id first where we have one — it is
   // exact — then on the IGDB id, which catches a copy added before Steam ids
   // were being stored, or one found by name in the first place.
-  const ownedQuery = steamAppId != null ? `steam_appid.eq.${steamAppId},igdb_id.eq.${igdbId}` : `igdb_id.eq.${igdbId}`
-  const { data: owned } = await (sb.from('games') as any)
-    .select('id, title, status')
+  // The whole library, most recently touched first: a game can own several
+  // rows (Completed story run, Ambient multiplayer, Playing replay), and
+  // lib/trackable-row.ts picks among them — Playing, then Ambient, then the
+  // most recent. That's what makes a replay created on the website take
+  // over, and what sends multiplayer back to the Ambient row once the replay
+  // is Completed, instead of re-raising the "is this a replay?" prompt.
+  const { data: libraryData } = await (sb.from('games') as any)
+    .select('id, title, status, igdb_id, rawg_id, steam_appid')
     .eq('user_id', userId)
-    .or(ownedQuery)
     .order('updated_at', { ascending: false })
-    .limit(1)
-  let existing = (owned ?? [])[0] as { id: string; title: string; status: string } | undefined
-  // Picking the most-recently-updated matching row (above and in the
-  // version_parent fallback below) is also what makes a replay the user has
-  // already created by hand on the website — via the Add Game form's own
-  // replay detection — take over automatically: that row is newer than the
-  // original Completed one, so it's the one found here, already Playing,
-  // with nothing special needed to recognise it.
+  const library = (libraryData ?? []) as LibraryRow[]
+  const owned = library.filter(g => g.igdb_id === igdbId || (steamAppId != null && g.steam_appid === steamAppId))
+  const firstMatch = pickRow(owned)
+  let existing = firstMatch ? resolveRow(firstMatch, library) : undefined
   // Backfilled onto the matched row below, only when the match came from
   // this fallback — an exact `existing` match already has the right id.
   let editionSteamAppId: number | null = null
@@ -258,12 +259,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!existing) {
     const parentId = await getVersionParent(igdbId)
     if (parentId) {
-      const { data: parentOwned } = await (sb.from('games') as any)
-        .select('id, title, status')
-        .eq('user_id', userId)
-        .eq('igdb_id', parentId)
-        .limit(1)
-      existing = (parentOwned ?? [])[0] as { id: string; title: string; status: string } | undefined
+      const parentMatch = pickRow(library.filter(g => g.igdb_id === parentId))
+      existing = parentMatch ? resolveRow(parentMatch, library) : undefined
       if (existing && steamAppId != null) editionSteamAppId = steamAppId
     }
   }

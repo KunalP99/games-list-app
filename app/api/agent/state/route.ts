@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { accentPalette } from '@/lib/accent'
+import { isTrackable, resolveRow, sameGame, type LibraryRow } from '@/lib/trackable-row'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,12 +28,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .select('display_name, username, theme_preference, accent_colour')
       .eq('id', identity.userId)
       .maybeSingle(),
+    // The whole library, not just the trackable rows: an exe link can point
+    // at a row that's since been Completed, and the rule in
+    // lib/trackable-row.ts needs its siblings to send the hours elsewhere.
     (sb.from('games') as any)
-      .select('id, title, status, steam_appid, hours_played, platform')
+      .select('id, title, status, steam_appid, igdb_id, rawg_id, hours_played, platform')
       .eq('user_id', identity.userId)
-      // Ambient games are tracked exactly like playing ones; they are simply
-      // the ongoing games that sit outside the wheel.
-      .in('status', ['playing', 'ambient'])
       .order('updated_at', { ascending: false }),
     (sb.from('game_executables') as any)
       .select('exe_name, game_id')
@@ -55,23 +56,46 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const profile = profileRes.data as { display_name: string | null; username: string; theme_preference: string | null; accent_colour: string | null } | null
-  const games = (gamesRes.data ?? []) as { id: string; title: string; steam_appid: number | null; hours_played: number | null; platform: string | null }[]
+  const library = (gamesRes.data ?? []) as (LibraryRow & { hours_played: number | null; platform: string | null })[]
   const links = (linksRes.data ?? []) as { exe_name: string; game_id: string }[]
   const ignored = (ignoredRes.data ?? []) as { exe_name: string }[]
+
+  // Ambient games are tracked exactly like playing ones; they are simply the
+  // ongoing games that sit outside the wheel. Playing rows first: the agent
+  // takes the first row matching a running Steam game, so this order is what
+  // makes a replay win over the same game's Ambient row (lib/trackable-row.ts).
+  const trackable = library
+    .filter(isTrackable)
+    .sort((a, b) => Number(a.status !== 'playing') - Number(b.status !== 'playing'))
+
+  // Each exe link, redirected to the row its hours belong to now — a link
+  // made for the Ambient row still feeds a Playing replay of the same game,
+  // and one left on a since-Completed replay falls back to the Ambient row.
+  const byId = new Map(library.map(g => [g.id, g]))
+  const executables = Object.fromEntries(links.map(l => {
+    const linked = byId.get(l.game_id)
+    return [l.exe_name, linked ? resolveRow(linked, library).id : l.game_id]
+  }))
+  const linkedIds = new Set(Object.values(executables))
 
   // Same default the rest of the app uses for an unset accent.
   const accent = profile?.accent_colour ?? '#ff5722'
 
   return NextResponse.json({
-    playing: games.map(g => ({
-      id: g.id,
-      title: g.title,
-      steamAppId: g.steam_appid,
-      hours: g.hours_played ?? 0,
-      linked: links.some(l => l.game_id === g.id) || g.steam_appid != null,
-      platform: g.platform,
-    })),
-    executables: Object.fromEntries(links.map(l => [l.exe_name, l.game_id])),
+    playing: trackable.map(g => {
+      // A replay row the wheel or the website created may carry no Steam id
+      // of its own; borrowing its siblings' lets the running game find it.
+      const steamAppId = g.steam_appid ?? library.find(r => r.steam_appid != null && sameGame(r, g))?.steam_appid ?? null
+      return {
+        id: g.id,
+        title: g.title,
+        steamAppId,
+        hours: g.hours_played ?? 0,
+        linked: linkedIds.has(g.id) || steamAppId != null,
+        platform: g.platform,
+      }
+    }),
+    executables,
     ignoredExecutables: ignored.map(i => i.exe_name),
     displayName: profile?.display_name ?? profile?.username ?? null,
     theme: profile?.theme_preference ?? 'system',

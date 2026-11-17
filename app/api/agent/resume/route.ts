@@ -53,12 +53,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'kind must be "completed", "dnf" or "backlog"' }, { status: 400 })
   }
   const kind: 'completed' | 'dnf' | 'backlog' = body.kind
-  // Only meaningful (and required) for backlog — dnf/completed each have
-  // exactly one possible outcome, so there's nothing for the caller to pick.
+  // Required for backlog, where there's no single obvious answer. Optional
+  // for completed: "ambient" there is "Track as Ambient" — the story is done
+  // and this is the multiplayer (or other ongoing play) since, so it gets its
+  // own Ambient row rather than a replay. Absent, a completed match is a
+  // replay as before, which keeps older agents working unchanged.
   if (kind === 'backlog' && body?.status !== 'playing' && body?.status !== 'ambient') {
     return NextResponse.json({ error: 'status must be "playing" or "ambient" when kind is "backlog"' }, { status: 400 })
   }
-  const targetStatus: 'playing' | 'ambient' = kind === 'backlog' ? body.status : 'playing'
+  if (kind === 'completed' && body?.status != null && body.status !== 'playing' && body.status !== 'ambient') {
+    return NextResponse.json({ error: 'status must be "playing" or "ambient" when given' }, { status: 400 })
+  }
+  const targetStatus: 'playing' | 'ambient' =
+    kind === 'backlog' || (kind === 'completed' && body?.status === 'ambient') ? body.status : 'playing'
   const exeName = typeof body?.exeName === 'string' && body.exeName.trim()
     ? normaliseExeName(body.exeName)
     : null
@@ -103,14 +110,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: true, gameId: game.id, title: game.title })
   }
 
-  // completed: a new row, carrying the old one's display identity only.
+  // completed: a new row, carrying the old one's display identity only — a
+  // replay (Playing), or with "Track as Ambient" an Ambient row for the play
+  // that comes after finishing it. Not a replay then: nothing is being
+  // played through again, and Ambient never completes.
   const { data: created, error } = await (sb.from('games') as any)
     .insert({
       user_id: userId,
       title: game.title,
       developer: game.developer,
-      status: 'playing',
-      is_replay: true,
+      status: targetStatus,
+      is_replay: targetStatus === 'playing',
       platform: game.platform,
       start_date: new Date().toISOString().slice(0, 10),
       steam_appid: game.steam_appid,

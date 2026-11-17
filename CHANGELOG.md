@@ -7,6 +7,18 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Story, multiplayer and replays of one game now track to the right entry.** A game can have several entries: the Completed story run, an Ambient entry for the multiplayer played since, and later a Playing replay. The tracker routes (state, session, identify) now share one rule in `lib/trackable-row.ts`: hours go to the game's **Playing** entry, then its **Ambient** one. So:
+  - a replay takes the hours while it's in progress, even when the exe was linked to the Ambient entry or the replay has no Steam id of its own;
+  - once the replay is Completed, tracking falls back to the Ambient entry by itself, with no prompt and nothing to re-link.
+
+  Previously Steam games went to whichever entry was edited last, and linked exes stuck to their old entry. This also works with the tracker version people already have installed.
+- **The wheel creates a proper replay for a completed game that also has an Ambient entry.** It used to convert the Ambient entry into the Playing one, which:
+  - carried all the multiplayer hours into the replay, inflating its completion tickets;
+  - dropped the replay flag;
+  - lost the Ambient entry.
+
+  Now a Completed entry means a fresh replay starting from 0 hours. An Ambient entry for a game never completed is still promoted to Playing, as before.
+- **"Track as Ambient" support for the replay prompt (website side).** `/api/agent/resume` accepts `status: "ambient"` for a Completed match, creating an Ambient entry (not a replay) for play after finishing a game, such as multiplayer. The tracker button ships in the next tracker release.
 - **Play Sessions card: hover a session to see its day's total.** Each day's sessions form one block, so hovering highlights the whole day as a single shape and floats a small card above it ("Tue 3 Nov · 2h 10m · 3 sessions"). The total covers every session that day, even ones hidden behind "Show all". The card is positioned against the window, so the scrolling expanded list can't clip it, and it hides when you scroll.
 - **Play Sessions card: long durations stay on one line.** A session like "14h 24m" was wider than the duration column, so it wrapped onto two lines. The column now grows to fit and never wraps.
 - **Play Sessions card: the date appears once per day.** When a game was played more than once on a day, the date shows only on the first session. The rest sit under it with no divider, so each day reads as one group.

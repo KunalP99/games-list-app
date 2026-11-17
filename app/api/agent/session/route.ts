@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { validateSessionPayload, computeHoursDelta, addHours } from '@/lib/agent-session'
 import { checkAndAwardAchievements } from '@/lib/achievements'
+import { isTrackable, pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,34 +38,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { clientSessionId, minutes, startedAt, endedAt, steamAppId, exeName } = parsed.value
 
   // ── Resolve which game this is ────────────────────────────────────────────
-  let game: GameRow | null = null
+  // Several rows per game are legitimate (a Completed story run, an Ambient
+  // row for the multiplayer since, a Playing replay). Whatever matched — the
+  // Steam id or the exe link — the hours go to the row lib/trackable-row.ts
+  // picks among that game's rows: Playing, then Ambient. The same rule
+  // /api/agent/state uses, so the agent and the server agree on the game.
+  const { data: libraryData, error: libraryError } = await (sb.from('games') as any)
+    .select('id, title, status, hours_played, steam_appid, igdb_id, rawg_id')
+    .eq('user_id', identity.userId)
+    .order('updated_at', { ascending: false })
+  if (libraryError) return NextResponse.json({ error: libraryError.message }, { status: 500 })
+  const library = (libraryData ?? []) as (GameRow & LibraryRow)[]
+
+  let game: (GameRow & LibraryRow) | null = null
 
   if (steamAppId != null) {
-    const { data } = await (sb.from('games') as any)
-      .select('id, title, status, hours_played')
-      .eq('user_id', identity.userId)
-      .eq('steam_appid', steamAppId)
-      .in('status', ['playing', 'ambient'])
-      // Several rows per title are legitimate (replays); the most recently
-      // touched one is the one being played.
-      .order('updated_at', { ascending: false })
-      .limit(1)
-    game = ((data ?? [])[0] ?? null) as GameRow | null
+    const bySteam = pickRow(library.filter(g => g.steam_appid === steamAppId))
+    if (bySteam) game = resolveRow(bySteam, library)
   }
 
-  if (!game && exeName) {
+  // As before, the exe link is the fallback when the Steam id found nothing
+  // trackable.
+  if ((!game || !isTrackable(game)) && exeName) {
     const { data: link } = await (sb.from('game_executables') as any)
       .select('game_id')
       .eq('user_id', identity.userId)
       .eq('exe_name', exeName)
       .maybeSingle()
-    if (link?.game_id) {
-      const { data } = await (sb.from('games') as any)
-        .select('id, title, status, hours_played')
-        .eq('user_id', identity.userId)
-        .eq('id', link.game_id)
-        .maybeSingle()
-      game = (data ?? null) as GameRow | null
+    const linked = link?.game_id ? library.find(g => g.id === link.game_id) : undefined
+    if (linked) {
+      const resolved = resolveRow(linked, library)
+      if (!game || isTrackable(resolved)) game = resolved
     }
   }
 

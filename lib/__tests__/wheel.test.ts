@@ -44,6 +44,23 @@ describe('pickWinner', () => {
   })
 })
 
+describe('decideWonGameAction: completed + ambient', () => {
+  it('inserts a fresh replay and leaves the post-completion Ambient row alone', () => {
+    // Story completed, multiplayer since as Ambient, then the wheel picks it.
+    expect(decideWonGameAction([
+      { id: 'a1', status: 'ambient' },
+      { id: 'c1', status: 'completed' },
+    ])).toEqual({ action: 'insert', isReplay: true })
+  })
+
+  it('still claims an Ambient row for a game never completed', () => {
+    expect(decideWonGameAction([
+      { id: 'a1', status: 'ambient' },
+      { id: 'd1', status: 'dnf' },
+    ])).toEqual({ action: 'flip', gameId: 'a1' })
+  })
+})
+
 describe('decideWonGameAction', () => {
   it('inserts a plain (non-replay) entry when the game is not owned', () => {
     expect(decideWonGameAction([])).toEqual({ action: 'insert', isReplay: false })
