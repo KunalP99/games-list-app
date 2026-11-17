@@ -83,15 +83,19 @@ impl MasterList {
         let candidates = self.by_name.get(file_name(&path))?;
         candidates
             .iter()
-            .filter(|(suffix, _)| {
-                path == *suffix
-                    || (path.len() > suffix.len()
-                        && path.ends_with(suffix.as_str())
-                        && path.as_bytes()[path.len() - suffix.len() - 1] == b'/')
-            })
+            .filter(|(suffix, _)| ends_with_suffix(&path, suffix))
             .max_by_key(|(suffix, _)| suffix.len())
             .map(|(suffix, id)| Hit { id: *id, suffix: suffix.clone() })
     }
+}
+
+/// Whether a normalised path *is* an ending or ends with `/` + it — so
+/// `hades.exe` matches `…/hades/hades.exe` but never `…/hades2.exe`.
+pub fn ends_with_suffix(path: &str, suffix: &str) -> bool {
+    path == suffix
+        || (path.len() > suffix.len()
+            && path.ends_with(suffix)
+            && path.as_bytes()[path.len() - suffix.len() - 1] == b'/')
 }
 
 /// The ending sent to the site when a user links or adds a game, for the

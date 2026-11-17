@@ -25,6 +25,19 @@ pub struct PlayingGame {
     pub platform: Option<String>,
 }
 
+/// One "this program is that game" link, with the folder it was linked from
+/// (`_forever_/wow.exe`). An exe can have one per folder: WoW Retail and
+/// Forever both run Wow.exe. No folder means an older link.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExeLink {
+    #[serde(rename = "exeName")]
+    pub exe_name: String,
+    #[serde(rename = "pathSuffix", default)]
+    pub path_suffix: Option<String>,
+    #[serde(rename = "gameId")]
+    pub game_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentState {
     #[serde(default)]
@@ -32,6 +45,11 @@ pub struct AgentState {
     /// exe name -> game id
     #[serde(default)]
     pub executables: HashMap<String, String>,
+    /// Every link with its folder (sites from v0.2.2 on). When present it's
+    /// what matching uses — see `tracker::pick_link`; `executables` is the
+    /// one-per-name fallback for an older site.
+    #[serde(rename = "exeLinks", default)]
+    pub exe_links: Vec<ExeLink>,
     /// Executables the user has said to never auto-track, from Settings or
     /// the toast's "Not a game" answer on another machine. Checked before
     /// anything else in `run_loop` — an ignored exe is never judged, never
@@ -177,12 +195,12 @@ pub async fn post_link(
 }
 
 /// Forget that an executable is a game.
-pub async fn post_unlink(base: &str, token: &str, exe_name: &str) -> Result<(), String> {
+pub async fn post_unlink(base: &str, token: &str, exe_name: &str, path_suffix: Option<&str>) -> Result<(), String> {
     let res = client()
         .map_err(|e| e.to_string())?
         .post(format!("{base}/api/agent/unlink"))
         .bearer_auth(token)
-        .json(&serde_json::json!({ "exeName": exe_name }))
+        .json(&serde_json::json!({ "exeName": exe_name, "pathSuffix": path_suffix }))
         .send()
         .await
         .map_err(|e| e.to_string())?;

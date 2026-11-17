@@ -119,8 +119,6 @@ fn start_pairing(app: AppHandle) -> Result<(), String> {
 /// "Yes, that is the game" — link the executable and clear the prompt.
 #[tauri::command]
 async fn confirm_prompt(app: AppHandle) -> Result<(), String> {
-    // TEMP DIAG
-    log::info!("DIAG confirm_prompt entered");
     let (base, token, prompt) = {
         let tracker = app.state::<Tracker>();
         let config = tracker.snapshot_config();
@@ -195,7 +193,8 @@ async fn unlink_executable(app: AppHandle, exe_name: String) -> Result<(), Strin
         let config = app.state::<Tracker>().snapshot_config();
         (config.base(), config.token.clone().unwrap_or_default())
     };
-    api::post_unlink(&base, &token, &exe_name).await?;
+    // No folder to hand here, so every link for this exe goes, as before.
+    api::post_unlink(&base, &token, &exe_name, None).await?;
 
     let tracker = app.state::<Tracker>();
     let mut shared = tracker.shared.lock().unwrap();
@@ -381,8 +380,6 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 /// locally.
 #[tauri::command]
 async fn dismiss_prompt(app: AppHandle, remember: Option<bool>) {
-    // TEMP DIAG
-    log::info!("DIAG dismiss_prompt entered remember={remember:?}");
     let tracker = app.state::<Tracker>();
     let dir = tracker.data_dir.clone();
     let (base, token) = {

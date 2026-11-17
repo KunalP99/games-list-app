@@ -128,6 +128,10 @@ impl Session {
             "clientSessionId": self.client_session_id,
             "minutes": self.minutes(),
             "startedAt": self.started_at.to_rfc3339(),
+            // The game matched here, per folder, so the site needn't guess
+            // from the exe name, which two games can share. (The site still
+            // checks it's yours and trackable.)
+            "gameId": self.game_id,
         });
         if let Some(app_id) = self.steam_app_id {
             payload["steamAppId"] = serde_json::json!(app_id);
@@ -373,6 +377,50 @@ pub async fn end_session_for_quit(app: &AppHandle) {
     let _ = tokio::time::timeout(HANDOVER_TIMEOUT, stop_session(app, &base, &token)).await;
 }
 
+/// Which game a running program's links point to, per folder, so two games
+/// that run the same exe name each keep their own: WoW Retail and Forever
+/// are both `Wow.exe`, from `_retail_\` and `_forever_\`.
+///
+/// 1. A link whose folder matches the program's path wins (the longest, if
+///    several do).
+/// 2. Else a link with no folder (made before folders were recorded).
+/// 3. Else, if the master list recognises this path, no link applies: the
+///    identify chain works out what it really is and links that, which is
+///    how Retail gets its own link beside an existing Forever one.
+/// 4. Else a single link still matches on the name alone, as always: a game
+///    reinstalled somewhere else, or linked by hand and not on the list.
+pub fn pick_link<'a>(
+    links: &'a [api::ExeLink],
+    exe_name: &str,
+    path: Option<&str>,
+    on_master_list: bool,
+) -> Option<&'a str> {
+    let for_exe: Vec<&api::ExeLink> = links.iter().filter(|l| l.exe_name == exe_name).collect();
+    if for_exe.is_empty() {
+        return None;
+    }
+    if let Some(path) = path.map(master_list::normalise) {
+        let by_folder = for_exe
+            .iter()
+            .filter_map(|l| l.path_suffix.as_deref().map(|s| (*l, master_list::normalise(s))))
+            .filter(|(_, suffix)| master_list::ends_with_suffix(&path, suffix))
+            .max_by_key(|(_, suffix)| suffix.len());
+        if let Some((link, _)) = by_folder {
+            return Some(&link.game_id);
+        }
+    }
+    if let Some(legacy) = for_exe.iter().find(|l| l.path_suffix.is_none()) {
+        return Some(&legacy.game_id);
+    }
+    if on_master_list {
+        return None;
+    }
+    match for_exe.as_slice() {
+        [only] => Some(&only.game_id),
+        _ => None,
+    }
+}
+
 /// Whether the user said "Not now" to a resume/replay/backlog prompt for
 /// this very launch of the program (same exe, same process).
 pub fn declined_this_launch(declined: &HashMap<String, u32>, candidate: &detect::Candidate) -> bool {
@@ -551,11 +599,12 @@ pub async fn run_loop(app: AppHandle) {
         forget_closed_launches(&mut tracker.shared.lock().unwrap().resume_declined, &candidates);
         let steam_app_id = detect::steam_running_app_id();
 
-        let (playing, executables) = {
+        let (playing, executables, exe_links, list) = {
             let shared = tracker.shared.lock().unwrap();
+            let list = shared.master_list.clone();
             match &shared.state {
-                Some(state) => (state.playing.clone(), state.executables.clone()),
-                None => (Vec::new(), HashMap::new()),
+                Some(state) => (state.playing.clone(), state.executables.clone(), state.exe_links.clone(), list),
+                None => (Vec::new(), HashMap::new(), Vec::new(), list),
             }
         };
 
@@ -568,7 +617,17 @@ pub async fn run_loop(app: AppHandle) {
         }
         if matched.is_none() {
             for candidate in &candidates {
-                if let Some(game_id) = executables.get(&candidate.exe_name) {
+                // Per folder when the site sends folders (pick_link); by name
+                // alone from an older site.
+                let linked = if exe_links.is_empty() {
+                    executables.get(&candidate.exe_name).cloned()
+                } else {
+                    let on_list = list
+                        .as_ref()
+                        .is_some_and(|l| l.find(candidate.path.as_deref(), &candidate.exe_name).is_some());
+                    pick_link(&exe_links, &candidate.exe_name, candidate.path.as_deref(), on_list).map(str::to_string)
+                };
+                if let Some(game_id) = linked.as_ref() {
                     if !window_grace.is_playing(candidate) {
                         continue;
                     }
@@ -603,24 +662,6 @@ pub async fn run_loop(app: AppHandle) {
                 }
             }
         }
-
-        // TEMP DIAG: one line per tick when wow.exe is seen running.
-        if let Some(c) = candidates.iter().find(|c| c.exe_name == "wow.exe") {
-            let shared = tracker.shared.lock().unwrap();
-            log::info!(
-                "DIAG wow pid={} run={}s path={:?} plausible={} judged={} pending={:?} dismissed={} toast_up={} session={:?}",
-                c.pid,
-                c.run_time_secs,
-                c.path,
-                detect::plausible_candidate(c),
-                judge.judge(c),
-                shared.pending_prompt.as_ref().map(|p| &p.exe_name),
-                shared.toast_dismissed.contains("wow.exe"),
-                app.get_webview_window(toast::LABEL).is_some(),
-                current_game_id,
-            );
-        }
-
 
         match (&matched, &current_game_id) {
             (Some((game, _, _)), Some(current)) if &game.id == current => {
@@ -681,19 +722,10 @@ pub async fn run_loop(app: AppHandle) {
                     let shared = tracker.shared.lock().unwrap();
                     candidates.iter().filter(|c| !declined_this_launch(&shared.resume_declined, c)).cloned().collect()
                 };
-                // TEMP DIAG: time each step
-                let t0 = std::time::Instant::now();
                 let m = identify_master_list(&app, &base, &token, &candidates).await;
-                log::info!("DIAG CHAIN master={m} elapsed={:?}", t0.elapsed());
-                let t1 = std::time::Instant::now();
                 let s = !m && identify_steam_games(&app, &base, &token, &candidates, &mut judge).await;
-                log::info!("DIAG CHAIN steam={s} elapsed={:?}", t1.elapsed());
-                let t2 = std::time::Instant::now();
                 let e = !m && !s && identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
-                log::info!("DIAG CHAIN epic={e} elapsed={:?}", t2.elapsed());
-                let t3 = std::time::Instant::now();
                 let ea = !m && !s && !e && identify_ea_games(&app, &base, &token, &candidates, &mut judge).await;
-                log::info!("DIAG CHAIN ea={ea} elapsed={:?}", t3.elapsed());
                 let identified = m || s || e || ea;
                 if identified {
                     // Something was filed; re-read so the next tick can track
@@ -703,16 +735,6 @@ pub async fn run_loop(app: AppHandle) {
                     maybe_prompt(&app, &candidates, &playing, &executables, &mut judge);
                 }
             }
-        }
-
-        // TEMP DIAG: pending state at end of tick
-        {
-            let shared = tracker.shared.lock().unwrap();
-            log::info!(
-                "DIAG END-OF-TICK pending={:?} toast_up={}",
-                shared.pending_prompt.as_ref().map(|p| &p.exe_name),
-                app.get_webview_window(toast::LABEL).is_some(),
-            );
         }
 
         // ── Checkpoint ──────────────────────────────────────────────────────
@@ -1319,6 +1341,62 @@ mod tests {
 
     fn running(exe: &str, pid: u32) -> detect::Candidate {
         detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true }
+    }
+
+    fn link(exe: &str, suffix: Option<&str>, game: &str) -> api::ExeLink {
+        api::ExeLink { exe_name: exe.into(), path_suffix: suffix.map(Into::into), game_id: game.into() }
+    }
+
+    const RETAIL: &str = r"C:\Program Files (x86)\World of Warcraft\_retail_\Wow.exe";
+    const FOREVER: &str = r"C:\Program Files (x86)\World of Warcraft\_forever_\Wow.exe";
+
+    #[test]
+    fn retail_and_forever_each_go_to_their_own_link_by_folder() {
+        let links = [link("wow.exe", Some("_forever_/wow.exe"), "forever"), link("wow.exe", Some("_retail_/wow.exe"), "retail")];
+        assert_eq!(pick_link(&links, "wow.exe", Some(FOREVER), true), Some("forever"));
+        assert_eq!(pick_link(&links, "wow.exe", Some(RETAIL), true), Some("retail"));
+    }
+
+    #[test]
+    fn a_single_forever_link_does_not_claim_retail_when_the_list_knows_it() {
+        // Today's real accounts: only Forever linked. Retail is on the master
+        // list, so no link applies and identify gives it its own.
+        let links = [link("wow.exe", Some("_forever_/wow.exe"), "forever")];
+        assert_eq!(pick_link(&links, "wow.exe", Some(RETAIL), true), None);
+        assert_eq!(pick_link(&links, "wow.exe", Some(FOREVER), true), Some("forever"));
+    }
+
+    #[test]
+    fn a_single_link_off_the_list_still_matches_by_name_after_a_move() {
+        let links = [link("mygame.exe", Some("old place/mygame.exe"), "g")];
+        assert_eq!(pick_link(&links, "mygame.exe", Some(r"D:\Games\New Place\MyGame.exe"), false), Some("g"));
+    }
+
+    #[test]
+    fn the_most_specific_folder_wins_and_a_folderless_link_is_the_fallback() {
+        let links = [
+            link("game.exe", Some("game.exe"), "short"),
+            link("game.exe", Some("hades/game.exe"), "long"),
+        ];
+        assert_eq!(pick_link(&links, "game.exe", Some(r"C:\x\hades\game.exe"), true), Some("long"));
+        let legacy = [link("wow.exe", Some("_forever_/wow.exe"), "forever"), link("wow.exe", None, "old")];
+        assert_eq!(pick_link(&legacy, "wow.exe", Some(RETAIL), true), Some("old"));
+        assert_eq!(pick_link(&legacy, "other.exe", Some(RETAIL), true), None);
+    }
+
+    #[test]
+    fn a_checkpoint_says_which_game_was_matched() {
+        let session = Session {
+            game_id: "retail".into(),
+            title: "World of Warcraft".into(),
+            client_session_id: "abc".into(),
+            started_at: Utc::now(),
+            started_instant: Instant::now(),
+            last_checkpoint: Instant::now(),
+            steam_app_id: None,
+            exe_name: Some("wow.exe".into()),
+        };
+        assert_eq!(session.payload(false)["gameId"], "retail");
     }
 
     fn saved(started_at: &str, saved_at: &str) -> config::SavedSession {
