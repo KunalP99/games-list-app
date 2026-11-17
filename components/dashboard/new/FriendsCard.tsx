@@ -33,7 +33,7 @@ function initials(name: string): string {
  * Friends, with anyone the tracker sees in a game right now pinned to the top
  * in a green row: the game, a ticking timer, and a link to it. The live list
  * re-reads /api/playing-now once a minute while the tab is visible — the same
- * feed and liveness rule as the classic dashboard's "Playing now".
+ * feed and liveness rule as the badges on game cards (`isSessionLive`).
  */
 export default function FriendsCard({ friends, initialLive }: { friends: FriendSummary[]; initialLive: PlayingNowEntry[] }) {
   const [players, setPlayers] = useState(initialLive)

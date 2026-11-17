@@ -1,17 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { parseDashboardLayout, streakStatus, pickHero, comingUp, countdownLabel, playSummary, ticketsEarnedThisWeek, formatPlayMinutes } from '../dashboard'
+import { streakStatus, pickHero, comingUp, countdownLabel, playSummary, ticketsEarnedThisWeek, formatPlayMinutes } from '../dashboard'
 
 // Midday UK time on Tue 17 Nov 2026 (GMT, so UTC = UK).
 const NOW = new Date('2026-11-17T12:00:00Z')
-
-describe('parseDashboardLayout', () => {
-  it('defaults to new; classic only when chosen', () => {
-    expect(parseDashboardLayout('new')).toBe('new')
-    expect(parseDashboardLayout('classic')).toBe('classic')
-    expect(parseDashboardLayout(undefined)).toBe('new')
-    expect(parseDashboardLayout('nonsense')).toBe('new')
-  })
-})
 
 describe('streakStatus', () => {
   it('counts the run ending today as active', () => {

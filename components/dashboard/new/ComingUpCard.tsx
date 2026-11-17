@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { getCachedEvents } from '@/components/dashboard/UpcomingEventsSection'
+import { getCachedEvents } from '@/lib/data/upcoming-events'
 import { comingUp, countdownLabel, type ComingUpRelease } from '@/lib/dashboard'
 import { londonDay } from '@/lib/activity'
 
@@ -11,7 +11,7 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '
 /**
  * Backlog games releasing soon and upcoming gaming events, merged by date.
  * Streamed in its own Suspense boundary: the events come from IGDB (cached
- * for an hour, shared with the classic dashboard's events card).
+ * for an hour, `getCachedEvents` in lib/data/upcoming-events.ts).
  */
 export default async function ComingUpCard({ userId }: { userId: string }) {
   const supabase = createClient()

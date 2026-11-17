@@ -1,26 +1,11 @@
 /**
- * Rules for the new dashboard layout (`components/dashboard/new/`).
+ * Rules for the dashboard (`components/dashboard/new/`).
  *
  * Pure, so each one is a unit test: which game takes the hero, whether there's
  * a play streak worth showing, and what goes in "Coming up". Supabase and IGDB
  * access stays in the components that call these.
  */
 import { londonDay } from './activity'
-
-// ── Layout switch ─────────────────────────────────────────────────────────
-
-/**
- * The dashboard has two layouts. The choice lives in a cookie, like the games
- * list's grid/cover/table view, so there's nothing to migrate and switching is
- * one click. The new layout is the default; only someone who has chosen
- * "Back to classic" (cookie `classic`) gets the classic one.
- */
-export type DashboardLayout = 'classic' | 'new'
-export const DASHBOARD_LAYOUT_COOKIE = 'dashboardLayout'
-
-export function parseDashboardLayout(value: string | undefined): DashboardLayout {
-  return value === 'classic' ? 'classic' : 'new'
-}
 
 // ── Play streak ───────────────────────────────────────────────────────────
 

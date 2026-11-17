@@ -8,7 +8,6 @@ import { londonDay } from '@/lib/activity'
 import { pickHero, streakStatus, playSummary, ticketsEarnedThisWeek, MAX_PLAY_PERIOD_DAYS, type PlayPeriod, type PlaySummary } from '@/lib/dashboard'
 import { fetchAllRows } from '@/lib/data/fetch-all'
 import { GREETINGS } from '@/lib/greetings'
-import DashboardLayoutSwitch from '@/components/dashboard/DashboardLayoutSwitch'
 import HeroCard, { type HeroGame } from './HeroCard'
 import StreakPill from './StreakPill'
 import WheelTurnCard from './WheelTurnCard'
@@ -27,8 +26,7 @@ const dateFormat = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'num
 type GameRow = HeroGame & { completion_date: string | null }
 
 /**
- * The new dashboard layout (tried out behind the `dashboardLayout` cookie; the
- * classic one is untouched in app/(app)/dashboard/page.tsx).
+ * The dashboard (app/(app)/dashboard/page.tsx renders it for everyone).
  *
  * Left: what you played last, four stats, and everyone's activity. Right: your
  * wheel turn, friends (live players pinned on top), your week / month / year in play and
@@ -96,7 +94,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   }
 
   // Stats. Ambient hours count (they were played); the Games count doesn't
-  // include Ambient, matching the classic dashboard.
+  // include Ambient, matching the Games tab.
   const curated = games.filter(g => g.status !== 'ambient')
   const totalHours = games.reduce((sum, g) => sum + (g.hours_played ?? 0), 0)
   const completed = games.filter(g => g.status === 'completed').length
@@ -142,7 +140,6 @@ export default async function NewDashboard({ userId }: { userId: string }) {
           <h1 className="mt-1 text-2xl sm:text-[28px] font-bold tracking-tight text-fg-base">{greeting}, {name}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <DashboardLayoutSwitch to="classic" />
           <Link href="/games/new" className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-colors">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden><path d="M12 5v14M5 12h14" /></svg>
             Add a game
