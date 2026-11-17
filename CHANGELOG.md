@@ -6,6 +6,15 @@ All notable changes to **GamesList** are documented here, newest first.
 
 ## [Unreleased]
 
+### Fixed
+- **WoW Retail and WoW Forever are told apart.** Both run `Wow.exe`, from `_retail_\` and `_forever_\`, and the tracker matched programs to games by exe name alone, so whichever was linked first claimed both: Retail was logged as Forever. Links are now **per folder**. An exe can have one link per folder (`game_executables.path_suffix`), and the tracker (v0.2.2) matches with `pick_link`:
+  1. a link whose folder matches wins;
+  2. otherwise a link saved before folders were recorded;
+  3. a mismatched folder steps aside when the master list recognises the running path, so the real game gets identified and linked (how Retail gets its own link beside an existing Forever one);
+  4. otherwise a single link still matches by name, as before (a reinstalled game, or a hand-linked one not on the list).
+
+  The same fixes the Classic versions, which all share `WowClassic.exe`. Check-ins now carry the matched game's id (checked against your own library), and an exe with two links no longer breaks the name-only lookup that older trackers rely on (`pickLegacyLink`, `lib/exe-links.ts`). Every link write goes through `writeExeLink`. Tested live with both games installed: Forever → Forever, Retail → added as World of Warcraft with its own link, then each relaunch went straight to its own game with no prompts. SQL: `db/exe-links-per-folder.sql`, in two steps: add the per-folder index, deploy, then drop the old per-name constraint.
+
 ### Changed
 - **The Stats page is redesigned, "Wrapped" style.** It's now a stack of bold, full-width colour bands, each built around one huge number, in a condensed display font (Anton). It opens on **your own stats**; a "Compare with a friend" dropdown switches to a **head-to-head**, and "Just me" switches back. Both views show the same sections in the same order:
   1. hours played
