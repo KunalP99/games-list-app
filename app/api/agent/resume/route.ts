@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
+import { cleanSubmittedSuffix } from '@/lib/detectable'
+import { writeExeLink } from '@/lib/exe-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,6 +71,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const exeName = typeof body?.exeName === 'string' && body.exeName.trim()
     ? normaliseExeName(body.exeName)
     : null
+  // Its folder, from trackers that send one, so the link is per folder.
+  const pathSuffix = cleanSubmittedSuffix(body?.pathSuffix)
 
   const { data: game } = await (sb.from('games') as any)
     .select(`id, title, status, start_date, developer, release_date, release_date_precision, cover_image_url,
@@ -86,12 +90,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   async function linkExe(gameId: string) {
     if (!exeName) return
-    const { error } = await (sb.from('game_executables') as any).upsert({
-      user_id: userId,
-      game_id: gameId,
-      exe_name: exeName,
-    }, { onConflict: 'user_id,exe_name' })
-    if (error) console.error(`resume: could not link ${exeName} to ${gameId}: ${error.message}`)
+    const error = await writeExeLink(sb as any, { userId, gameId, exeName, pathSuffix })
+    if (error) console.error(`resume: could not link ${exeName} to ${gameId}: ${error}`)
   }
 
   if (kind === 'dnf' || kind === 'backlog') {

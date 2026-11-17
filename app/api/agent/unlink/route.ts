@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
+import { cleanSubmittedSuffix } from '@/lib/detectable'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,10 +32,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const exeName = normaliseExeName(body.exeName)
-  const { error } = await (sb.from('game_executables') as any)
+  // With a folder, only that link goes — an exe can have one per folder (WoW
+  // Retail and Forever are both Wow.exe). Without one, every link for the
+  // exe, as before.
+  const pathSuffix = cleanSubmittedSuffix(body?.pathSuffix)
+  let query = (sb.from('game_executables') as any)
     .delete()
     .eq('user_id', identity.userId)
     .eq('exe_name', exeName)
+  if (pathSuffix) query = query.eq('path_suffix', pathSuffix)
+  const { error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ ok: true, exeName })

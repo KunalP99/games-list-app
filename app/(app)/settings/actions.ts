@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types'
 import { generateDeviceToken, hashToken, isLoopbackCallback } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
+import { writeExeLink } from '@/lib/exe-links'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
   const supabase = createClient()
@@ -143,12 +144,10 @@ export async function linkExecutable(exeName: string, gameId: string): Promise<A
     .maybeSingle() as { data: { id: string } | null }
   if (!game) return { success: false, error: 'Game not found' }
 
-  const { error } = await (supabase.from('game_executables') as any).upsert({
-    user_id: user.id,
-    game_id: game.id,
-    exe_name: normalised,
-  }, { onConflict: 'user_id,exe_name' })
-  if (error) return { success: false, error: error.message }
+  // No folder known from the website: repoints the exe's link as it always
+  // did when there's one, without disturbing per-folder links (lib/exe-links.ts).
+  const error = await writeExeLink(supabase as any, { userId: user.id, gameId: game.id, exeName: normalised, pathSuffix: null })
+  if (error) return { success: false, error }
 
   revalidatePath('/settings')
   return { success: true, data: undefined }

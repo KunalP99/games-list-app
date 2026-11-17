@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
 import { cleanSubmittedSuffix } from '@/lib/detectable'
+import { writeExeLink } from '@/lib/exe-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,13 +45,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .maybeSingle()
   if (!game) return NextResponse.json({ error: 'game not found' }, { status: 404 })
 
-  const { error } = await (sb.from('game_executables') as any).upsert({
-    user_id: identity.userId,
-    game_id: game.id,
-    exe_name: exeName,
-    ...(pathSuffix ? { path_suffix: pathSuffix } : {}),
-  }, { onConflict: 'user_id,exe_name' })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Per folder (lib/exe-links.ts): two games sharing an exe name keep a link each.
+  const error = await writeExeLink(sb as any, { userId: identity.userId, gameId: game.id, exeName, pathSuffix })
+  if (error) return NextResponse.json({ error }, { status: 500 })
 
   return NextResponse.json({ ok: true, exeName, gameId: game.id, title: game.title })
 }

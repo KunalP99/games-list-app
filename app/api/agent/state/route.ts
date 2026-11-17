@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
 import { accentPalette } from '@/lib/accent'
 import { isTrackable, resolveRow, sameGame, type LibraryRow } from '@/lib/trackable-row'
+import { pickLegacyLink, type ExeLinkRow } from '@/lib/exe-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .eq('user_id', identity.userId)
       .order('updated_at', { ascending: false }),
     (sb.from('game_executables') as any)
-      .select('exe_name, game_id')
+      .select('exe_name, game_id, path_suffix, created_at')
       .eq('user_id', identity.userId),
     (sb.from('ignored_executables') as any)
       .select('exe_name')
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const profile = profileRes.data as { display_name: string | null; username: string; theme_preference: string | null; accent_colour: string | null } | null
   const library = (gamesRes.data ?? []) as (LibraryRow & { hours_played: number | null; platform: string | null })[]
-  const links = (linksRes.data ?? []) as { exe_name: string; game_id: string }[]
+  const links = (linksRes.data ?? []) as Pick<ExeLinkRow, 'exe_name' | 'game_id' | 'path_suffix' | 'created_at'>[]
   const ignored = (ignoredRes.data ?? []) as { exe_name: string }[]
 
   // Ambient games are tracked exactly like playing ones; they are simply the
@@ -72,11 +73,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // made for the Ambient row still feeds a Playing replay of the same game,
   // and one left on a since-Completed replay falls back to the Ambient row.
   const byId = new Map(library.map(g => [g.id, g]))
-  const executables = Object.fromEntries(links.map(l => {
-    const linked = byId.get(l.game_id)
-    return [l.exe_name, linked ? resolveRow(linked, library).id : l.game_id]
-  }))
-  const linkedIds = new Set(Object.values(executables))
+  const resolve = (gameId: string) => {
+    const linked = byId.get(gameId)
+    return linked ? resolveRow(linked, library).id : gameId
+  }
+  // Every link with its folder, for trackers that match per folder — two
+  // games sharing an exe name (WoW Retail and Forever) each keep their own.
+  const exeLinks = links.map(l => ({ exeName: l.exe_name, pathSuffix: l.path_suffix, gameId: resolve(l.game_id) }))
+  // One game per exe name, for trackers older than that: picked the same
+  // way /api/agent/session picks for them, so the two always agree.
+  const byExe = new Map<string, typeof links>()
+  for (const l of links) byExe.set(l.exe_name, [...(byExe.get(l.exe_name) ?? []), l])
+  const executables = Object.fromEntries(
+    Array.from(byExe, ([exe, rows]) => [exe, resolve(pickLegacyLink(rows)!.game_id)]),
+  )
+  const linkedIds = new Set(exeLinks.map(l => l.gameId))
 
   // Same default the rest of the app uses for an unset accent.
   const accent = profile?.accent_colour ?? '#ff5722'
@@ -96,6 +107,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }),
     executables,
+    exeLinks,
     ignoredExecutables: ignored.map(i => i.exe_name),
     displayName: profile?.display_name ?? profile?.username ?? null,
     theme: profile?.theme_preference ?? 'system',

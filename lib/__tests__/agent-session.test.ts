@@ -74,7 +74,16 @@ describe('validateSessionPayload', () => {
   it('requires something to match the game on', () => {
     const result = validateSessionPayload(
       { clientSessionId: 'x', minutes: 1, startedAt: ago(5) }, NOW)
-    expect(result).toEqual({ ok: false, error: 'one of steamAppId or exeName is required' })
+    expect(result).toEqual({ ok: false, error: 'one of steamAppId, exeName or gameId is required' })
+  })
+
+  it('carries the game id a newer tracker matched, and checks its shape', () => {
+    const ok = validateSessionPayload(payload({ gameId: 'game-uuid' }), NOW)
+    expect(ok.ok && ok.value.gameId).toBe('game-uuid')
+    const none = validateSessionPayload(payload({}), NOW)
+    expect(none.ok && none.value.gameId).toBeNull()
+    expect(validateSessionPayload(payload({ gameId: '' }), NOW)).toEqual({ ok: false, error: 'gameId must be a non-empty string' })
+    expect(validateSessionPayload(payload({ gameId: 7 }), NOW).ok).toBe(false)
   })
 
   it('accepts an exe instead of a steam id, normalised', () => {

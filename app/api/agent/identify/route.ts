@@ -8,6 +8,7 @@ import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent } from '@/lib/igdb'
 import { pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
+import { writeExeLink } from '@/lib/exe-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -220,14 +221,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // pre-existing behaviour, not a new failure mode.
   async function linkExe(gameId: string) {
     if (!exeName) return
-    const { error } = await (sb.from('game_executables') as any).upsert({
-      user_id: userId,
-      game_id: gameId,
-      exe_name: exeName,
-      // Only when known — an upsert without it must not wipe one already saved.
-      ...(pathSuffix ? { path_suffix: pathSuffix } : {}),
-    }, { onConflict: 'user_id,exe_name' })
-    if (error) console.error(`identify: could not link ${exeName} to ${gameId}: ${error.message}`)
+    // Per folder (lib/exe-links.ts) — how WoW Retail gets a link of its own
+    // beside Forever's, both being Wow.exe.
+    const error = await writeExeLink(sb as any, { userId, gameId, exeName, pathSuffix })
+    if (error) console.error(`identify: could not link ${exeName} to ${gameId}: ${error}`)
   }
 
   // Already theirs? Match on the Steam id first where we have one — it is

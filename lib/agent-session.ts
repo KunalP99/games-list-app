@@ -20,6 +20,11 @@ export type ValidatedSession = {
   endedAt: string | null
   steamAppId: number | null
   exeName: string | null
+  /**
+   * The game the agent matched, from trackers that match per folder. Only a
+   * hint: the session route still checks it's this user's and trackable.
+   */
+  gameId: string | null
 }
 
 export type Validation<T> = { ok: true; value: T } | { ok: false; error: string }
@@ -82,11 +87,19 @@ export function validateSessionPayload(body: unknown, nowMs: number): Validation
     exeName = normaliseExeName(b.exeName)
   }
 
-  if (steamAppId === null && exeName === null) {
-    return { ok: false, error: 'one of steamAppId or exeName is required' }
+  let gameId: string | null = null
+  if (b.gameId != null) {
+    if (typeof b.gameId !== 'string' || b.gameId.length === 0 || b.gameId.length > 64) {
+      return { ok: false, error: 'gameId must be a non-empty string' }
+    }
+    gameId = b.gameId
   }
 
-  return { ok: true, value: { clientSessionId: b.clientSessionId, minutes, startedAt: b.startedAt, endedAt, steamAppId, exeName } }
+  if (steamAppId === null && exeName === null && gameId === null) {
+    return { ok: false, error: 'one of steamAppId, exeName or gameId is required' }
+  }
+
+  return { ok: true, value: { clientSessionId: b.clientSessionId, minutes, startedAt: b.startedAt, endedAt, steamAppId, exeName, gameId } }
 }
 
 /** Executables are matched case-insensitively and without their path. */

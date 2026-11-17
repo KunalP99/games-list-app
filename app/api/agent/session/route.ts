@@ -4,6 +4,7 @@ import { authenticateDevice } from '@/lib/agent-auth'
 import { validateSessionPayload, computeHoursDelta, addHours } from '@/lib/agent-session'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { isTrackable, pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
+import { pickLegacyLink, type ExeLinkRow } from '@/lib/exe-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const parsed = validateSessionPayload(body, Date.now())
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
-  const { clientSessionId, minutes, startedAt, endedAt, steamAppId, exeName } = parsed.value
+  const { clientSessionId, minutes, startedAt, endedAt, steamAppId, exeName, gameId } = parsed.value
 
   // ── Resolve which game this is ────────────────────────────────────────────
   // Several rows per game are legitimate (a Completed story run, an Ambient
@@ -52,19 +53,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let game: (GameRow & LibraryRow) | null = null
 
-  if (steamAppId != null) {
+  // Newer trackers say which game they matched — per folder, so WoW Retail and
+  // Forever (both Wow.exe) are told apart. Used only if it's in this user's
+  // own library; the status check below still applies, as for any match.
+  if (gameId) {
+    const named = library.find(g => g.id === gameId)
+    if (named) game = resolveRow(named, library)
+  }
+
+  if ((!game || !isTrackable(game)) && steamAppId != null) {
     const bySteam = pickRow(library.filter(g => g.steam_appid === steamAppId))
     if (bySteam) game = resolveRow(bySteam, library)
   }
 
   // As before, the exe link is the fallback when the Steam id found nothing
   // trackable.
+  // An exe can have a link per folder; trackers that don't send a game id get
+  // the same one /api/agent/state gives them (pickLegacyLink).
   if ((!game || !isTrackable(game)) && exeName) {
-    const { data: link } = await (sb.from('game_executables') as any)
-      .select('game_id')
+    const { data: links } = await (sb.from('game_executables') as any)
+      .select('game_id, path_suffix, created_at')
       .eq('user_id', identity.userId)
       .eq('exe_name', exeName)
-      .maybeSingle()
+    const link = pickLegacyLink((links ?? []) as Pick<ExeLinkRow, 'game_id' | 'path_suffix' | 'created_at'>[])
     const linked = link?.game_id ? library.find(g => g.id === link.game_id) : undefined
     if (linked) {
       const resolved = resolveRow(linked, library)
