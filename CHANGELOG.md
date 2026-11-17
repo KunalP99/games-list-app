@@ -6,6 +6,9 @@ All notable changes to **GamesList** are documented here, newest first.
 
 ## [Unreleased]
 
+### Fixed
+- **Tracker: the "Stopped tracking" notification shows the real session length.** It used to say "Xh added", but that was only what the *final* check-in added since the one before it. The tracker checks in every 15 minutes, so a 2-hour session could close with "0.1h added". It now reads e.g. "Mortal Kombat 1 — played 2h 5m this session, 32.1h in total." The total is left off until there's at least 0.1h to show. The hours saved on the website were always right; only the notification's wording was wrong. Notifications are now also written to the tracker's log.
+
 ### Added
 - **Tracker: "Track as Ambient" on the "is this a replay?" prompt.** For a game you've finished and keep playing for something other than a replay, such as Mortal Kombat 1's multiplayer after the story. It creates a separate Ambient entry and leaves the Completed one untouched (hours, date, tickets), and future launches track to that Ambient entry with no prompt. Needs the matching website change (`/api/agent/resume` accepting `status: "ambient"` for a Completed match) deployed first.
 - **Tracker: "Not now" on a replay/resume prompt lasts for that launch of the game.** It covers all three prompts: Completed ("is this a replay?"), DNF ("are you resuming it?") and Backlog ("set it to…"). The prompt used to pop straight back up every few seconds while the game was open, because the identify step that raises it ignored the answer. Now "Not now" is tied to that game's running process. The tracker leaves that launch alone completely: no prompt, and no repeated calls to the site. Close the game and open it again, and it asks again, even if the tracker kept running.

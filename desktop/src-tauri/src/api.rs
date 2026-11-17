@@ -66,8 +66,10 @@ pub struct SessionResponse {
     #[serde(default)]
     pub reason: Option<String>,
     pub title: Option<String>,
-    #[serde(rename = "addedHours")]
-    pub added_hours: Option<f64>,
+    // The site also sends `addedHours`: only what this one checkpoint added
+    // since the previous one. Deliberately not read — it was what the
+    // "Stopped tracking" notification used to show, wrongly, as the session's
+    // hours (see `stopped_message` in tracker.rs).
     #[serde(rename = "totalHours")]
     pub total_hours: Option<f64>,
 }

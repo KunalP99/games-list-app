@@ -267,6 +267,7 @@ impl Tracker {
 }
 
 fn notify(app: &AppHandle, title: &str, body: &str) {
+    log::info!("notification: {title}: {body}");
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
@@ -629,10 +630,10 @@ async fn checkpoint(app: &AppHandle, base: &str, token: &str) {
 
 pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
     let tracker = app.state::<Tracker>();
-    let (payload, title) = {
+    let (payload, title, minutes) = {
         let mut shared = tracker.shared.lock().unwrap();
         match shared.session.take() {
-            Some(session) => (session.payload(true), session.title),
+            Some(session) => (session.payload(true), session.title.clone(), session.minutes()),
             None => return,
         }
     };
@@ -640,14 +641,12 @@ pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
     log::info!("stopping tracking for {title}");
     let result = send_or_queue(app, base, token, payload).await;
     let (heading, body) = match result {
+        // The whole session's length, from the tracker's own clock — not the
+        // response's `added_hours`, which is only what this final checkpoint
+        // added since the previous one (a few minutes, after a long session).
         Some(res) if res.ok => (
             "Stopped tracking",
-            format!(
-                "{} — {}h added, now {}h.",
-                res.title.unwrap_or(title),
-                res.added_hours.unwrap_or(0.0),
-                res.total_hours.unwrap_or(0.0)
-            ),
+            stopped_message(&res.title.unwrap_or(title), minutes, res.total_hours),
         ),
         // The server refused it — almost always because the game is no longer
         // set to Playing. Say so, rather than claiming hours were saved.
@@ -665,6 +664,30 @@ pub async fn stop_session(app: &AppHandle, base: &str, token: &str) {
     };
     notify(app, heading, &body);
     ping_ui(app);
+}
+
+/// "45m", "2h", "2h 5m" — the same style the website uses for sessions.
+pub fn format_minutes(minutes: u64) -> String {
+    let (h, m) = (minutes / 60, minutes % 60);
+    match (h, m) {
+        (0, m) => format!("{m}m"),
+        (h, 0) => format!("{h}h"),
+        (h, m) => format!("{h}h {m}m"),
+    }
+}
+
+/// The "Stopped tracking" notification: this session's length, and the
+/// game's new total when the site sent one back.
+pub fn stopped_message(title: &str, session_minutes: u64, total_hours: Option<f64>) -> String {
+    let played = format!("{title} — played {} this session", format_minutes(session_minutes));
+    match total_hours {
+        // Rounded to the 0.1h the site stores, so a float never prints as
+        // 32.100000001. Left off below 0.1h: a brand-new game's first few
+        // minutes really are 0h on the site (it counts in 6-minute steps),
+        // but "0h in total" right after playing reads as broken.
+        Some(total) if total >= 0.05 => format!("{played}, {:.1}h in total.", total).replace(".0h in total", "h in total"),
+        _ => format!("{played}."),
+    }
 }
 
 /// Send a checkpoint, or keep it for later if the site cannot be reached.
@@ -1163,6 +1186,21 @@ mod tests {
 
     fn running(exe: &str, pid: u32) -> detect::Candidate {
         detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true }
+    }
+
+    #[test]
+    fn stopped_message_reports_the_whole_session_not_the_last_checkpoint() {
+        // A 2h 5m session whose final checkpoint only added 0.1h.
+        assert_eq!(
+            stopped_message("Mortal Kombat 1", 125, Some(32.1)),
+            "Mortal Kombat 1 — played 2h 5m this session, 32.1h in total."
+        );
+        assert_eq!(stopped_message("Hades", 45, Some(12.0)), "Hades — played 45m this session, 12h in total.");
+        assert_eq!(stopped_message("Hades", 120, None), "Hades — played 2h this session.");
+        // A brand-new game's first couple of minutes: no "0h in total".
+        assert_eq!(stopped_message("Hades", 2, Some(0.0)), "Hades — played 2m this session.");
+        // A float that isn't exactly representable still prints cleanly.
+        assert_eq!(stopped_message("Hades", 6, Some(0.1 + 0.2)), "Hades — played 6m this session, 0.3h in total.");
     }
 
     #[test]
