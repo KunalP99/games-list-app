@@ -20,7 +20,7 @@ All notable changes to **GamesList** are documented here, newest first.
 
   The rules live in `lib/game-quick-actions.ts` (tested); the menu is `components/games/GameActionsMenu.tsx`; there are new `setGameStatus` and `setFavourite` server actions. The Mark as Completed form is now one component (`CompleteGameModal`), shared by the card button, the detail page and the menu.
 
-- **A new dashboard layout to try out.** A "Try the new dashboard" button at the top of the dashboard switches to it, and "Back to classic" switches back. The choice is remembered on this device. Classic is unchanged and stays the default for everyone. The new layout:
+- **A new dashboard layout, now the default.** Everyone sees it unless they choose otherwise: "Back to classic" at the top switches to the old dashboard (unchanged), and "Try the new dashboard" switches back. The choice is remembered on this device. The new layout:
   - The main column opens on a large artwork card for the game you played most recently, whether it's on Playing or Ambient, with a live timer while the tracker sees it. A Playing game gets "Mark as completed" and "Open"; an Ambient one gets Open only, since Ambient games never complete.
   - Below that are four stats (Games, Hours played, Finish rate, and Tickets with how many you earned this week, all in the same Anton display font as the Stats page's big numbers) and one Activity feed for you and your friends, with Everyone / You / Friends tabs.
   - The right column has your wheel turn, with where you are in the Spin → Spin + Reroll → Choose cycle.

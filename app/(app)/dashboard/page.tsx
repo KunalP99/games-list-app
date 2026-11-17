@@ -26,8 +26,8 @@ export default async function DashboardPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // The new layout is being tried out behind a cookie (see lib/dashboard.ts);
-  // everything below this line is the classic dashboard, unchanged.
+  // The new layout is the default; "Back to classic" sets a cookie to opt out
+  // (see lib/dashboard.ts). Everything below this line is the classic dashboard.
   if (parseDashboardLayout(cookies().get(DASHBOARD_LAYOUT_COOKIE)?.value) === 'new') {
     return <NewDashboard userId={user!.id} />
   }

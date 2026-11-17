@@ -5,11 +5,11 @@ import { parseDashboardLayout, streakStatus, pickHero, comingUp, countdownLabel,
 const NOW = new Date('2026-11-17T12:00:00Z')
 
 describe('parseDashboardLayout', () => {
-  it('defaults to classic for anything but "new"', () => {
+  it('defaults to new; classic only when chosen', () => {
     expect(parseDashboardLayout('new')).toBe('new')
     expect(parseDashboardLayout('classic')).toBe('classic')
-    expect(parseDashboardLayout(undefined)).toBe('classic')
-    expect(parseDashboardLayout('nonsense')).toBe('classic')
+    expect(parseDashboardLayout(undefined)).toBe('new')
+    expect(parseDashboardLayout('nonsense')).toBe('new')
   })
 })
 

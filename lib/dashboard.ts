@@ -10,16 +10,16 @@ import { londonDay } from './activity'
 // ── Layout switch ─────────────────────────────────────────────────────────
 
 /**
- * The dashboard has two layouts while the new one is being tried out. The
- * choice lives in a cookie, like the games list's grid/cover/table view, so
- * there's nothing to migrate and switching back is one click. Classic stays
- * the default for everyone.
+ * The dashboard has two layouts. The choice lives in a cookie, like the games
+ * list's grid/cover/table view, so there's nothing to migrate and switching is
+ * one click. The new layout is the default; only someone who has chosen
+ * "Back to classic" (cookie `classic`) gets the classic one.
  */
 export type DashboardLayout = 'classic' | 'new'
 export const DASHBOARD_LAYOUT_COOKIE = 'dashboardLayout'
 
 export function parseDashboardLayout(value: string | undefined): DashboardLayout {
-  return value === 'new' ? 'new' : 'classic'
+  return value === 'classic' ? 'classic' : 'new'
 }
 
 // ── Play streak ───────────────────────────────────────────────────────────
