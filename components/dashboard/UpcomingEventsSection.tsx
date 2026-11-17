@@ -5,7 +5,8 @@ import { getUpcomingEvents } from '@/lib/igdb'
 // igdbQuery POST isn't cached by Next automatically, and events change slowly.
 // Cache key is versioned — bump it when the event shape changes so stale
 // cached payloads (missing new fields) are discarded rather than served.
-const getCachedEvents = unstable_cache(() => getUpcomingEvents(5), ['upcoming-events-v5'], { revalidate: 3600 })
+// Exported for the new dashboard's "Coming up" card, which shares this cache entry.
+export const getCachedEvents = unstable_cache(() => getUpcomingEvents(5), ['upcoming-events-v5'], { revalidate: 3600 })
 
 // Whole calendar days from today until a Unix-seconds timestamp.
 function daysUntil(startTime: number): number {

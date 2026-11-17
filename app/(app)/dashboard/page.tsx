@@ -11,6 +11,10 @@ import { AnticipatedGamesSection, AnticipatedGamesSkeleton } from '@/components/
 import { GREETINGS } from '@/lib/greetings'
 import { getPlayingNow } from '@/lib/presence'
 import PlayingNowSection from '@/components/dashboard/PlayingNowSection'
+import { cookies } from 'next/headers'
+import { DASHBOARD_LAYOUT_COOKIE, parseDashboardLayout } from '@/lib/dashboard'
+import DashboardLayoutSwitch from '@/components/dashboard/DashboardLayoutSwitch'
+import NewDashboard from '@/components/dashboard/new/NewDashboard'
 
 const GamesPerYearChart = dynamic(() => import('@/components/dashboard/GamesPerYearChart'), { ssr: false })
 const GenreAndPlatformCharts = dynamic(() => import('@/components/dashboard/GenreAndPlatformCharts'), { ssr: false })
@@ -21,6 +25,12 @@ export default async function DashboardPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // The new layout is being tried out behind a cookie (see lib/dashboard.ts);
+  // everything below this line is the classic dashboard, unchanged.
+  if (parseDashboardLayout(cookies().get(DASHBOARD_LAYOUT_COOKIE)?.value) === 'new') {
+    return <NewDashboard userId={user!.id} />
+  }
 
   const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
 
@@ -174,11 +184,14 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-fg-base">
-          {greeting}, {profile?.display_name ?? profile?.username}
-        </h1>
-        <p className="mt-1 text-fg-muted text-sm">Here&apos;s your GamesList overview.</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-fg-base">
+            {greeting}, {profile?.display_name ?? profile?.username}
+          </h1>
+          <p className="mt-1 text-fg-muted text-sm">Here&apos;s your GamesList overview.</p>
+        </div>
+        <DashboardLayoutSwitch to="new" />
       </div>
 
       {/* Stats row */}

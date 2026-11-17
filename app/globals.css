@@ -101,6 +101,28 @@ body {
   animation: ticket-gain 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* Dashboard "Your week": bars grow up one by one, then their value fades in.
+   Only a `from` frame, so each bar grows to its own inline height; the delay
+   comes from --i (the bar's index) times --step (shorter for the month and
+   year, which have many more bars), and `both` holds it at 0 until its turn.
+   Runs on every visit and every period switch, since both mount the chart anew. */
+@keyframes week-bar-rise {
+  from { height: 0; }
+}
+@keyframes week-bar-label {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-week-bar {
+    animation: week-bar-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * var(--step, 80ms) + 100ms);
+  }
+  .animate-week-label {
+    animation: week-bar-label 0.3s ease-out both;
+    animation-delay: calc(var(--i, 0) * var(--step, 80ms) + 450ms);
+  }
+}
+
 @keyframes ticket-spend {
   0%   { opacity: 1; transform: translateY(0) scale(1); }
   15%  { opacity: 1; transform: translateY(-3px) scale(1.15); }

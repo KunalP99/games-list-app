@@ -10,6 +10,7 @@
  * Days are UK days, like everywhere else sessions are shown (lib/activity.ts).
  */
 import { londonDay } from './activity'
+import { fetchAllRows as fetchAll } from './data/fetch-all'
 
 // ── Tickets ────────────────────────────────────────────────────────────────
 
@@ -236,16 +237,6 @@ export type WrappedExtras = {
 }
 
 type Sb = { from: (t: string) => any }
-
-/** Every row of a query, past PostgREST's 1,000-row cap. */
-async function fetchAll<T>(query: () => any): Promise<T[]> {
-  const out: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data } = await query().range(from, from + 999) as { data: T[] | null }
-    out.push(...(data ?? []))
-    if (!data || data.length < 1000) return out
-  }
-}
 
 /** The Wrapped-only numbers for one user. Readable for friends too (same RLS as the profile pages). */
 export async function computeWrappedExtras(supabase: Sb, userId: string, now: Date = new Date()): Promise<WrappedExtras> {

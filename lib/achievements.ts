@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createAdminClient } from './supabase/admin'
+import { fetchAllRows } from './data/fetch-all'
 import {
   gameKey, sessionAchievementStats,
   type AchievementSession, type KeyedSession, type SessionAchievementStats,
@@ -278,16 +279,6 @@ type Stats = {
 }
 
 const SESSION_COLUMNS = 'game_id, started_at, ended_at, last_checkpoint_at, minutes'
-
-/** Every row of a query, past PostgREST's 1,000-row cap. */
-async function fetchAllRows<T>(query: () => any): Promise<T[]> {
-  const out: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data } = await query().range(from, from + 999) as { data: T[] | null }
-    out.push(...(data ?? []))
-    if (!data || data.length < 1000) return out
-  }
-}
 
 /**
  * The tracker-session side of the stats. For Squad Up it also reads other
