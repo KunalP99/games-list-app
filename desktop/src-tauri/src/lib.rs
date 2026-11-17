@@ -460,8 +460,9 @@ async fn set_platform(app: AppHandle, platform: String) -> Result<(), String> {
 /// `accept: false` is deliberately not written anywhere permanent — unlike
 /// "not a game", declining says nothing about whether the program is a
 /// game (it plainly is, already in the library), only that today isn't the
-/// day for this. `skip_for_now` just quiets this run; a fresh launch asks
-/// again.
+/// day for this. It quiets this launch of the game only
+/// (`Shared::resume_declined`): close the game and open it again, and it
+/// asks again.
 #[tauri::command]
 async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<String>) -> Result<(), String> {
     let tracker = app.state::<Tracker>();
@@ -471,7 +472,7 @@ async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<S
     if !accept {
         let mut shared = tracker.shared.lock().unwrap();
         shared.pending_resume_prompt = None;
-        shared.skip_for_now.insert(prompt.exe_name.clone());
+        shared.resume_declined.insert(prompt.exe_name.clone(), prompt.pid);
         drop(shared);
         let _ = app.emit("status-changed", ());
         return Ok(());

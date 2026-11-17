@@ -167,6 +167,9 @@ pub struct PendingPlatformPrompt {
 #[derive(Debug, Clone, Serialize)]
 pub struct PendingResumePrompt {
     pub exe_name: String,
+    /// The process this prompt is about — "Not now" quiets this launch only
+    /// (`Shared::resume_declined`).
+    pub pid: u32,
     pub game_id: String,
     pub title: String,
     /// `"completed"` — accepting creates a brand-new row (a replay).
@@ -195,6 +198,14 @@ pub struct Shared {
     /// reappear the moment it is dealt with, while a question that was never
     /// answered still comes back next time the app starts.
     pub skip_for_now: HashSet<String>,
+    /// Exe name -> the process id of the launch where the user answered a
+    /// resume/replay/backlog prompt with "Not now". That launch is left alone
+    /// — never re-identified, never re-prompted — for as long as it runs; the
+    /// entry is dropped once the process is gone (`forget_closed_launches`),
+    /// so opening the game again asks again. Keyed by launch rather than by
+    /// exe name for the whole run, which is what `skip_for_now` would have
+    /// done: "not now" means this sitting, not until the tracker restarts.
+    pub resume_declined: HashMap<String, u32>,
     /// Steam app ids already put to the site this run, so a game that is
     /// running but owned-and-not-trackable (backlog, say) is not asked about
     /// on every single poll. Cleared alongside `state` on every refresh
@@ -264,6 +275,18 @@ fn ping_ui(app: &AppHandle) {
     let _ = app.emit("status-changed", ());
 }
 
+/// Whether the user said "Not now" to a resume/replay/backlog prompt for
+/// this very launch of the program (same exe, same process).
+pub fn declined_this_launch(declined: &HashMap<String, u32>, candidate: &detect::Candidate) -> bool {
+    declined.get(&candidate.exe_name) == Some(&candidate.pid)
+}
+
+/// Drops "Not now" answers whose launch has ended, so the next launch of the
+/// same game is asked again.
+pub fn forget_closed_launches(declined: &mut HashMap<String, u32>, candidates: &[detect::Candidate]) {
+    declined.retain(|exe, pid| candidates.iter().any(|c| &c.exe_name == exe && c.pid == *pid));
+}
+
 /// Shared by every identify path's `"untracked"` arm, since all three land
 /// in the exact same server-side logic and so see the exact same response
 /// shape. Surfaces the replay/resume prompt when the match is Completed or
@@ -274,7 +297,8 @@ fn ping_ui(app: &AppHandle) {
 /// Returns true when a prompt was shown — the caller treats that exactly
 /// like a successful identification for this tick, so the ordinary
 /// "is this a game?" toast doesn't also fire for the same program.
-fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, exe_name: &str) -> bool {
+fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, candidate: &detect::Candidate) -> bool {
+    let exe_name = candidate.exe_name.as_str();
     let Some(kind) = response.resumable.as_deref() else { return false };
     let Some(game_id) = response.game_id.clone() else { return false };
     let title = response.title.clone().unwrap_or_else(|| exe_name.to_string());
@@ -288,6 +312,7 @@ fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, exe_na
     );
     app.state::<Tracker>().shared.lock().unwrap().pending_resume_prompt = Some(PendingResumePrompt {
         exe_name: exe_name.to_string(),
+        pid: candidate.pid,
         game_id,
         title: title.clone(),
         kind: kind.to_string(),
@@ -418,6 +443,8 @@ pub async fn run_loop(app: AppHandle) {
             }
         }
         judge.retain_running(&candidates.iter().map(|c| c.pid).collect());
+        // A "Not now" lasts only as long as the launch it was given for.
+        forget_closed_launches(&mut tracker.shared.lock().unwrap().resume_declined, &candidates);
         let steam_app_id = detect::steam_running_app_id();
 
         let (playing, executables) = {
@@ -513,6 +540,13 @@ pub async fn run_loop(app: AppHandle) {
                 // is the user asked anything — and a title guessed from the
                 // exe name only ever *suggests* (the toast's search box),
                 // never files a game on its own (tracker review T-H1).
+                // A launch the user said "Not now" to is left out entirely:
+                // re-identifying it would only raise the same prompt again
+                // (and ask the site the same question every few seconds).
+                let candidates: Vec<detect::Candidate> = {
+                    let shared = tracker.shared.lock().unwrap();
+                    candidates.iter().filter(|c| !declined_this_launch(&shared.resume_declined, c)).cloned().collect()
+                };
                 // TEMP DIAG: time each step
                 let t0 = std::time::Instant::now();
                 let m = identify_master_list(&app, &base, &token, &candidates).await;
@@ -788,7 +822,7 @@ async fn identify_steam_games(
                 // remember not to ask again until the next state refresh.
                 // Completed/DNF get a prompt instead (`resumable`) — those
                 // are "already played before", worth asking about.
-                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                if maybe_prompt_resume(app, &response, candidate) {
                     return true;
                 }
                 log::info!(
@@ -866,7 +900,7 @@ async fn identify_master_list(
             }
             "tracked" => return true,
             "untracked" => {
-                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                if maybe_prompt_resume(app, &response, candidate) {
                     return true;
                 }
                 log::info!(
@@ -965,7 +999,7 @@ async fn identify_by_title(
                 return true;
             }
             "untracked" => {
-                if maybe_prompt_resume(app, &response, &candidate.exe_name) {
+                if maybe_prompt_resume(app, &response, candidate) {
                     return true;
                 }
                 // Worth remembering: no link exists, and nothing changes here
@@ -1120,5 +1154,43 @@ fn maybe_prompt(
         toast::show(app, &prompt.exe_name);
         ping_ui(app);
         return;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn running(exe: &str, pid: u32) -> detect::Candidate {
+        detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true }
+    }
+
+    #[test]
+    fn not_now_quiets_only_the_launch_it_was_given_for() {
+        let mut declined = HashMap::new();
+        declined.insert("hades.exe".to_string(), 100);
+
+        // Same launch: stays quiet.
+        assert!(declined_this_launch(&declined, &running("hades.exe", 100)));
+        // A different launch of the same game: asks again.
+        assert!(!declined_this_launch(&declined, &running("hades.exe", 200)));
+        // A different game: unaffected.
+        assert!(!declined_this_launch(&declined, &running("celeste.exe", 100)));
+    }
+
+    #[test]
+    fn closing_the_game_forgets_the_not_now() {
+        let mut declined = HashMap::new();
+        declined.insert("hades.exe".to_string(), 100);
+        declined.insert("celeste.exe".to_string(), 300);
+
+        // Hades still running as the same process; Celeste closed.
+        forget_closed_launches(&mut declined, &[running("hades.exe", 100), running("other.exe", 300)]);
+        assert_eq!(declined.get("hades.exe"), Some(&100));
+        assert!(!declined.contains_key("celeste.exe"));
+
+        // Hades closed and reopened as a new process: forgotten too.
+        forget_closed_launches(&mut declined, &[running("hades.exe", 101)]);
+        assert!(declined.is_empty());
     }
 }
