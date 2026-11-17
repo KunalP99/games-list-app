@@ -485,9 +485,10 @@ async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<S
     let response = api::post_resume(&base, &token, &prompt.game_id, &prompt.kind, status.as_deref(), &prompt.exe_name).await?;
     log::info!(
         "{} {} ({})",
-        match prompt.kind.as_str() {
-            "dnf" => "resumed",
-            "backlog" => "started tracking",
+        match (prompt.kind.as_str(), status.as_deref()) {
+            ("dnf", _) => "resumed",
+            ("backlog", _) => "started tracking",
+            (_, Some("ambient")) => "tracking as ambient",
             _ => "replaying",
         },
         response.title,

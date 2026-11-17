@@ -103,11 +103,15 @@ function renderResume(prompt) {
   } else if (prompt.kind === 'backlog') {
     el('resume-ask-heading').textContent = `You have ${prompt.title} in your backlog — set it to:`
     el('resume-ask-yes').textContent = 'Set to Playing'
+    ambientButton.textContent = 'Set to Ambient'
+    ambientButton.title = ''
     ambientButton.hidden = false
   } else {
     el('resume-ask-heading').textContent = `You already completed ${prompt.title} — is this a replay?`
     el('resume-ask-yes').textContent = 'Yes, replay'
-    ambientButton.hidden = true
+    ambientButton.textContent = 'Track as Ambient'
+    ambientButton.title = 'Multiplayer or other ongoing play: tracked as its own Ambient game, not a replay'
+    ambientButton.hidden = false
   }
   el('ask').hidden = true
   el('said-no').hidden = true
