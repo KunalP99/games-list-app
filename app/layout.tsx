@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
-import { Orbitron } from 'next/font/google'
+import { Anton, Orbitron } from 'next/font/google'
 import './globals.css'
 import EnvBanner from '@/components/layout/EnvBanner'
 
@@ -16,6 +16,13 @@ const orbitron = Orbitron({
   weight: ['700', '800'],
 })
 
+// The big condensed numbers on the Stats page.
+const anton = Anton({
+  subsets: ['latin'],
+  variable: '--font-anton',
+  weight: '400',
+})
+
 export const metadata: Metadata = {
   title: 'GamesList',
   description: 'Track games. Earn tickets. Spin the wheel.',
@@ -27,7 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})();` }} />
       </head>
-      <body className={`${geistSans.variable} ${orbitron.variable} font-sans antialiased`}>
+      <body className={`${geistSans.variable} ${orbitron.variable} ${anton.variable} font-sans antialiased`}>
         {children}
         <EnvBanner />
       </body>

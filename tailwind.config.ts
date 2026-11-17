@@ -19,6 +19,7 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
         orbitron: ['var(--font-orbitron)', 'sans-serif'],
+        display: ['var(--font-anton)', 'Impact', 'sans-serif'],
       },
       colors: {
         brand: {

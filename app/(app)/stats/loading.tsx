@@ -1,13 +1,14 @@
+// The Wrapped page's shape while it loads: the picker, then a stack of tall
+// bands.
 export default function Loading() {
   return (
-    <div className="space-y-6 animate-pulse max-w-2xl">
-      <div className="flex items-center justify-between">
-        <div className="h-8 w-24 bg-surface-active rounded-lg" />
-        <div className="h-9 w-52 bg-surface-active rounded-lg" />
+    <div className="space-y-6 animate-pulse">
+      <div className="h-11 w-52 bg-surface-active rounded-full" />
+      <div className="rounded-3xl overflow-hidden space-y-1">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="bg-surface-active h-64 md:h-80" />
+        ))}
       </div>
-      {[1, 2, 3, 4].map(i => (
-        <div key={i} className="bg-surface-active rounded-xl h-36" />
-      ))}
     </div>
   )
 }

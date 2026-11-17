@@ -6,6 +6,22 @@ All notable changes to **GamesList** are documented here, newest first.
 
 ## [Unreleased]
 
+### Changed
+- **The Stats page is redesigned, "Wrapped" style.** It's now a stack of bold, full-width colour bands, each built around one huge number, in a condensed display font (Anton). It opens on **your own stats**; a "Compare with a friend" dropdown switches to a **head-to-head**, and "Just me" switches back. Both views show the same sections in the same order:
+  1. hours played
+  2. games finished (with a per-year chart)
+  3. finish rate
+  4. **most played game**
+  5. **longest session**
+  6. **longest streak** (with your current streak)
+  7. **tickets** earned and lost, broken down by where they came from and went, penalties in red
+  8. highlights (longest clear, quickest, best month)
+  9. **perfectionist** (games at 100%)
+  10. level & XP
+  11. genres
+
+  Most played, longest session and longest streak are new and come from the desktop tracker's play sessions, on UK days. In the head-to-head, each stat is a round: its band is split between you (bright shade) and your friend (deep shade), sized by the result, with an AHEAD tag and a verdict. Tickets count as one round, decided on net. The **final score** (rounds won) comes last. On phones each band becomes two bars instead. Sections with no data are left out, such as the tracker sections for someone without the tracker, and a round only counts when both of you have data. The default is no longer comparing with your first friend. Numbers in `lib/stats-wrapped.ts`, components in `components/stats/wrapped/`.
+
 ### Fixed
 - **Mark as Completed no longer wipes tracked hours.** The form's Hours Played and Achievement Progress boxes start empty, and every field is labelled optional. But leaving them blank erased the hours the desktop tracker had logged, and the completion tickets were then worked out from nothing. A blank box now keeps the game's current value. Found while testing the replay flow end to end: a replay with 3h tracked dropped to 0h on completion.
 
