@@ -632,14 +632,6 @@ ALTER TABLE ONLY public.game_executables
 
 
 --
--- Name: game_executables game_executables_user_id_exe_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.game_executables
-    ADD CONSTRAINT game_executables_user_id_exe_name_key UNIQUE (user_id, exe_name);
-
-
---
 -- Name: games games_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -772,6 +764,13 @@ ALTER TABLE ONLY public.wheel_spins
 --
 
 CREATE INDEX detectable_games_suffix_idx ON public.detectable_games USING btree (path_suffix);
+
+
+--
+-- Name: game_executables_user_exe_suffix_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX game_executables_user_exe_suffix_key ON public.game_executables USING btree (user_id, exe_name, path_suffix) NULLS NOT DISTINCT;
 
 
 --
