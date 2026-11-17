@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rankSearchResults, mergeById, apicalypseString, isFullGame, popularity, type RankCandidate } from '../search-ranking'
+import { rankSearchResults, mergeById, apicalypseString, isFullGame, popularity, slugPrefix, type RankCandidate } from '../search-ranking'
 
 type G = RankCandidate & { id: number }
 const names = (gs: G[]) => gs.map(g => g.name)
@@ -153,5 +153,35 @@ describe('apicalypseString', () => {
   it('escapes quotes and backslashes so a title cannot break out of the query', () => {
     expect(apicalypseString('Say "Hi"')).toBe('Say \\"Hi\\"')
     expect(apicalypseString('a\\b')).toBe('a\\\\b')
+  })
+})
+
+describe('typing a title without its punctuation', () => {
+  it('turns the query into the start of an IGDB slug', () => {
+    expect(slugPrefix('hunt sh')).toBe('hunt-sh')
+    expect(slugPrefix('Hunt: Showdown 18')).toBe('hunt-showdown-18')
+    expect(slugPrefix("Baldur's G")).toBe('baldurs-g')
+    expect(slugPrefix('  Star Wars Jedi:  Surv ')).toBe('star-wars-jedi-surv')
+    expect(slugPrefix('::')).toBe('')
+  })
+
+  it('counts a title as a match without its colon, apostrophe or hyphen', () => {
+    const pool: G[] = [
+      { id: 1, name: 'Obscure Hunting Game', game_type: 0, total_rating_count: 900 },
+      { id: 2, name: 'Hunt: Showdown 1896', game_type: 0, total_rating_count: 10 },
+    ]
+    expect(names(rankSearchResults('hunt showdo', pool))[0]).toBe('Hunt: Showdown 1896')
+
+    const bg: G[] = [
+      { id: 3, name: 'Gate Crasher', game_type: 0, total_rating_count: 900 },
+      { id: 4, name: "Baldur's Gate III", game_type: 0, total_rating_count: 50 },
+    ]
+    expect(names(rankSearchResults('baldurs g', bg))[0]).toBe("Baldur's Gate III")
+
+    const sm: G[] = [
+      { id: 5, name: 'Man of Spiders', game_type: 0, total_rating_count: 900 },
+      { id: 6, name: 'Spider-Man 2', game_type: 0, total_rating_count: 50 },
+    ]
+    expect(names(rankSearchResults('spiderman 2', sm))[0]).toBe('Spider-Man 2')
   })
 })

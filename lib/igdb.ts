@@ -5,7 +5,7 @@
 import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, GameCompany, GameExtras, DeveloperGamesInfo, RelatedGame } from './rawg'
 import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
-import { rankSearchResults, mergeById, apicalypseString, FULL_GAME_TYPES, type RankCandidate } from './search-ranking'
+import { rankSearchResults, mergeById, apicalypseString, slugPrefix, FULL_GAME_TYPES, type RankCandidate } from './search-ranking'
 
 const TIMEOUT_MS = 8000
 
@@ -171,15 +171,21 @@ async function searchPool(query: string): Promise<IgdbRankedGame[]> {
   const fullGame = `game_type = (${FULL_GAME_TYPES.join(',')}) & version_parent = null`
 
   const search = await igdbQuery<IgdbRankedGame>('games', `search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE};`)
+  // Punctuation-blind starts-with match on the slug (see slugPrefix), so a
+  // half-typed title without its ":" or "'" still finds the game.
+  const slug = slugPrefix(query)
   const sets = await igdbQuery<{ name: string; result: IgdbRankedGame[] }>('multiquery', [
     `query games "exact" { ${fields} where name ~ "${q}"; limit 10; };`,
     `query games "prefix" { ${fields} where name ~ "${q}"* & ${fullGame}; sort total_rating_count desc; limit 20; };`,
+    ...(slug.length >= 2
+      ? [`query games "slug" { ${fields} where slug ~ "${slug}"* & ${fullGame}; sort total_rating_count desc; limit 20; };`]
+      : []),
   ].join('\n'))
   const set = (name: string) => sets.find(r => r.name === name)?.result ?? []
 
   // Search first: mergeById keeps the first copy, and the ranking's final
   // tie-break is position, so IGDB's own relevance order survives for ties.
-  return mergeById(search, set('exact'), set('prefix'))
+  return mergeById(search, set('exact'), set('prefix'), set('slug'))
 }
 
 export async function searchGames(query: string, page = 1): Promise<RawgSearchResult[]> {

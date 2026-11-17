@@ -103,6 +103,9 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   const [chooseSelectedRawg, setChooseSelectedRawg] = useState<RawgSearchResult | null>(null)
   const [chooseSearching, setChooseSearching] = useState(false)
   const chooseSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Each search is numbered; a reply that arrives after a pick or a newer
+  // search is dropped, so it can't reopen a dropdown that was just closed.
+  const chooseSeq = useRef(0)
   const choosePageRef = useRef(1)
   const [chooseHasMore, setChooseHasMore] = useState(false)
   const [chooseLoadingMore, setChooseLoadingMore] = useState(false)
@@ -111,6 +114,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   const [builderResults, setBuilderResults] = useState<RawgSearchResult[]>([])
   const [builderSearching, setBuilderSearching] = useState(false)
   const builderSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const builderSeq = useRef(0)
   const builderPageRef = useRef(1)
   const [builderHasMore, setBuilderHasMore] = useState(false)
   const [builderLoadingMore, setBuilderLoadingMore] = useState(false)
@@ -136,7 +140,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   // Debounced RAWG search for the CHOOSE turn input
   useEffect(() => {
     const q = chooseInput.trim()
+    const seq = ++chooseSeq.current
+    if (chooseSearchDebounce.current) clearTimeout(chooseSearchDebounce.current)
     if (chooseSelectedRawg && q === chooseSelectedRawg.name) {
+      setChooseSearching(false)
       setChooseSearchResults([])
       return
     }
@@ -152,6 +159,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
       setChooseSearching(true)
       choosePageRef.current = 1
       const { results, hasMore } = await fetchGameSearchPage(q, 1)
+      if (seq !== chooseSeq.current) return
       setChooseSearchResults(results)
       setChooseHasMore(hasMore)
       setChooseSearching(false)
@@ -164,15 +172,18 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   // Debounced RAWG search for the setup-phase wheel builder
   useEffect(() => {
     const q = builderInput.trim()
+    const seq = ++builderSeq.current
+    if (builderSearchDebounce.current) clearTimeout(builderSearchDebounce.current)
     if (q.length < 2) {
       setBuilderResults([])
+      setBuilderSearching(false)
       return
     }
-    if (builderSearchDebounce.current) clearTimeout(builderSearchDebounce.current)
     builderSearchDebounce.current = setTimeout(async () => {
       setBuilderSearching(true)
       builderPageRef.current = 1
       const { results, hasMore } = await fetchGameSearchPage(q, 1)
+      if (seq !== builderSeq.current) return
       setBuilderResults(results)
       setBuilderHasMore(hasMore)
       setBuilderSearching(false)
@@ -188,8 +199,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
     const q = chooseInput.trim()
     if (chooseLoadingMore || !chooseHasMore || q.length < 2) return
     setChooseLoadingMore(true)
+    const seq = chooseSeq.current
     const next = choosePageRef.current + 1
     const { results, hasMore } = await fetchGameSearchPage(q, next)
+    if (seq !== chooseSeq.current) { setChooseLoadingMore(false); return }
     choosePageRef.current = next
     setChooseSearchResults(prev => {
       const seen = new Set(prev.map(x => x.id))
@@ -203,8 +216,10 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
     const q = builderInput.trim()
     if (builderLoadingMore || !builderHasMore || q.length < 2) return
     setBuilderLoadingMore(true)
+    const seq = builderSeq.current
     const next = builderPageRef.current + 1
     const { results, hasMore } = await fetchGameSearchPage(q, next)
+    if (seq !== builderSeq.current) { setBuilderLoadingMore(false); return }
     builderPageRef.current = next
     setBuilderResults(prev => {
       const seen = new Set(prev.map(x => x.id))

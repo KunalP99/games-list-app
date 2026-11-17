@@ -19,18 +19,22 @@ export default function AddDetectableForm() {
   const [success, setSuccess] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Numbered searches: a reply that lands after a pick or a newer search is dropped.
+  const seqRef = useRef(0)
 
   function onQueryChange(value: string) {
     setQuery(value)
     setPicked(null)
     setSuccess(null)
     if (debounceRef.current) clearTimeout(debounceRef.current)
+    const seq = ++seqRef.current
     if (value.trim().length < 2) {
       setResults([])
       return
     }
     debounceRef.current = setTimeout(async () => {
       const { results } = await fetchGameSearchPage(value.trim(), 1)
+      if (seq !== seqRef.current) return
       setResults(results)
     }, 300)
   }
@@ -46,6 +50,7 @@ export default function AddDetectableForm() {
         return
       }
       setSuccess(`"${suffix}" → ${picked.name} added.`)
+      seqRef.current++
       setPathSuffix('')
       setQuery('')
       setResults([])
@@ -92,7 +97,7 @@ export default function AddDetectableForm() {
                 <button
                   type="button"
                   className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-surface-sunken"
-                  onClick={() => { setPicked(r); setQuery(r.name); setResults([]) }}
+                  onClick={() => { seqRef.current++; if (debounceRef.current) clearTimeout(debounceRef.current); setPicked(r); setQuery(r.name); setResults([]) }}
                 >
                   {(r.cover_image ?? r.background_image) && (
                     <img src={r.cover_image ?? r.background_image!} alt="" className="w-7 h-10 rounded object-cover shrink-0" />

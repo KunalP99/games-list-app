@@ -30,8 +30,26 @@ export function normaliseTitle(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
+/**
+ * Lowercase words, split on anything that isn't a letter or digit. Apostrophes
+ * are dropped first rather than split on, so "Baldur's" is the one word
+ * "baldurs" — what people actually type.
+ */
 function words(raw: string): string[] {
-  return raw.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  return raw.toLowerCase().replace(/['’]/g, '').split(/[^a-z0-9]+/).filter(Boolean)
+}
+
+/**
+ * The query as the start of an IGDB slug, for a starts-with match that doesn't
+ * care about punctuation. IGDB slugs are the title lowercased with apostrophes
+ * dropped and every other run of punctuation or spaces turned into one "-":
+ * "Hunt: Showdown 1896" → `hunt-showdown-1896`, "Baldur's Gate 3" →
+ * `baldurs-gate-3`. So "hunt sh" → `hunt-sh` finds it while the last word is
+ * still being typed, which neither the full-text search (whole words only) nor
+ * a name prefix (needs the colon) does. Empty when nothing usable is left.
+ */
+export function slugPrefix(query: string): string {
+  return words(query).join('-')
 }
 
 /**
@@ -64,6 +82,14 @@ function wordsMatch(queryWords: string[], name: string): boolean {
   if (queryWords.length === 0) return false
   const nameWords = words(name)
   return queryWords.every(q => nameWords.some(n => n.startsWith(q)))
+}
+
+/**
+ * The title starts with the query once both lose all spaces and punctuation,
+ * so "spiderman 2" still counts as a match for "Spider-Man 2".
+ */
+function squashedPrefix(target: string, name: string): boolean {
+  return target.length >= 2 && normaliseTitle(name).startsWith(target)
 }
 
 /** Worth one ×10 step of popularity each — see the header comment. */
@@ -109,7 +135,7 @@ export function rankSearchResults<T extends RankCandidate>(query: string, candid
   return candidates
     .map((c, index) => {
       const exact = target !== '' && normaliseTitle(c.name) === target
-      const group = exact || wordsMatch(queryWords, c.name) ? 0 : 1
+      const group = exact || wordsMatch(queryWords, c.name) || squashedPrefix(target, c.name) ? 0 : 1
       return { c, index, group, score: score(c, exact) }
     })
     .sort((a, b) => a.group - b.group || b.score - a.score || a.index - b.index)

@@ -79,10 +79,22 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
 
   const replayDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rawgDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Picking a suggestion writes its name into the title, which would otherwise
+  // run the search again and pop the list straight back open. The picked name
+  // is remembered so that one change is skipped, and every search carries a
+  // number so a reply that lands after a pick (or a newer search) is dropped.
+  // An existing game's own title counts as already picked, so the edit page
+  // doesn't open the list on load.
+  const pickedTitleRef = useRef<string | null>(isEdit ? (game?.title ?? null) : null)
+  const searchSeqRef = useRef(0)
 
   // RAWG search debounce — fires at 300ms on title change
   useEffect(() => {
     if (rawgDebounceRef.current) clearTimeout(rawgDebounceRef.current)
+    const seq = ++searchSeqRef.current
+
+    if (pickedTitleRef.current !== null && title === pickedTitleRef.current) return
+    pickedTitleRef.current = null
 
     if (title.trim().length < 2) {
       setSuggestions([])
@@ -94,6 +106,7 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
       setSearchLoading(true)
       suggestionsPageRef.current = 1
       const { results, hasMore } = await fetchGameSearchPage(title.trim(), 1)
+      if (seq !== searchSeqRef.current) return
       setSuggestions(results)
       setShowDropdown(results.length > 0)
       setHasMoreSuggestions(hasMore)
@@ -213,7 +226,9 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
     if (loadingMoreSuggestions || !hasMoreSuggestions || q.length < 2) return
     setLoadingMoreSuggestions(true)
     const next = suggestionsPageRef.current + 1
+    const seq = searchSeqRef.current
     const { results, hasMore } = await fetchGameSearchPage(q, next)
+    if (seq !== searchSeqRef.current) { setLoadingMoreSuggestions(false); return }
     suggestionsPageRef.current = next
     setSuggestions(prev => {
       const seen = new Set(prev.map(x => x.id))
@@ -224,6 +239,10 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
   }
 
   async function handleRawgSelect(result: RawgSearchResult) {
+    pickedTitleRef.current = result.name
+    searchSeqRef.current++
+    if (rawgDebounceRef.current) clearTimeout(rawgDebounceRef.current)
+    setSearchLoading(false)
     setTitle(result.name)
     setReleaseDate(result.released ?? '')
     setReleaseDatePrecision('full')
