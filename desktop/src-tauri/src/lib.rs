@@ -354,11 +354,19 @@ async fn revoke_device(app: AppHandle, device_id: String) -> Result<(), String> 
 /// version string here to re-resolve from. On a successful Windows install
 /// the installer takes over and this process exits before ever returning,
 /// so an `Ok(())` reaching the frontend is not the expected case there.
+///
+/// Downloaded and installed as two steps, not `download_and_install`, so a
+/// game being played can be handed over in between: tracking carries on
+/// through the download, then the session is saved for the new version to
+/// carry on with and checkpointed (`tracker::hand_over_session`), and only
+/// then does the installer close the app.
 #[tauri::command]
 async fn install_update(app: AppHandle) -> Result<(), String> {
     let update = app.state::<UpdateState>().0.lock().unwrap().take();
     let Some(update) = update else { return Err("no update is pending".into()) };
-    update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())
+    let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    tracker::hand_over_session(&app).await;
+    update.install(bytes).map_err(|e| e.to_string())
 }
 
 /// Clear the prompt.
@@ -694,7 +702,16 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
-                    "quit" => app.exit(0),
+                    // End the session properly first (a final checkpoint, as
+                    // closing the game would), so the minutes since the last
+                    // checkpoint aren't lost. Bounded, so it can't hang.
+                    "quit" => {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            tracker::end_session_for_quit(&app).await;
+                            app.exit(0);
+                        });
+                    }
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {

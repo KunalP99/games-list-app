@@ -7,6 +7,13 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Fixed
+- **Tracker: updating mid-game no longer loses time or splits the session.** Installing an update closes the tracker, and it used to do so without a final check-in, losing everything since the last one (up to 15 minutes); the restarted tracker then began a second session. Now:
+  - the update downloads first, with tracking carrying on;
+  - the session in progress is saved to disk and checked in;
+  - then the installer runs.
+
+  When the new version starts and the same game is still running (within 30 minutes), it **carries on the same session**: same start time, no new "Now tracking" notification, and the minutes include the update time, since the game never stopped. If the game was closed meanwhile, the saved session is closed off where it was left. If the site can't be reached, the check-in waits in the tracker's offline queue as usual. Logic in `resume_session` / `saved_final_payload` (`tracker.rs`); the saved session lives in `resume-session.json`.
+- **Tracker: Quit from the tray ends the session properly.** It sends the same final check-in as closing a game before exiting, instead of dropping up to 15 minutes. It waits at most 5 seconds, so quitting can't hang while offline.
 - **Tracker: the "Stopped tracking" notification shows the real session length.** It used to say "Xh added", but that was only what the *final* check-in added since the one before it. The tracker checks in every 15 minutes, so a 2-hour session could close with "0.1h added". It now reads e.g. "Mortal Kombat 1 — played 2h 5m this session, 32.1h in total." The total is left off until there's at least 0.1h to show. The hours saved on the website were always right; only the notification's wording was wrong. Notifications are now also written to the tracker's log.
 
 ### Added

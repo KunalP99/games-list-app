@@ -95,9 +95,32 @@ pub struct Session {
     pub exe_name: Option<String>,
 }
 
+/// How old a handed-over session can be and still be carried on with. An
+/// update takes a minute or two; past this, the app was closed for long
+/// enough that it's a new sitting, not the same one.
+pub const RESUME_WITHIN: Duration = Duration::from_secs(30 * 60);
+
+/// How long quitting or updating waits on the site before giving up — the
+/// checkpoint is queued on disk if it doesn't get through, so nothing is lost.
+const HANDOVER_TIMEOUT: Duration = Duration::from_secs(5);
+
 impl Session {
     pub fn minutes(&self) -> u64 {
         self.started_instant.elapsed().as_secs() / 60
+    }
+
+    /// This session as written to disk for the next version to pick up.
+    pub fn to_saved(&self, now: DateTime<Utc>) -> config::SavedSession {
+        config::SavedSession {
+            game_id: self.game_id.clone(),
+            title: self.title.clone(),
+            client_session_id: self.client_session_id.clone(),
+            started_at: self.started_at.to_rfc3339(),
+            steam_app_id: self.steam_app_id,
+            exe_name: self.exe_name.clone(),
+            minutes: self.minutes(),
+            saved_at: now.to_rfc3339(),
+        }
     }
 
     fn payload(&self, final_write: bool) -> serde_json::Value {
@@ -276,6 +299,80 @@ fn ping_ui(app: &AppHandle) {
     let _ = app.emit("status-changed", ());
 }
 
+/// Carry on with a session handed over across an update: same id, same start
+/// time, so the site keeps one continuous session. Its clock runs from the
+/// original start — the game was running the whole time the app updated, so
+/// that time counts. None when it's too old to be the same sitting (or its
+/// times are unreadable).
+pub fn resume_session(
+    saved: &config::SavedSession,
+    now: DateTime<Utc>,
+    now_instant: Instant,
+) -> Option<Session> {
+    let started_at = DateTime::parse_from_rfc3339(&saved.started_at).ok()?.with_timezone(&Utc);
+    let saved_at = DateTime::parse_from_rfc3339(&saved.saved_at).ok()?.with_timezone(&Utc);
+    let since_saved = (now - saved_at).to_std().unwrap_or_default();
+    if since_saved > RESUME_WITHIN {
+        return None;
+    }
+    let running_for = (now - started_at).to_std().unwrap_or_default();
+    Some(Session {
+        game_id: saved.game_id.clone(),
+        title: saved.title.clone(),
+        client_session_id: saved.client_session_id.clone(),
+        started_at,
+        started_instant: now_instant.checked_sub(running_for).unwrap_or(now_instant),
+        last_checkpoint: now_instant,
+        steam_app_id: saved.steam_app_id,
+        exe_name: saved.exe_name.clone(),
+    })
+}
+
+/// The final checkpoint for a handed-over session that won't be carried on
+/// (the game closed during the update, or too long passed): it ends when the
+/// app handed it over, with the minutes it had then.
+pub fn saved_final_payload(saved: &config::SavedSession) -> serde_json::Value {
+    let mut payload = serde_json::json!({
+        "clientSessionId": saved.client_session_id,
+        "minutes": saved.minutes,
+        "startedAt": saved.started_at,
+        "endedAt": saved.saved_at,
+    });
+    if let Some(app_id) = saved.steam_app_id {
+        payload["steamAppId"] = serde_json::json!(app_id);
+    }
+    if let Some(exe) = &saved.exe_name {
+        payload["exeName"] = serde_json::json!(exe);
+    }
+    payload
+}
+
+/// Just before an update installs and closes the app: save the session in
+/// progress for the new version to carry on with, and checkpoint it, so even
+/// if it's never picked up nothing since the last checkpoint is lost. An
+/// unreachable site queues the checkpoint on disk; the new version sends it.
+pub async fn hand_over_session(app: &AppHandle) {
+    let tracker = app.state::<Tracker>();
+    let Some(session) = tracker.shared.lock().unwrap().session.clone() else { return };
+    config::save_resume(&tracker.data_dir, &session.to_saved(Utc::now()));
+    let (base, token) = {
+        let config = tracker.snapshot_config();
+        (config.base(), config.token.unwrap_or_default())
+    };
+    log::info!("handing over {} for the update", session.title);
+    let _ = tokio::time::timeout(HANDOVER_TIMEOUT, checkpoint(app, &base, &token)).await;
+}
+
+/// Quitting from the tray: end the session properly first, as closing the
+/// game would, so the time since the last checkpoint isn't lost.
+pub async fn end_session_for_quit(app: &AppHandle) {
+    let (base, token) = {
+        let config = app.state::<Tracker>().snapshot_config();
+        (config.base(), config.token.unwrap_or_default())
+    };
+    let _ = tokio::time::timeout(HANDOVER_TIMEOUT, stop_session(app, &base, &token)).await;
+}
+
 /// Whether the user said "Not now" to a resume/replay/backlog prompt for
 /// this very launch of the program (same exe, same process).
 pub fn declined_this_launch(declined: &HashMap<String, u32>, candidate: &detect::Candidate) -> bool {
@@ -375,6 +472,12 @@ pub async fn run_loop(app: AppHandle) {
     let mut state_fetched: Option<Instant> = None;
     // At startup, then daily (hourly after a failure).
     let mut list_check_due = Instant::now();
+    // A session the previous version handed over when it closed for an
+    // update. Decided on the first tick that knows what's being played.
+    let mut handed_over = config::take_resume(&app.state::<Tracker>().data_dir);
+    if let Some(saved) = &handed_over {
+        log::info!("found a session handed over by the previous version ({})", saved.title);
+    }
 
     loop {
         let tracker = app.state::<Tracker>();
@@ -480,6 +583,27 @@ pub async fn run_loop(app: AppHandle) {
         // ── Start / stop ────────────────────────────────────────────────────
         let current_game_id = tracker.shared.lock().unwrap().session.as_ref().map(|s| s.game_id.clone());
 
+        // ── A session handed over across an update ──────────────────────────
+        // Only once the state has loaded — before then nothing can match, and
+        // "the game isn't running" would be a false conclusion. Same game
+        // still running: carry on with that session. Otherwise it's closed
+        // off where the previous version left it.
+        let mut resumed: Option<Session> = None;
+        let state_loaded = tracker.shared.lock().unwrap().state.is_some();
+        if state_loaded {
+            if let Some(saved) = handed_over.take() {
+                let same_game = current_game_id.is_none()
+                    && matches!(&matched, Some((game, _, _)) if game.id == saved.game_id);
+                if same_game {
+                    resumed = resume_session(&saved, Utc::now(), Instant::now());
+                }
+                if resumed.is_none() {
+                    log::info!("closing off {}, handed over but not carried on", saved.title);
+                    send_or_queue(&app, &base, &token, saved_final_payload(&saved)).await;
+                }
+            }
+        }
+
         // TEMP DIAG: one line per tick when wow.exe is seen running.
         if let Some(c) = candidates.iter().find(|c| c.exe_name == "wow.exe") {
             let shared = tracker.shared.lock().unwrap();
@@ -506,19 +630,28 @@ pub async fn run_loop(app: AppHandle) {
                 if current_game_id.is_some() {
                     stop_session(&app, &base, &token).await;
                 }
-                let session = Session {
-                    game_id: game.id.clone(),
-                    title: game.title.clone(),
-                    client_session_id: uuid::Uuid::new_v4().to_string(),
-                    started_at: Utc::now(),
-                    started_instant: Instant::now(),
-                    last_checkpoint: Instant::now(),
-                    steam_app_id: *app_id,
-                    exe_name: exe.clone(),
-                };
-                tracker.shared.lock().unwrap().session = Some(session);
-                log::info!("started tracking {} (steam {:?}, exe {:?})", game.title, app_id, exe);
-                notify(&app, "Now tracking", &format!("{} — your hours are being logged.", game.title));
+                if let Some(mut session) = resumed.take() {
+                    // Carrying on across an update: the same session, quietly
+                    // — the game never stopped, so neither does the tracking.
+                    session.steam_app_id = *app_id;
+                    session.exe_name = exe.clone();
+                    log::info!("carried on tracking {} after the update ({}m so far)", game.title, session.minutes());
+                    tracker.shared.lock().unwrap().session = Some(session);
+                } else {
+                    let session = Session {
+                        game_id: game.id.clone(),
+                        title: game.title.clone(),
+                        client_session_id: uuid::Uuid::new_v4().to_string(),
+                        started_at: Utc::now(),
+                        started_instant: Instant::now(),
+                        last_checkpoint: Instant::now(),
+                        steam_app_id: *app_id,
+                        exe_name: exe.clone(),
+                    };
+                    tracker.shared.lock().unwrap().session = Some(session);
+                    log::info!("started tracking {} (steam {:?}, exe {:?})", game.title, app_id, exe);
+                    notify(&app, "Now tracking", &format!("{} — your hours are being logged.", game.title));
+                }
                 // Without this, play_sessions gets no row — and the site no
                 // sign anyone is playing — until the first periodic checkpoint,
                 // up to checkpoint_minutes later. Sent immediately so a "now
@@ -1186,6 +1319,53 @@ mod tests {
 
     fn running(exe: &str, pid: u32) -> detect::Candidate {
         detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true }
+    }
+
+    fn saved(started_at: &str, saved_at: &str) -> config::SavedSession {
+        config::SavedSession {
+            game_id: "g1".into(),
+            title: "Hades".into(),
+            client_session_id: "abc".into(),
+            started_at: started_at.into(),
+            steam_app_id: Some(1145360),
+            exe_name: None,
+            minutes: 95,
+            saved_at: saved_at.into(),
+        }
+    }
+
+    fn at(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
+    }
+
+    #[test]
+    fn an_update_carries_on_the_same_session_counting_the_time_it_took() {
+        let s = saved("2026-11-17T20:00:00Z", "2026-11-17T21:35:00Z");
+        let now_instant = Instant::now();
+        // Back two minutes later, the game still running.
+        let session = resume_session(&s, at("2026-11-17T21:37:00Z"), now_instant).expect("carried on");
+        assert_eq!(session.client_session_id, "abc");
+        assert_eq!(session.started_at, at("2026-11-17T20:00:00Z"));
+        // Its clock runs from the original start: 97 minutes, update included.
+        assert_eq!(now_instant.duration_since(session.started_instant).as_secs(), 97 * 60);
+        assert_eq!(session.steam_app_id, Some(1145360));
+    }
+
+    #[test]
+    fn a_handover_that_is_too_old_or_unreadable_is_not_carried_on() {
+        let s = saved("2026-11-17T20:00:00Z", "2026-11-17T21:35:00Z");
+        assert!(resume_session(&s, at("2026-11-17T22:06:00Z"), Instant::now()).is_none());
+        assert!(resume_session(&saved("not a date", "2026-11-17T21:35:00Z"), at("2026-11-17T21:36:00Z"), Instant::now()).is_none());
+    }
+
+    #[test]
+    fn a_handover_not_carried_on_is_closed_off_where_it_was_left() {
+        let p = saved_final_payload(&saved("2026-11-17T20:00:00Z", "2026-11-17T21:35:00Z"));
+        assert_eq!(p["clientSessionId"], "abc");
+        assert_eq!(p["minutes"], 95);
+        assert_eq!(p["endedAt"], "2026-11-17T21:35:00Z");
+        assert_eq!(p["steamAppId"], 1145360);
+        assert!(p.get("exeName").is_none());
     }
 
     #[test]

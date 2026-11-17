@@ -81,6 +81,41 @@ pub fn save_queue(dir: &Path, queue: &[serde_json::Value]) {
     write_json(&path_in(dir, "pending.json"), &queue);
 }
 
+// ── A session handed over across an update ──────────────────────────────────
+// Installing an update closes the app mid-session. Just before it does, the
+// session in progress is written here, so the new version — when it starts
+// and the same game is still running — carries on with the very same session
+// (`tracker::resume_session`) rather than starting a second one.
+
+/// The session in progress when the app closed for an update.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SavedSession {
+    pub game_id: String,
+    pub title: String,
+    pub client_session_id: String,
+    /// RFC 3339, as sent to the site.
+    pub started_at: String,
+    pub steam_app_id: Option<u32>,
+    pub exe_name: Option<String>,
+    /// Minutes as of the moment it was saved.
+    pub minutes: u64,
+    /// RFC 3339: when the app handed it over.
+    pub saved_at: String,
+}
+
+pub fn save_resume(dir: &Path, saved: &SavedSession) {
+    write_json(&path_in(dir, "resume-session.json"), saved);
+}
+
+/// The handed-over session, if any — removed as it's read, so it's only ever
+/// used once.
+pub fn take_resume(dir: &Path) -> Option<SavedSession> {
+    let path = path_in(dir, "resume-session.json");
+    let saved = read_json(&path);
+    let _ = std::fs::remove_file(&path);
+    saved
+}
+
 // ── Asked-about executables ─────────────────────────────────────────────────
 // Remembered across restarts, so dismissing a prompt means never seeing it
 // again rather than seeing it every time the app starts.
