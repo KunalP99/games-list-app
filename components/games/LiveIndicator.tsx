@@ -10,7 +10,16 @@ import { useEffect, useState } from 'react'
  * as a React interval instead of a Rust one. A 20s tick is plenty for a
  * minutes-resolution display; anything faster would just burn renders.
  */
-export default function LiveIndicator({ startedAt, dark = false }: { startedAt: string; dark?: boolean }) {
+export default function LiveIndicator({
+  startedAt,
+  dark = false,
+  prefix = 'Playing now',
+}: {
+  startedAt: string
+  dark?: boolean
+  /** The words before the timer ("Playing now · 42m"). */
+  prefix?: string
+}) {
   const [now, setNow] = useState<number | null>(null)
 
   useEffect(() => {
@@ -36,7 +45,7 @@ export default function LiveIndicator({ startedAt, dark = false }: { startedAt: 
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
       </span>
-      Playing now · {label}
+      {prefix} · {label}
     </span>
   )
 }

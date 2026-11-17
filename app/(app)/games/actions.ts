@@ -396,9 +396,22 @@ export async function markAsCompleted(
   const update: Record<string, unknown> = { status: 'completed' }
 
   if (details) {
-    // Modal path — write everything the user supplied
-    hours = details.hours
-    achievementProgress = details.achievementProgress
+    // Modal path — write everything the user supplied. Except that a blank
+    // Hours / Achievement Progress box keeps what the game already has
+    // rather than wiping it: the form starts empty and says every field is
+    // optional, and before this a blank box erased the hours the desktop
+    // tracker had logged — and the completion tickets below were then
+    // worked out from nothing.
+    const needsExisting = details.hours == null || details.achievementProgress == null
+    const { data: current } = needsExisting
+      ? await (supabase.from('games') as any)
+          .select('hours_played, achievement_progress')
+          .eq('id', id)
+          .eq('user_id', user.id)
+          .single() as { data: { hours_played: number | null; achievement_progress: number | null } | null }
+      : { data: null }
+    hours = details.hours ?? current?.hours_played ?? null
+    achievementProgress = details.achievementProgress ?? current?.achievement_progress ?? null
     update.hours_played = hours
     update.rating = details.rating
     update.achievement_progress = achievementProgress

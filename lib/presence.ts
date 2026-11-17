@@ -52,6 +52,87 @@ export function liveGameIds(rows: LiveSessionRow[], nowMs: number): Map<string, 
   return out
 }
 
+export type PresenceRow = LiveSessionRow & { user_id: string }
+
+/**
+ * Who is in a game right now: one live session per person (their most
+ * recently started, should a crash ever leave two open), self first, then
+ * whoever has been playing longest.
+ */
+export function livePlayers<R extends PresenceRow>(rows: R[], nowMs: number, selfId: string): R[] {
+  const byUser = new Map<string, R>()
+  for (const row of rows) {
+    if (!row.game_id || !isSessionLive(row, nowMs)) continue
+    const current = byUser.get(row.user_id)
+    if (!current || row.started_at > current.started_at) byUser.set(row.user_id, row)
+  }
+  return Array.from(byUser.values()).sort((a, b) =>
+    Number(b.user_id === selfId) - Number(a.user_id === selfId) || a.started_at.localeCompare(b.started_at))
+}
+
+export type PlayingNowEntry = {
+  userId: string
+  isSelf: boolean
+  displayName: string
+  username: string
+  accentColour: string | null
+  gameId: string
+  gameTitle: string
+  gameImage: string | null
+  startedAt: string
+}
+
+/**
+ * Everyone currently in a game — the signed-in user and every friend (the
+ * app treats every other member as a friend, like the dashboard's Friends
+ * list). Runs through the normal RLS-scoped client: play_sessions, games and
+ * profiles are all readable by any signed-in user.
+ */
+export async function getPlayingNow(
+  supabase: { from: (t: string) => any },
+  selfId: string,
+  nowMs: number = Date.now(),
+): Promise<PlayingNowEntry[]> {
+  // Only open sessions checkpointed recently enough to still count as live —
+  // filtered in the query so a long-dead, never-closed row costs nothing.
+  const cutoff = new Date(nowMs - LIVE_STALE_AFTER_MS).toISOString()
+  const { data: sessionRows } = await supabase
+    .from('play_sessions')
+    .select('user_id, game_id, started_at, last_checkpoint_at, ended_at')
+    .is('ended_at', null)
+    .or(`last_checkpoint_at.gte.${cutoff},started_at.gte.${cutoff}`)
+
+  const live = livePlayers((sessionRows ?? []) as PresenceRow[], nowMs, selfId)
+  if (live.length === 0) return []
+
+  const [{ data: games }, { data: profiles }] = await Promise.all([
+    supabase.from('games').select('id, title, artwork_url, image_url, cover_image_url').in('id', live.map(l => l.game_id!)),
+    supabase.from('profiles').select('id, display_name, username, accent_colour').in('id', live.map(l => l.user_id)),
+  ]) as [
+    { data: { id: string; title: string; artwork_url: string | null; image_url: string | null; cover_image_url: string | null }[] | null },
+    { data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null },
+  ]
+  const gameById = new Map((games ?? []).map(g => [g.id, g]))
+  const profileById = new Map((profiles ?? []).map(p => [p.id, p]))
+
+  return live.flatMap(l => {
+    const game = gameById.get(l.game_id!)
+    const profile = profileById.get(l.user_id)
+    if (!game || !profile) return []
+    return [{
+      userId: l.user_id,
+      isSelf: l.user_id === selfId,
+      displayName: profile.display_name ?? profile.username,
+      username: profile.username,
+      accentColour: profile.accent_colour,
+      gameId: game.id,
+      gameTitle: game.title,
+      gameImage: game.artwork_url ?? game.image_url ?? game.cover_image_url,
+      startedAt: l.started_at,
+    }]
+  })
+}
+
 /**
  * The games, among the given users, with a session currently in progress.
  *

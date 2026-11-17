@@ -9,6 +9,8 @@ import FriendsActivitySection, { FriendsActivitySkeleton } from './FriendsActivi
 import { UpcomingEventsSection, UpcomingEventsSkeleton } from '@/components/dashboard/UpcomingEventsSection'
 import { AnticipatedGamesSection, AnticipatedGamesSkeleton } from '@/components/dashboard/AnticipatedGamesSection'
 import { GREETINGS } from '@/lib/greetings'
+import { getPlayingNow } from '@/lib/presence'
+import PlayingNowSection from '@/components/dashboard/PlayingNowSection'
 
 const GamesPerYearChart = dynamic(() => import('@/components/dashboard/GamesPerYearChart'), { ssr: false })
 const GenreAndPlatformCharts = dynamic(() => import('@/components/dashboard/GenreAndPlatformCharts'), { ssr: false })
@@ -29,6 +31,7 @@ export default async function DashboardPage() {
     ticketEarningsRes,
     recentGamesRes,
     friendProfilesRes,
+    playingNow,
   ] = await Promise.all([
     getProfile(user!.id),
     supabase
@@ -52,6 +55,7 @@ export default async function DashboardPage() {
       .select('id, display_name, username, ticket_balance, accent_colour')
       .neq('id', user!.id)
       .order('display_name', { ascending: true, nullsFirst: false }),
+    getPlayingNow(supabase, user!.id),
   ])
 
   const allGames = allGamesRes.data as { hours_played: number | null; status: string; completion_date: string | null; created_at: string; title: string; image_url: string | null; cover_image_url: string | null; genres: string[] | null; platform: string | null }[] | null
@@ -198,6 +202,9 @@ export default async function DashboardPage() {
           sub={completionRate !== null ? `${completedCount} of ${startedCount} started` : 'No games started yet'}
         />
       </div>
+
+      {/* You and your friends in a game right now — hidden when nobody is */}
+      <PlayingNowSection initial={playingNow} />
 
       {/* Quick actions */}
       <div>

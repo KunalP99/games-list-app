@@ -1,5 +1,37 @@
 import { describe, it, expect } from 'vitest'
-import { isSessionLive, liveGameIds, LIVE_STALE_AFTER_MS } from '../presence'
+import { isSessionLive, liveGameIds, livePlayers, LIVE_STALE_AFTER_MS } from '../presence'
+
+describe('livePlayers', () => {
+  const now = Date.parse('2026-11-17T20:00:00Z')
+  const s = (user: string, game: string, start: string, checkpoint: string | null = start, ended: string | null = null) =>
+    ({ user_id: user, game_id: game, started_at: start, last_checkpoint_at: checkpoint, ended_at: ended })
+
+  it('lists each person in a game once, you first, then longest playing', () => {
+    const out = livePlayers([
+      s('ramin', 'lol', '2026-11-17T19:30:00Z', '2026-11-17T19:55:00Z'),
+      s('me', 'mk1', '2026-11-17T19:50:00Z', '2026-11-17T19:58:00Z'),
+      s('sam', 'ow', '2026-11-17T18:00:00Z', '2026-11-17T19:50:00Z'),
+    ], now, 'me')
+    expect(out.map(r => r.user_id)).toEqual(['me', 'sam', 'ramin'])
+  })
+
+  it('leaves out ended, stale and game-less sessions', () => {
+    const out = livePlayers([
+      s('a', 'g', '2026-11-17T19:00:00Z', '2026-11-17T19:59:00Z', '2026-11-17T19:59:00Z'), // ended
+      s('b', 'g', '2026-11-17T18:00:00Z', '2026-11-17T19:00:00Z'),                          // stale
+      { ...s('c', 'g', '2026-11-17T19:50:00Z'), game_id: null },                            // deleted game
+    ], now, 'me')
+    expect(out).toEqual([])
+  })
+
+  it('keeps only the newest of two open sessions for one person', () => {
+    const out = livePlayers([
+      s('a', 'old', '2026-11-17T19:00:00Z', '2026-11-17T19:55:00Z'),
+      s('a', 'new', '2026-11-17T19:40:00Z', '2026-11-17T19:58:00Z'),
+    ], now, 'me')
+    expect(out.map(r => r.game_id)).toEqual(['new'])
+  })
+})
 
 const now = Date.parse('2026-10-30T12:00:00Z')
 const minsAgo = (m: number) => new Date(now - m * 60_000).toISOString()

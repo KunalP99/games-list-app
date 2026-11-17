@@ -6,7 +6,11 @@ All notable changes to **GamesList** are documented here, newest first.
 
 ## [Unreleased]
 
+### Fixed
+- **Mark as Completed no longer wipes tracked hours.** The form's Hours Played and Achievement Progress boxes start empty, and every field is labelled optional. But leaving them blank erased the hours the desktop tracker had logged, and the completion tickets were then worked out from nothing. A blank box now keeps the game's current value. Found while testing the replay flow end to end: a replay with 3h tracked dropped to 0h on completion.
+
 ### Added
+- **"Playing Now" on the dashboard.** Shows everyone currently in a game, you and your friends: their avatar, the game (over its artwork, linking to the game page) and a ticking timer ("In game · 1h 23m"). You come first, then whoever has been playing longest. The list re-checks itself every minute while the tab is open, through a small new `/api/playing-now` endpoint, so people starting or stopping appear and disappear without a reload. The section is hidden when nobody's playing. "Live" uses the same rule as the game-card badge: an open session checkpointed in the last 20 minutes (`livePlayers` in `lib/presence.ts`).
 - **Story, multiplayer and replays of one game now track to the right entry.** A game can have several entries: the Completed story run, an Ambient entry for the multiplayer played since, and later a Playing replay. The tracker routes (state, session, identify) now share one rule in `lib/trackable-row.ts`: hours go to the game's **Playing** entry, then its **Ambient** one. So:
   - a replay takes the hours while it's in progress, even when the exe was linked to the Ambient entry or the replay has no Steam id of its own;
   - once the replay is Completed, tracking falls back to the Ambient entry by itself, with no prompt and nothing to re-link.
