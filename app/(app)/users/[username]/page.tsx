@@ -16,6 +16,7 @@ import { getRecentlyPlayed } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
 import { FEATURES, wheelOn } from '@/lib/edition'
+import { escapeLike, ilikeAnyFilter } from '@/lib/query-escape'
 
 export default async function UserProfilePage({
   params,
@@ -37,7 +38,7 @@ export default async function UserProfilePage({
     .select('id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
   const requested = decodeURIComponent(params.username)
   profileQuery = FEATURES.secureAuth
-    ? profileQuery.ilike('username', requested.replace(/[\\%_]/g, c => `\\${c}`))
+    ? profileQuery.ilike('username', escapeLike(requested))
     : profileQuery.eq('username', params.username)
   const { data: profile } = await profileQuery.maybeSingle() as { data: Profile | null }
 
@@ -75,7 +76,7 @@ export default async function UserProfilePage({
     // Without Ambient there's no Now Playing either, so "All" is everything.
     if (FEATURES.ambient) gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
   }
-  if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
+  if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(ilikeAnyFilter(['title', 'developer'], searchParams.q.trim()))
 
   const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, recentSessionsRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
     gamesQuery,

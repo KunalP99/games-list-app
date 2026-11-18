@@ -11,8 +11,9 @@ import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 import { isFutureDate } from '@/lib/dates'
 import { isQuickStatus, statusChangeEffects } from '@/lib/game-quick-actions'
 import { editionStatus } from '@/lib/edition'
-
-type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
+import {
+  parseHours, parseAchievementProgress, parseDlc, parseYoutubeVideos, parseStringList, type GameVideo,
+} from '@/lib/game-input'
 
 // If `gameId` is the profile's most recent wheel outcome, consume that pointer.
 // When `revert` is true (the game is being DNF'd) also hand the wheel turn back
@@ -117,12 +118,18 @@ export async function createGame(formData: FormData) {
 
   // Ambient becomes Playing in an edition without it (lib/edition.ts).
   const status = editionStatus(formData.get('status') as string)
-  const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
-  const achievementProgress = formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null
+  // Checked here, not just by the form's inputs: a Server Action can be called
+  // with any payload, and hours feed straight into completion tickets.
+  const hoursParsed = parseHours(formData.get('hours_played'))
+  if (!hoursParsed.ok) return { error: hoursParsed.error }
+  const hours = hoursParsed.value
+  const progressParsed = parseAchievementProgress(formData.get('achievement_progress'))
+  if (!progressParsed.ok) return { error: progressParsed.error }
+  const achievementProgress = progressParsed.value
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
-  const dlc = JSON.parse((formData.get('dlc') as string) || '[]') as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
-  const youtubeVideos = JSON.parse((formData.get('youtube_videos') as string) || '[]') as GameVideo[]
+  const dlc = parseDlc(formData.get('dlc'))
+  const youtubeVideos = parseYoutubeVideos(formData.get('youtube_videos'))
 
   const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
   const releaseDate = releaseDatePrecision === 'year'
@@ -234,14 +241,26 @@ export async function updateGame(id: string, formData: FormData) {
     .eq('user_id', user.id)
     .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null } | null }
 
+  // Not this user's game (or no such game). Without this the update below
+  // matches no rows, which isn't an error, and the ticket logic further down
+  // then treats a posted "completed" as a fresh completion: anyone could mint
+  // tickets and XP against another user's game id, as often as they liked.
+  if (!existing) return { error: 'Game not found' }
+
   // Ambient becomes Playing in an edition without it (lib/edition.ts).
   const status = editionStatus(formData.get('status') as string)
-  const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
-  const achievementProgress = formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null
+  // Checked here, not just by the form's inputs: a Server Action can be called
+  // with any payload, and hours feed straight into completion tickets.
+  const hoursParsed = parseHours(formData.get('hours_played'))
+  if (!hoursParsed.ok) return { error: hoursParsed.error }
+  const hours = hoursParsed.value
+  const progressParsed = parseAchievementProgress(formData.get('achievement_progress'))
+  if (!progressParsed.ok) return { error: progressParsed.error }
+  const achievementProgress = progressParsed.value
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
-  const dlc = JSON.parse((formData.get('dlc') as string) || '[]') as { name: string; rawg_id: number | null; owned: boolean; removed?: boolean }[]
-  const youtubeVideos = JSON.parse((formData.get('youtube_videos') as string) || '[]') as GameVideo[]
+  const dlc = parseDlc(formData.get('dlc'))
+  const youtubeVideos = parseYoutubeVideos(formData.get('youtube_videos'))
 
   const releaseDatePrecision = (formData.get('release_date_precision') as 'full' | 'year') || 'full'
   const releaseDate = releaseDatePrecision === 'year'
@@ -393,6 +412,13 @@ export async function markAsCompleted(
 
   if (details && isFutureDate(details.completionDate)) {
     return { error: "Completion date can't be in the future." }
+  }
+  if (details) {
+    const h = parseHours(details.hours)
+    if (!h.ok) return { error: h.error }
+    const p = parseAchievementProgress(details.achievementProgress)
+    if (!p.ok) return { error: p.error }
+    details = { ...details, hours: h.value, achievementProgress: p.value }
   }
 
   // The status before this call: completing a DNF game refunds its penalty
@@ -612,7 +638,7 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   const title = formData.get('title') as string
   const developer = formData.get('developer') as string | null
   const image_url = formData.get('image_url') as string | null
-  const genres = JSON.parse((formData.get('genres') as string) || '[]')
+  const genres = parseStringList(formData.get('genres'))
   const rawgIdRaw = formData.get('rawg_id')
   const rawgId = rawgIdRaw ? Number(rawgIdRaw) : null
   let releaseDate = (formData.get('release_date') as string) || null

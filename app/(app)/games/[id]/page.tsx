@@ -19,6 +19,7 @@ import PlayedByCard from '@/components/games/PlayedByCard'
 import { mapGameVideos } from '@/lib/youtube'
 import PlaySessionsCard from '@/components/games/PlaySessionsCard'
 import { toTrackedSessions, type PlaySessionRow } from '@/lib/play-sessions'
+import { escapeLike } from '@/lib/query-escape'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
@@ -50,7 +51,8 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       .from('games')
       .select('id, created_at')
       .eq('user_id', game.user_id)
-      .ilike('title', game.title)
+      // Escaped so a title's own `_` or `%` isn't read as a wildcard.
+      .ilike('title', escapeLike(game.title))
       .order('created_at', { ascending: true }) as unknown as Promise<{ data: { id: string; created_at: string }[] | null }>,
     providerIdOf(game) ? getRawgScreenshots(providerIdOf(game)!) : Promise.resolve([] as RawgScreenshot[]),
     providerIdOf(game) ? getRawgAchievements(providerIdOf(game)!) : Promise.resolve([] as RawgAchievement[]),
@@ -62,7 +64,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
       .select('user_id, status')
       .neq('user_id', game.user_id)
       .in('status', ['completed', 'playing'])
-      .ilike('title', game.title) as unknown as Promise<{ data: { user_id: string; status: 'completed' | 'playing' }[] | null }>,
+      .ilike('title', escapeLike(game.title)) as unknown as Promise<{ data: { user_id: string; status: 'completed' | 'playing' }[] | null }>,
   ])
 
   // Every session the desktop agent tracked for this game (readable by any

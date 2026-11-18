@@ -13,6 +13,7 @@ import { getLiveSessions } from '@/lib/presence'
 import ProfileHero from '@/components/profile/ProfileHero'
 import { Suspense } from 'react'
 import { FEATURES } from '@/lib/edition'
+import { ilikeAnyFilter } from '@/lib/query-escape'
 
 export default async function GamesPage({
   searchParams,
@@ -60,7 +61,9 @@ export default async function GamesPage({
     // so there "All" really is everything.
     if (FEATURES.ambient) gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
   }
-  if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
+  // Quoted and escaped (lib/query-escape.ts): raw text here broke on a comma
+  // ("Warhammer 40,000") and could add filter conditions of its own.
+  if (q) gamesQuery = gamesQuery.or(ilikeAnyFilter(['title', 'developer'], q))
 
   // Playing games always fetched separately for the Now Playing strip — run
   // alongside the main games query and the profile-banner stats (computeUserStats

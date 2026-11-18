@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { BRAND } from '@/lib/edition'
 import { validateUsername, suggestUsernames, type Validation } from '@/lib/username'
+import { escapeLike as likeExact } from '@/lib/query-escape'
 
 /**
  * Server-side username checks against the database, shared by sign-up, the
@@ -17,8 +18,6 @@ export type UsernameStatus =
   | { status: 'taken'; username: string; suggestions: string[] }
   | { status: 'invalid'; error: string }
 
-/** Escapes LIKE wildcards, so `a_b` matches only itself. */
-const likeExact = (name: string) => name.replace(/[\\%_]/g, c => `\\${c}`)
 
 /** Validated against the rules, including this deployment's brand name. */
 export function checkUsernameRules(raw: string): Validation<string> {

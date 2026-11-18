@@ -17,7 +17,11 @@ const REPO = 'KunalP99/games-list-app'
 export async function GET() {
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
     headers: { Accept: 'application/vnd.github+json' },
-    cache: 'no-store',
+    // Cached for five minutes. Unauthenticated GitHub API calls are limited to
+    // 60 an hour per IP, and Vercel's outgoing IPs are shared, so asking on
+    // every click could leave the button failing. A new release still shows up
+    // within five minutes.
+    next: { revalidate: 300 },
   })
 
   if (!res.ok) {

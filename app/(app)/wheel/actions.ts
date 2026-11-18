@@ -11,6 +11,7 @@ import type { WheelTurn } from '@/lib/types'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { restoreSession, collapsePhase, type WheelSession } from '@/lib/wheel-session'
 import { wheelOn } from '@/lib/edition'
+import { escapeLike } from '@/lib/query-escape'
 
 // The wheel's state columns (wheel_turn, pending_wheel_*, wheel_session) and the
 // ticket functions are not writable by the browser roles — otherwise anyone
@@ -174,7 +175,7 @@ async function addWonGameToLibrary(
     const byTitle = await (supabase.from('games') as any)
       .select('id, status')
       .eq('user_id', userId)
-      .ilike('title', rawgGame.name) as { data: { id: string; status: string }[] | null }
+      .ilike('title', escapeLike(rawgGame.name)) as { data: { id: string; status: string }[] | null }
     rows = byTitle.data ?? []
   }
 

@@ -6,15 +6,12 @@ import { createClient } from '@/lib/supabase/server'
 import { FEATURES } from '@/lib/edition'
 import { validatePassword } from '@/lib/username'
 import { usernameStatus, type UsernameStatus } from '@/lib/data/usernames'
+import { siteOriginFrom } from '@/lib/site-origin'
 
-/** This site's own address, for links Supabase emails out (confirm, reset). */
+/** This site's own address, for links Supabase emails out (confirm, reset). See lib/site-origin.ts. */
 function siteOrigin(): string {
   const h = headers()
-  const origin = h.get('origin')
-  if (origin) return origin
-  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000'
-  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https')
-  return `${proto}://${host}`
+  return siteOriginFrom(process.env, name => h.get(name))
 }
 
 /** The Turnstile token from the form (the widget's own field), in an edition with secure sign-up. */

@@ -10,6 +10,8 @@ import type { RawgSearchResult } from '@/lib/rawg'
 import { fetchGameSearchPage } from '@/lib/searchGamesClient'
 import { todayIsoDate } from '@/lib/dates'
 import { FEATURES } from '@/lib/edition'
+import { escapeLike } from '@/lib/query-escape'
+import { MAX_HOURS_PLAYED } from '@/lib/game-input'
 
 const STATUS_OPTIONS = [
   { value: 'playing', label: 'Playing' },
@@ -139,7 +141,7 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
         .from('games')
         .select('id')
         .eq('user_id', user.id)
-        .ilike('title', title.trim())
+        .ilike('title', escapeLike(title.trim()))
         .limit(1)
 
       if (data && data.length > 0) {
@@ -475,6 +477,7 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
               name="hours_played"
               type="number"
               min={0}
+              max={MAX_HOURS_PLAYED}
               step={0.1}
               defaultValue={game?.hours_played ?? ''}
               className={input}
