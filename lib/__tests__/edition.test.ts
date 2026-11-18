@@ -25,6 +25,11 @@ describe('featuresFor', () => {
     expect(featuresFor('public').ticketHistoryNav).toBe(false)
   })
 
+  it('has secure sign-up in the public edition only', () => {
+    expect(featuresFor('friends').secureAuth).toBe(false)
+    expect(featuresFor('public').secureAuth).toBe(true)
+  })
+
   it('shares the ticket ledger in the friends edition only', () => {
     expect(featuresFor('friends').sharedTicketLedger).toBe(true)
     expect(featuresFor('public').sharedTicketLedger).toBe(false)

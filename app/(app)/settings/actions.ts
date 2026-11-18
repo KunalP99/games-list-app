@@ -8,6 +8,7 @@ import { generateDeviceToken, hashToken, isLoopbackCallback } from '@/lib/agent-
 import { normaliseExeName } from '@/lib/agent-session'
 import { writeExeLink } from '@/lib/exe-links'
 import { FEATURES } from '@/lib/edition'
+import { validatePassword } from '@/lib/username'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
   const supabase = createClient()
@@ -32,7 +33,12 @@ export async function updatePassword(formData: FormData): Promise<ActionResult> 
   const confirmPassword = formData.get('confirm_password') as string
 
   if (newPassword !== confirmPassword) return { success: false, error: 'Passwords do not match' }
-  if (newPassword.length < 6) return { success: false, error: 'Password must be at least 6 characters' }
+  // The public edition's stronger rule (lib/username.ts) applies here too, so
+  // a password change can't get round what sign-up enforces.
+  if (FEATURES.secureAuth) {
+    const pw = validatePassword(newPassword)
+    if (!pw.ok) return { success: false, error: pw.error }
+  } else if (newPassword.length < 6) return { success: false, error: 'Password must be at least 6 characters' }
 
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) return { success: false, error: error.message }

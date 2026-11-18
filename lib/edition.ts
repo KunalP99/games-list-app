@@ -60,6 +60,13 @@ export function featuresFor(edition: Edition) {
      * (what you have now, as in the nav's ticket pill).
      */
     ticketBalanceInBanner: edition === 'friends',
+    /**
+     * Sign-up fit for strangers: chosen usernames (lib/username.ts, changeable
+     * every 30 days), stronger passwords, Turnstile bot checks, Google and
+     * Discord sign-in, and forgot/reset password. The friends edition keeps its
+     * simple name/email/password login.
+     */
+    secureAuth: edition === 'public',
   }
 }
 

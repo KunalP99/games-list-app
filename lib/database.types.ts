@@ -30,6 +30,10 @@ export type Database = {
           theme_preference: 'light' | 'dark' | 'system'
           accent_colour: string | null
           is_admin: boolean
+          /** Whether the user picked their username (false: a stand-in from Google/Discord sign-up). db/public-auth.sql */
+          username_chosen: boolean
+          /** Last username change, for the 30-day cooldown (lib/username.ts). */
+          username_changed_at: string | null
           created_at: string
           updated_at: string
         }
@@ -47,6 +51,8 @@ export type Database = {
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
           is_admin?: boolean
+          username_chosen?: boolean
+          username_changed_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -64,9 +70,18 @@ export type Database = {
           theme_preference?: 'light' | 'dark' | 'system'
           accent_colour?: string | null
           is_admin?: boolean
+          username_chosen?: boolean
+          username_changed_at?: string | null
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
+      }
+      /** Old usernames after a rename, so old profile links still lead somewhere. db/public-auth.sql */
+      username_redirects: {
+        Row: { old_username: string; user_id: string; created_at: string }
+        Insert: { old_username: string; user_id: string; created_at?: string }
+        Update: { old_username?: string; user_id?: string; created_at?: string }
         Relationships: []
       }
       user_achievements: {

@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeUserStats } from '@/lib/user-stats'
@@ -29,12 +29,25 @@ export default async function UserProfilePage({
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
+  // The friends edition matches the name exactly, as it always has. The public
+  // edition's usernames are case-insensitive, and an old name (from before a
+  // rename, kept in username_redirects) forwards to the current profile.
+  let profileQuery = supabase
     .from('profiles')
     .select('id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
-    .eq('username', params.username)
-    .single() as { data: Profile | null }
+  const requested = decodeURIComponent(params.username)
+  profileQuery = FEATURES.secureAuth
+    ? profileQuery.ilike('username', requested.replace(/[\\%_]/g, c => `\\${c}`))
+    : profileQuery.eq('username', params.username)
+  const { data: profile } = await profileQuery.maybeSingle() as { data: Profile | null }
 
+  if (!profile && FEATURES.secureAuth) {
+    const { data: moved } = await ((supabase as any).from('username_redirects'))
+      .select('profiles(username)')
+      .eq('old_username', requested.toLowerCase())
+      .maybeSingle() as { data: { profiles: { username: string } | null } | null }
+    if (moved?.profiles?.username) redirect(`/users/${encodeURIComponent(moved.profiles.username)}`)
+  }
   if (!profile) notFound()
 
   const isOwner = user?.id === profile.id

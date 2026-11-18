@@ -5,6 +5,7 @@ import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, re
 import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
 import { FEATURES } from '@/lib/edition'
+import UsernameSetting from './UsernameSetting'
 
 const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
 
@@ -195,8 +196,11 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-fg-secondary mb-1">Username</label>
-              <input value={profile.username} disabled className={`${input} opacity-50 cursor-not-allowed`} />
+              <label htmlFor={FEATURES.secureAuth ? 'new_username' : undefined} className="block text-sm font-medium text-fg-secondary mb-1">Username</label>
+              {/* Changeable in the public edition (once every 30 days); fixed in the friends edition. */}
+              {FEATURES.secureAuth
+                ? <UsernameSetting username={profile.username} changedAt={profileData.username_changed_at ?? null} />
+                : <input value={profile.username} disabled className={`${input} opacity-50 cursor-not-allowed`} />}
             </div>
           </div>
           <div>
@@ -229,7 +233,7 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
                 required
                 minLength={6}
                 className={input}
-                placeholder="At least 6 characters"
+                placeholder={FEATURES.secureAuth ? 'At least 8, with a letter and a number' : 'At least 6 characters'}
                 autoComplete="new-password"
               />
             </div>

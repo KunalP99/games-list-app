@@ -1,9 +1,25 @@
 'use client'
 
-import { useState } from 'react'
-import { signIn, signUp } from './actions'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { signIn, signUp, checkUsername } from './actions'
 import Wordmark from '@/components/layout/Wordmark'
-import { BRAND } from '@/lib/edition'
+import { BRAND, FEATURES } from '@/lib/edition'
+import UsernameField from '@/components/auth/UsernameField'
+import Turnstile from '@/components/auth/Turnstile'
+import OAuthButtons from '@/components/auth/OAuthButtons'
+
+// The public edition's sign-up is built for strangers (lib/edition.ts
+// `secureAuth`): a chosen username, a stronger password, a Turnstile bot
+// check, Google/Discord, and "Forgot password?". The friends edition keeps its
+// name/email/password form exactly as it was.
+const SECURE = FEATURES.secureAuth
+
+// Messages for errors that come back in the address (?error=…), e.g. from an
+// expired confirmation or reset link.
+const URL_ERRORS: Record<string, string> = {
+  auth_callback_failed: 'That link has expired or was already used. Try again.',
+}
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -12,6 +28,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  // Turnstile tokens are single-use, so the widget is remounted after each try.
+  const [captchaKey, setCaptchaKey] = useState(0)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('error')
+    const description = params.get('error_description')
+    if (code) setError(URL_ERRORS[code] ?? description ?? 'Something went wrong signing you in. Try again.')
+  }, [])
 
   function switchMode(next: 'signin' | 'signup') {
     setMode(next)
@@ -43,6 +68,7 @@ export default function LoginPage() {
 
     if (result && 'error' in result) setError(result.error as string)
     if (result && 'success' in result) setMessage(result.success as string)
+    if (SECURE) setCaptchaKey(k => k + 1)
   }
 
   return (
@@ -89,9 +115,33 @@ export default function LoginPage() {
           </button>
         </div>
 
+        {SECURE && <div className="mb-4"><OAuthButtons onError={setError} /></div>}
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'signup' && (
+          {mode === 'signup' && SECURE && (
+            <>
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-fg-secondary mb-1">Username</label>
+                <UsernameField check={checkUsername} />
+              </div>
+              <div>
+                <label htmlFor="display_name" className="block text-sm font-medium text-fg-secondary mb-1">
+                  Display name <span className="font-normal text-fg-subtle">(optional)</span>
+                </label>
+                <input
+                  id="display_name"
+                  name="display_name"
+                  type="text"
+                  maxLength={50}
+                  autoComplete="name"
+                  className="w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input"
+                  placeholder="How your name shows on your profile"
+                />
+              </div>
+            </>
+          )}
+          {mode === 'signup' && !SECURE && (
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-fg-secondary mb-1">Name</label>
               <input
@@ -128,7 +178,7 @@ export default function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 required
                 autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                minLength={6}
+                minLength={SECURE && mode === 'signup' ? 8 : 6}
                 // pr-10 keeps typed text clear of the toggle sitting inside the field.
                 className="w-full px-3 py-2 pr-10 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input"
                 placeholder="••••••••"
@@ -164,6 +214,12 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {SECURE && mode === 'signin' && (
+            <div className="-mt-2 text-right">
+              <Link href="/forgot-password" className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400">Forgot password?</Link>
+            </div>
+          )}
+
           {/* Confirm password — signup only */}
           {mode === 'signup' && (
             <div>
@@ -193,6 +249,8 @@ export default function LoginPage() {
             </label>
           )}
 
+          {SECURE && <Turnstile key={captchaKey} />}
+
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800">
               {error}
@@ -217,7 +275,9 @@ export default function LoginPage() {
         </form>
 
         {mode === 'signup' && (
-          <p className="mt-4 text-xs text-fg-subtle text-center">Minimum 6 character password.</p>
+          <p className="mt-4 text-xs text-fg-subtle text-center">
+            {SECURE ? 'At least 8 characters, with a letter and a number.' : 'Minimum 6 character password.'}
+          </p>
         )}
       </div>
     </div>

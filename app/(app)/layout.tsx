@@ -8,6 +8,7 @@ import ThemeInitialiser from '@/components/layout/ThemeInitialiser'
 import NotificationBellData, { NotificationBellFallback } from '@/components/layout/NotificationBellData'
 import WhatsNewLoader from '@/components/layout/WhatsNewLoader'
 import { readFlashAchievements } from '@/lib/achievements'
+import { FEATURES } from '@/lib/edition'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient()
@@ -23,6 +24,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!profile) {
     await supabase.auth.signOut()
     redirect('/login')
+  }
+
+  // Signed in with Google/Discord but no username picked yet (the account was
+  // made with a stand-in name): ask for one before anything else. Public
+  // edition only; the friends edition never sets usernames this way.
+  if (FEATURES.secureAuth && (profile as { username_chosen?: boolean }).username_chosen === false) {
+    redirect('/welcome')
   }
 
   const pendingAchievements = readFlashAchievements()
