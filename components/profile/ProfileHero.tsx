@@ -1,5 +1,6 @@
 import { levelProgress } from '@/lib/achievements'
 import type { UserStats } from '@/lib/user-stats'
+import { FEATURES } from '@/lib/edition'
 
 // NOTE ON COLOUR: everything accented here uses `accent` inline, never a
 // `brand-*` class. `brand-*` resolves from the --brand-* CSS vars that
@@ -18,13 +19,18 @@ function StatFigure({ value, label }: { value: string; label: string }) {
 // Tickets get two numbers instead of one: the lifetime total leads at full
 // size, their current spendable balance follows in parentheses at a smaller
 // size, then "tickets" labels the whole figure — "120 (214) tickets".
+// The public edition shows one number, the tickets you have now — the same
+// figure as the nav's ticket pill (lib/edition.ts).
 function TicketFigure({ total, current }: { total: number; current: number }) {
+  const lead = FEATURES.ticketBalanceInBanner ? total : current
   return (
     <div>
-      <span className="text-xl font-bold text-white tabular-nums">🎟️ {total.toLocaleString()}</span>
-      <span className="text-[11px] font-semibold text-white/70 tabular-nums ml-1" title="Current balance">
-        ({current.toLocaleString()})
-      </span>
+      <span className="text-xl font-bold text-white tabular-nums">🎟️ {lead.toLocaleString()}</span>
+      {FEATURES.ticketBalanceInBanner && (
+        <span className="text-[11px] font-semibold text-white/70 tabular-nums ml-1" title="Current balance">
+          ({current.toLocaleString()})
+        </span>
+      )}
       <span className="text-xs text-white/65 ml-1.5">tickets</span>
     </div>
   )

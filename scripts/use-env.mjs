@@ -1,16 +1,24 @@
 #!/usr/bin/env node
 // Switches which Supabase project the local dev server talks to.
 //
-//   npm run env            -> show which environment is currently active
-//   npm run env:dev        -> point .env.local at the dev/test project
-//   npm run env:prod       -> point .env.local at the real project
+//   npm run env              -> show which environment is currently active
+//   npm run env:dev          -> the local Supabase stack, friends edition
+//   npm run env:dev-public   -> the local Supabase stack, public edition
+//   npm run env:prod         -> the real friends project
+//   npm run env:public       -> the real public-edition project
 //
 // Next.js only ever reads `.env.local`, so this just swaps that file's contents
-// from one of two stored sources. Both sources are gitignored (`.env*.local`).
+// from one of the stored sources. All are gitignored (`.env*.local`).
 //
-//   .env.prod.local  — the real project (created automatically on first run
-//                      from whatever `.env.local` held at the time)
-//   .env.dev.local   — the local Supabase stack
+//   .env.prod.local        — the real friends project (created automatically on
+//                            first run from whatever `.env.local` held then)
+//   .env.dev.local         — the local Supabase stack
+//   .env.dev-public.local  — the local stack again, as the public edition
+//   .env.public.local      — the real public-edition project
+//
+// A source is identified by its Supabase project ref *and* its edition
+// (NEXT_PUBLIC_EDITION, friends unless set to public; see lib/edition.ts),
+// since the two local sources share one database.
 //
 // Copying (rather than layering) is deliberate: whatever is in `.env.local` is
 // exactly what runs, so there's no chance of a half-dev/half-prod mix where,
@@ -29,7 +37,10 @@ const ACTIVE = path.join(ROOT, '.env.local')
 const SOURCES = {
   prod: path.join(ROOT, '.env.prod.local'),
   dev: path.join(ROOT, '.env.dev.local'),
+  'dev-public': path.join(ROOT, '.env.dev-public.local'),
+  public: path.join(ROOT, '.env.public.local'),
 }
+const SOURCE_FILES = Object.values(SOURCES).map(f => path.basename(f)).join(', ')
 
 function refOf(file) {
   if (!fs.existsSync(file)) return null
@@ -41,6 +52,18 @@ function refOf(file) {
   if (value && /127\.0\.0\.1|localhost/.test(value)) return 'local stack'
   const m = line.match(/https:\/\/([a-z0-9]+)\.supabase\.co/)
   return m ? m[1] : value
+}
+
+// Which edition a file runs as. Mirrors editionFrom in lib/edition.ts.
+function editionOf(file) {
+  if (!fs.existsSync(file)) return null
+  return parseKeys(fs.readFileSync(file, 'utf8')).get('NEXT_PUBLIC_EDITION') === 'public' ? 'public' : 'friends'
+}
+
+// "project ref · edition": what tells the sources apart.
+function identityOf(file) {
+  const ref = refOf(file)
+  return ref ? `${ref} · ${editionOf(file)}` : null
 }
 
 function parseKeys(text) {
@@ -65,22 +88,22 @@ function describeDrift(fromText, toText) {
   return { added, removed, changed, any: added.length + removed.length + changed.length > 0 }
 }
 
-function sourceMatching(ref) {
-  return Object.entries(SOURCES).find(([, file]) => refOf(file) === ref)
+function sourceMatching(identity) {
+  return Object.entries(SOURCES).find(([, file]) => identityOf(file) === identity)
 }
 
 function describeActive() {
-  const active = refOf(ACTIVE)
+  const active = identityOf(ACTIVE)
   if (!active) {
     console.log('No .env.local found (or it has no NEXT_PUBLIC_SUPABASE_URL).')
     return
   }
   const match = sourceMatching(active)
   const label = match ? match[0].toUpperCase() : 'UNKNOWN'
-  console.log(`Active: ${label}  (project ref: ${active})`)
+  console.log(`Active: ${label}  (project ref · edition: ${active})`)
 
   if (!match) {
-    console.log('  ^ .env.local does not match .env.prod.local or .env.dev.local.')
+    console.log(`  ^ .env.local does not match any of: ${SOURCE_FILES}.`)
     return
   }
 
@@ -111,13 +134,13 @@ function ensureProdBackup() {
 function syncBackActive() {
   if (!fs.existsSync(ACTIVE)) return
 
-  const activeRef = refOf(ACTIVE)
-  const match = sourceMatching(activeRef)
+  const activeId = identityOf(ACTIVE)
+  const match = sourceMatching(activeId)
 
   if (!match) {
-    // Belongs to neither source — switching would destroy it with no way back.
-    console.error(`Refusing to switch: .env.local (ref: ${activeRef}) does not match`)
-    console.error('.env.prod.local or .env.dev.local, so its contents would be lost.')
+    // Belongs to no source — switching would destroy it with no way back.
+    console.error(`Refusing to switch: .env.local (${activeId}) does not match any of`)
+    console.error(`${SOURCE_FILES}, so its contents would be lost.`)
     console.error('Save it somewhere first, then switch.')
     process.exit(1)
   }
@@ -143,7 +166,7 @@ if (!target) {
 }
 
 if (!SOURCES[target]) {
-  console.error(`Unknown environment "${target}". Use "dev" or "prod".`)
+  console.error(`Unknown environment "${target}". Use one of: ${Object.keys(SOURCES).join(', ')}.`)
   process.exit(1)
 }
 
@@ -157,5 +180,5 @@ if (!fs.existsSync(SOURCES[target])) {
 syncBackActive()
 
 fs.copyFileSync(SOURCES[target], ACTIVE)
-console.log(`Switched to ${target.toUpperCase()} (project ref: ${refOf(ACTIVE)})`)
+console.log(`Switched to ${target.toUpperCase()} (project ref · edition: ${identityOf(ACTIVE)})`)
 console.log('Restart `npm run dev` for it to take effect.')

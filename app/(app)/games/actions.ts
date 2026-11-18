@@ -10,6 +10,7 @@ import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
 import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 import { isFutureDate } from '@/lib/dates'
 import { isQuickStatus, statusChangeEffects } from '@/lib/game-quick-actions'
+import { editionStatus } from '@/lib/edition'
 
 type GameVideo = { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }
 
@@ -114,7 +115,8 @@ export async function createGame(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const status = formData.get('status') as string
+  // Ambient becomes Playing in an edition without it (lib/edition.ts).
+  const status = editionStatus(formData.get('status') as string)
   const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
   const achievementProgress = formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null
   const rawgIdRaw = formData.get('rawg_id')
@@ -232,7 +234,8 @@ export async function updateGame(id: string, formData: FormData) {
     .eq('user_id', user.id)
     .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null } | null }
 
-  const status = formData.get('status') as string
+  // Ambient becomes Playing in an edition without it (lib/edition.ts).
+  const status = editionStatus(formData.get('status') as string)
   const hours = formData.get('hours_played') ? Number(formData.get('hours_played')) : null
   const achievementProgress = formData.get('achievement_progress') ? Number(formData.get('achievement_progress')) : null
   const rawgIdRaw = formData.get('rawg_id')
@@ -543,7 +546,9 @@ export async function deleteGame(id: string, opts?: { stay?: boolean }) {
 // Quick-actions menu: move a game to Playing, Backlog or Ambient without the
 // full edit form. Completed and DNF go through markAsCompleted / markAsDnf,
 // which need their own details. Ticket effects match updateGame exactly.
-export async function setGameStatus(id: string, to: string) {
+export async function setGameStatus(id: string, rawTo: string) {
+  // Ambient becomes Playing in an edition without it (lib/edition.ts).
+  const to = editionStatus(rawTo)
   if (!isQuickStatus(to)) return { error: 'Not a status this can set.' }
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()

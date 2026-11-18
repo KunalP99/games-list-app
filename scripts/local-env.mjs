@@ -1,5 +1,7 @@
 /**
- * Writes .env.dev.local pointing at the local Supabase stack.
+ * Writes .env.dev.local pointing at the local Supabase stack, plus
+ * .env.dev-public.local: the same stack run as the public edition
+ * (NEXT_PUBLIC_EDITION=public, see lib/edition.ts).
  *
  * Usage (after `npm run supabase:start`):
  *   npm run env:local
@@ -77,6 +79,9 @@ const PROJECT_SPECIFIC = new Set([
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_DB_URL',
   'NEXT_PUBLIC_APP_ENV',
+  // Edition settings belong to each env file, never inherited from prod.
+  'NEXT_PUBLIC_EDITION',
+  'NEXT_PUBLIC_BRAND_NAME',
 ])
 
 const lines = [
@@ -103,8 +108,17 @@ for (const [key, value] of shared) {
   lines.push(`${key}=${value}`)
 }
 
-fs.writeFileSync(path.join(ROOT, '.env.dev.local'), lines.filter(l => l !== '').join('\n') + '\n')
-console.log('Wrote .env.dev.local pointing at the local stack.')
+const body = lines.filter(l => l !== '').join('\n') + '\n'
+fs.writeFileSync(path.join(ROOT, '.env.dev.local'), body)
+fs.writeFileSync(
+  path.join(ROOT, '.env.dev-public.local'),
+  body +
+    '\n# Run the local stack as the public edition (lib/edition.ts).\n' +
+    '# Activate with:  npm run env:dev-public\n' +
+    'NEXT_PUBLIC_EDITION=public\n' +
+    'NEXT_PUBLIC_BRAND_NAME=Untitled\n',
+)
+console.log('Wrote .env.dev.local and .env.dev-public.local pointing at the local stack.')
 console.log(`  API:    ${apiUrl}`)
 console.log( '  Studio: http://127.0.0.1:54323')
 console.log('\nNext:  npm run env:dev && npm run db:reset && npm run seed:dev')

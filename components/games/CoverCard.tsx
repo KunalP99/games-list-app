@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import StatusBadge from './StatusBadge'
-import MarkCompletedButton from './MarkCompletedButton'
 import LiveIndicator from './LiveIndicator'
 import GameActions, { GameActionsTrigger } from './GameActionsMenu'
 import type { Game } from '@/lib/types'
@@ -37,7 +36,7 @@ function CoverCardBody({
   return (
     <Link
       href={`/games/${game.id}`}
-      className="group flex flex-col bg-surface-base border border-edge-base rounded-xl overflow-hidden hover:border-brand-300 hover:shadow-md hover:-translate-y-1 transition-all duration-200 dark:hover:border-brand-600"
+      className="group flex flex-col h-full bg-surface-base border border-edge-base rounded-xl overflow-hidden hover:border-brand-300 hover:shadow-md hover:-translate-y-1 transition-all duration-200 dark:hover:border-brand-600"
     >
       {/* Cover (portrait) or placeholder */}
       <div className="relative w-full aspect-[3/4] bg-surface-sunken overflow-hidden">
@@ -63,8 +62,10 @@ function CoverCardBody({
         </div>
       </div>
 
-      {/* Info */}
-      <div className="flex flex-col gap-1.5 p-3">
+      {/* Info. Fills the card (h-full on the card, so every card in a grid
+          row is as tall as the tallest) with the stats row pinned to the
+          bottom, so the rows line up across cards. */}
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
         <div className="flex items-center gap-1.5 min-w-0">
           <h3 className="text-sm font-semibold text-fg-base truncate">{game.title}</h3>
           {game.is_favourite && <span className="text-amber-400 shrink-0 leading-none">★</span>}
@@ -73,8 +74,10 @@ function CoverCardBody({
         {releaseLabel && <p className="text-xs font-medium text-fg-muted truncate">📅 Releases {releaseLabel}</p>}
         {liveSince && <LiveIndicator startedAt={liveSince} />}
 
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 text-xs text-fg-subtle min-w-0 flex-wrap">
+        {/* One line, always: wrapping the stats (hours, rating, %) or the
+            button made cards with more of them taller than the rest. */}
+        <div className="mt-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 text-xs text-fg-subtle min-w-0 flex-nowrap overflow-hidden whitespace-nowrap">
             {game.is_replay && <span className="text-orange-400" title="Replay">↩</span>}
             {game.is_sequel && (
               <span className="text-violet-500" title="Sequel">
@@ -95,7 +98,6 @@ function CoverCardBody({
               <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
             )}
           </div>
-          {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} initialFavourite={game.is_favourite} />}
         </div>
       </div>
     </Link>

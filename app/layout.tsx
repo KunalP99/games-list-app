@@ -3,6 +3,7 @@ import localFont from 'next/font/local'
 import { Anton, Orbitron } from 'next/font/google'
 import './globals.css'
 import EnvBanner from '@/components/layout/EnvBanner'
+import { BRAND } from '@/lib/edition'
 
 const geistSans = localFont({
   src: './fonts/GeistVF.woff',
@@ -24,8 +25,8 @@ const anton = Anton({
 })
 
 export const metadata: Metadata = {
-  title: 'GamesList',
-  description: 'Track games. Earn tickets. Spin the wheel.',
+  title: BRAND.name,
+  description: BRAND.tagline,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

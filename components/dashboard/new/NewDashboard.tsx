@@ -11,10 +11,12 @@ import { GREETINGS } from '@/lib/greetings'
 import HeroCard, { type HeroGame } from './HeroCard'
 import StreakPill from './StreakPill'
 import WheelTurnCard from './WheelTurnCard'
+import LevelCard, { LevelCardSkeleton } from './LevelCard'
 import FriendsCard, { type FriendSummary } from './FriendsCard'
 import PlayCard from './PlayCard'
 import ComingUpCard, { ComingUpSkeleton } from './ComingUpCard'
 import ActivityCard, { ActivityCardSkeleton } from './ActivityCard'
+import { FEATURES, wheelOn } from '@/lib/edition'
 
 // How far back sessions are loaded: a year (plus a day's slack for the time
 // zone), for the "Your year" chart. The streak counts within the same window,
@@ -124,7 +126,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
     ...(counts.get(f.id) ?? { completed: 0, playing: 0 }),
   }))
 
-  const wheelEnabled = profile?.wheel_enabled ?? true
+  const wheelEnabled = wheelOn(profile)
   const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
   const name = profile?.display_name ?? profile?.username ?? ''
 
@@ -174,6 +176,13 @@ export default async function NewDashboard({ userId }: { userId: string }) {
         <div className="flex-[1_1_300px] min-w-0 space-y-4">
           {wheelEnabled && (
             <WheelTurnCard turn={profile?.wheel_turn ?? 'spin'} inProgress={profile?.wheel_session != null} />
+          )}
+          {/* No wheel in this edition: your level and next achievement take its
+              place, in the same bold card (lib/edition.ts). */}
+          {!FEATURES.wheel && (
+            <Suspense fallback={<LevelCardSkeleton />}>
+              <LevelCard userId={userId} xp={profile?.xp ?? 0} />
+            </Suspense>
           )}
           <FriendsCard friends={friends} initialLive={playingNow} />
           {playSummaries.year.totalMinutes > 0 && <PlayCard summaries={playSummaries} titles={playTitles} />}

@@ -9,6 +9,7 @@ import type { Game } from '@/lib/types'
 import type { RawgSearchResult } from '@/lib/rawg'
 import { fetchGameSearchPage } from '@/lib/searchGamesClient'
 import { todayIsoDate } from '@/lib/dates'
+import { FEATURES } from '@/lib/edition'
 
 const STATUS_OPTIONS = [
   { value: 'playing', label: 'Playing' },
@@ -16,8 +17,9 @@ const STATUS_OPTIONS = [
   { value: 'backlog', label: 'Backlog' },
   { value: 'dnf', label: 'Did Not Finish (DNF)' },
   // Ongoing games outside the wheel. Usually set by the desktop agent rather
-  // than here, but a game can be moved in and out by hand.
-  { value: 'ambient', label: 'Ambient (ongoing)' },
+  // than here, but a game can be moved in and out by hand. Friends edition
+  // only: the public edition has a single Playing status (lib/edition.ts).
+  ...(FEATURES.ambient ? [{ value: 'ambient', label: 'Ambient (ongoing)' }] : []),
 ]
 
 export default function GameForm({ game, defaultStatus, defaultTitle }: { game?: Game; defaultStatus?: string; defaultTitle?: string }) {

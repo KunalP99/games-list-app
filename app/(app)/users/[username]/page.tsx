@@ -15,6 +15,7 @@ import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
+import { FEATURES, wheelOn } from '@/lib/edition'
 
 export default async function UserProfilePage({
   params,
@@ -58,7 +59,8 @@ export default async function UserProfilePage({
     // the untabbed list is everything else. Only for "All" — AND-ing this
     // onto an explicit `status=ambient` tab contradicts the eq() above and
     // always returns nothing, which is what was making that tab empty.
-    gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
+    // Without Ambient there's no Now Playing either, so "All" is everything.
+    if (FEATURES.ambient) gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
   }
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(`title.ilike.%${searchParams.q.trim()}%,developer.ilike.%${searchParams.q.trim()}%`)
 
@@ -177,7 +179,7 @@ export default async function UserProfilePage({
 
   // Someone who's opted out of wheel turns in Settings doesn't advertise one.
   // Accounts predating the column read as opted in.
-  const wheelTurnBadge = (profile.wheel_enabled ?? true) ? (profile.wheel_turn ?? null) : null
+  const wheelTurnBadge = wheelOn(profile) ? (profile.wheel_turn ?? null) : null
 
   return (
     <div className="space-y-6">
@@ -193,7 +195,8 @@ export default async function UserProfilePage({
           the stat cards in a right-hand rail, but the grid row was then as tall
           as the rail, leaving a large gap above the games list whenever the
           content beside it was shorter. */}
-      <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />
+      {/* No Now Playing in the public edition: Recently played covers it (lib/edition.ts). */}
+      {FEATURES.ambient && <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />}
 
       <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner={isOwner} />
 

@@ -16,6 +16,7 @@ import path from 'path'
 import { createClient } from '@supabase/supabase-js'
 
 // Project refs this script must never touch, whatever .env.local says.
+// Add the public edition's project here as soon as it exists (lib/edition.ts).
 const PROD_REFS = ['msdnrnedrqogvdsmzxxz']
 
 // ── Load .env.local ────────────────────────────────────────────────────────────

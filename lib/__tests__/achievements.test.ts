@@ -117,3 +117,49 @@ describe('gameCompletionXp', () => {
     expect(gameCompletionXp(10, null)).toBe(50)
   })
 })
+
+// ─── Next achievement ───────────────────────────────────────────────────────
+import { nextAchievement, remainingLabel, ACHIEVEMENTS as ALL_ACHIEVEMENTS } from '../achievements'
+
+/** Stats with every number at 0 except the ones given (sessions.* via `sessions`). */
+function statsWith(values: Record<string, number>, sessions: Record<string, number> = {}) {
+  const sess = new Proxy({}, { get: (_t, k) => (typeof k === 'string' && k in sessions ? sessions[k] : 0) })
+  return new Proxy({}, {
+    get: (_t, k) => (k === 'sessions' ? sess : typeof k === 'string' && k in values ? values[k] : 0),
+  }) as Parameters<typeof nextAchievement>[0]
+}
+
+describe('nextAchievement', () => {
+  it('picks the locked achievement closest to its target', () => {
+    const next = nextAchievement(statsWith({ completedCount: 4 }), new Set(['first_clear']))
+    expect(next?.achievement.id).toBe('five_clears')
+    expect(next?.remaining).toBe('1 more game to complete')
+    expect(next?.percent).toBe(80)
+  })
+
+  it('compares across kinds of achievement', () => {
+    const next = nextAchievement(statsWith({ completedCount: 4, totalHours: 47 }), new Set(['first_clear', 'ten_hours']))
+    expect(next?.achievement.id).toBe('fifty_hours')
+    expect(next?.remaining).toBe('3h to go')
+  })
+
+  it('skips what is unlocked, and is null when nothing counted is left', () => {
+    const pool = ALL_ACHIEVEMENTS.filter(a => a.id === 'first_clear')
+    expect(nextAchievement(statsWith({}), new Set(['first_clear']), pool)).toBeNull()
+    expect(nextAchievement(statsWith({}), new Set(), pool)?.remaining).toBe('1 more game to complete')
+  })
+
+  it('leaves out one-off achievements, which have no progress to show', () => {
+    const pool = ALL_ACHIEVEMENTS.filter(a => a.id === 'five_rating')
+    expect(nextAchievement(statsWith({}), new Set(), pool)).toBeNull()
+  })
+})
+
+describe('remainingLabel', () => {
+  it('reads naturally for each unit', () => {
+    expect(remainingLabel('hours', 2.2)).toBe('3h to go')
+    expect(remainingLabel('minutes', 90)).toBe('1h 30m to go')
+    expect(remainingLabel('minutes', 25)).toBe('25m to go')
+    expect(remainingLabel({ one: 'session', many: 'sessions' }, 3)).toBe('3 more sessions')
+  })
+})

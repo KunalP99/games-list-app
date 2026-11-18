@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { signIn, signUp } from './actions'
+import Wordmark from '@/components/layout/Wordmark'
+import { BRAND } from '@/lib/edition'
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
@@ -51,7 +53,7 @@ export default function LoginPage() {
         <div className="mb-10 text-center">
           <div className="inline-flex items-center gap-2 mb-2">
             <h1 className="font-orbitron text-2xl font-bold tracking-tight">
-              <span className="text-fg-base">Games</span><span className="text-brand-600 dark:text-brand-400">List</span>
+              <Wordmark />
             </h1>
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 flex items-center justify-center shadow-sm shadow-brand-500/20">
               <svg viewBox="0 0 16 16" fill="white" className="w-4 h-4">
@@ -62,7 +64,7 @@ export default function LoginPage() {
               </svg>
             </div>
           </div>
-          <p className="text-sm text-fg-muted">Track games. Earn tickets. Spin the wheel.</p>
+          <p className="text-sm text-fg-muted">{BRAND.tagline}</p>
         </div>
 
         {/* Tab toggle */}

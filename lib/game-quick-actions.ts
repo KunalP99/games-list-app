@@ -8,6 +8,7 @@
  * edit wouldn't.
  */
 import type { GameStatus } from './types'
+import { FEATURES } from './edition'
 
 /** Statuses the menu moves to directly. Completed and DNF have their own flows. */
 export type QuickStatus = 'playing' | 'backlog' | 'ambient'
@@ -19,9 +20,12 @@ export type MenuMove =
 
 const ORDER: GameStatus[] = ['playing', 'completed', 'backlog', 'dnf', 'ambient']
 
-/** The moves to offer for a game, in a fixed order, never its own status. */
-export function menuMoves(current: GameStatus): MenuMove[] {
-  return ORDER.filter(s => s !== current).map(s =>
+/**
+ * The moves to offer for a game, in a fixed order, never its own status.
+ * No "Move to Ambient" in an edition without Ambient (lib/edition.ts).
+ */
+export function menuMoves(current: GameStatus, withAmbient: boolean = FEATURES.ambient): MenuMove[] {
+  return ORDER.filter(s => s !== current && (withAmbient || s !== 'ambient')).map(s =>
     s === 'completed' ? { kind: 'complete' }
       : s === 'dnf' ? { kind: 'dnf' }
       : { kind: 'status', to: s as QuickStatus },
@@ -32,12 +36,16 @@ export function isQuickStatus(s: unknown): s is QuickStatus {
   return s === 'playing' || s === 'backlog' || s === 'ambient'
 }
 
-/** What leaving `from` for `to` does to the ledger (same as `updateGame`). */
-export function statusChangeEffects(from: GameStatus, to: GameStatus) {
+/**
+ * What leaving `from` for `to` does to the ledger (same as `updateGame`).
+ * Without a DNF penalty (the public edition, lib/edition.ts) there's none to
+ * apply or refund.
+ */
+export function statusChangeEffects(from: GameStatus, to: GameStatus, withDnfPenalty: boolean = FEATURES.dnfPenalty) {
   return {
     reverseCompletion: from === 'completed' && to !== 'completed',
-    reverseDnf: from === 'dnf' && to !== 'dnf',
-    applyDnf: from !== 'dnf' && to === 'dnf',
+    reverseDnf: withDnfPenalty && from === 'dnf' && to !== 'dnf',
+    applyDnf: withDnfPenalty && from !== 'dnf' && to === 'dnf',
   }
 }
 
@@ -46,8 +54,8 @@ export function statusChangeEffects(from: GameStatus, to: GameStatus) {
  * straight through. Anything that costs tickets asks first; getting tickets
  * back (leaving DNF) doesn't.
  */
-export function moveWarning(from: GameStatus, to: GameStatus): string | null {
-  const fx = statusChangeEffects(from, to)
+export function moveWarning(from: GameStatus, to: GameStatus, withDnfPenalty: boolean = FEATURES.dnfPenalty): string | null {
+  const fx = statusChangeEffects(from, to, withDnfPenalty)
   const parts: string[] = []
   if (fx.reverseCompletion) parts.push('takes back the tickets you earned for completing it')
   if (fx.applyDnf) parts.push('applies the DNF ticket penalty')

@@ -14,6 +14,8 @@
     "env": "node scripts/use-env.mjs",
     "env:dev": "node scripts/use-env.mjs dev",
     "env:prod": "node scripts/use-env.mjs prod",
+    "env:public": "node scripts/use-env.mjs public",
+    "env:dev-public": "node scripts/use-env.mjs dev-public",
     "db:dump": "node scripts/dump-schema.mjs",
     "seed:dev": "node scripts/seed-dev.mjs",
     "import:detectable": "node scripts/import-detectable.mjs",

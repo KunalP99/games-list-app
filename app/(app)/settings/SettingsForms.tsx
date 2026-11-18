@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, revokeDevice, ignoreExecutable, unignoreExecutable } from './actions'
 import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
+import { FEATURES } from '@/lib/edition'
 
 const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
 
@@ -329,7 +330,8 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
         </form>
       </section>
 
-      {/* Wheel */}
+      {/* Wheel — only in an edition that has it (lib/edition.ts) */}
+      {FEATURES.wheel && (
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Wheel</h2>
 
@@ -373,6 +375,7 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
 
         <StatusMessage msg={wheelMsg} />
       </section>
+      )}
 
       {/* Devices — the desktop agent that logs hours automatically */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">

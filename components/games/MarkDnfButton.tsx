@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { markAsDnf } from '@/app/(app)/games/actions'
+import { FEATURES } from '@/lib/edition'
 
 // "Did Not Finish" button for the game detail page (playing games only). Opens a
 // simple are-you-sure confirmation before dropping the game.
@@ -40,7 +41,7 @@ export default function MarkDnfButton({ gameId }: { gameId: string }) {
             <div>
               <h2 className="text-lg font-semibold text-fg-base">Mark as Did Not Finish?</h2>
               <p className="text-sm text-fg-muted mt-1">
-                Are you sure? This drops the game and applies the DNF ticket penalty.
+                Are you sure? This drops the game{FEATURES.dnfPenalty && ' and applies the DNF ticket penalty'}.
               </p>
             </div>
             <div className="flex justify-end gap-3 pt-1">

@@ -270,7 +270,9 @@ export default function MarkCompletedButton({
         <button
           onClick={handleOpen}
           disabled={pending}
-          className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5 hover:bg-emerald-100 disabled:opacity-50 transition-colors dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
+          // Never wraps or shrinks: on a narrow card a two-line button made
+          // that card taller than its neighbours.
+          className="shrink-0 whitespace-nowrap text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-0.5 hover:bg-emerald-100 disabled:opacity-50 transition-colors dark:bg-emerald-900/40 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
         >
           {pending ? '…' : 'Mark Complete'}
         </button>

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
+import { FEATURES } from '@/lib/edition'
 
 const PAGE_SIZE = 20
 
@@ -148,11 +149,16 @@ export default async function TicketsPage({
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Everyone's tickets in the friends edition; only the viewer's own in the
+  // public edition, where other users are strangers (lib/edition.ts).
+  let transactionsQuery = supabase
+    .from('ticket_transactions')
+    .select('*, games(id, title), profiles(id, username, display_name, accent_colour)')
+    .order('created_at', { ascending: false })
+  if (!FEATURES.sharedTicketLedger) transactionsQuery = transactionsQuery.eq('user_id', user!.id)
+
   const [allTransactionsRes, profileRes] = await Promise.all([
-    supabase
-      .from('ticket_transactions')
-      .select('*, games(id, title), profiles(id, username, display_name, accent_colour)')
-      .order('created_at', { ascending: false }),
+    transactionsQuery,
     supabase
       .from('profiles')
       .select('ticket_balance, accent_colour')

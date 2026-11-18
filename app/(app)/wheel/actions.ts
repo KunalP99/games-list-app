@@ -10,6 +10,7 @@ import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { restoreSession, collapsePhase, type WheelSession } from '@/lib/wheel-session'
+import { wheelOn } from '@/lib/edition'
 
 // The wheel's state columns (wheel_turn, pending_wheel_*, wheel_session) and the
 // ticket functions are not writable by the browser roles — otherwise anyone
@@ -108,7 +109,8 @@ export async function clearWheelSession() {
 }
 
 // Every wheel action routes through here, which makes it the one place to
-// enforce the Settings opt-out: a user with wheel turns switched off reads as
+// enforce the Settings opt-out (and an edition without the wheel, which counts
+// as everyone opted out — see lib/edition.ts): a user with wheel turns off reads as
 // "no profile", and each caller already refuses on that (six guard `!profile`
 // explicitly, six via `profile?.`). The UI hides the wheel and /wheel redirects
 // when it's off, so reaching an action at all means a stale or hand-made
@@ -119,8 +121,7 @@ async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, us
     .select('wheel_turn, ticket_balance, wheel_enabled')
     .eq('id', userId)
     .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number; wheel_enabled: boolean | null } | null }
-  // Accounts predating the column read as opted in.
-  if (data && !(data.wheel_enabled ?? true)) return null
+  if (data && !wheelOn(data)) return null
   return data
 }
 

@@ -7,6 +7,7 @@ import type { ActionResult } from '@/lib/types'
 import { generateDeviceToken, hashToken, isLoopbackCallback } from '@/lib/agent-auth'
 import { normaliseExeName } from '@/lib/agent-session'
 import { writeExeLink } from '@/lib/exe-links'
+import { FEATURES } from '@/lib/edition'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
   const supabase = createClient()
@@ -39,6 +40,7 @@ export async function updatePassword(formData: FormData): Promise<ActionResult> 
 }
 
 export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult> {
+  if (!FEATURES.wheel) return { success: false, error: 'The wheel isn’t available here' }
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }

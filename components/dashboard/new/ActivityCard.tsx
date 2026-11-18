@@ -5,7 +5,9 @@ import ActivityRow from '@/components/activity/ActivityRow'
 import ActivityTabs from './ActivityTabs'
 import type { ActivityItem } from '@/lib/activity'
 
-const PER_TAB = 6
+// Ten per tab: enough to fill the column beside the rail without the card
+// turning into the full /activity page.
+const PER_TAB = 10
 
 function List({ items, empty }: { items: ActivityItem[]; empty: string }) {
   if (items.length === 0) return <p className="py-6 text-sm text-fg-subtle">{empty}</p>
@@ -42,5 +44,5 @@ export default async function ActivityCard({ userId }: { userId: string }) {
 }
 
 export function ActivityCardSkeleton() {
-  return <div className="h-96 rounded-2xl bg-surface-base border border-edge-base animate-pulse" />
+  return <div className="h-[36rem] rounded-2xl bg-surface-base border border-edge-base animate-pulse" />
 }

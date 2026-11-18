@@ -4,6 +4,8 @@ import { SPIN_TYPE_BADGE, SPIN_TYPE_LABEL, spinModeLabel, rerollRunnerUp, summar
 import { TICKET_AWARDS } from '@/lib/constants'
 import { getInitials } from '@/lib/activity'
 import SpinTime from '@/components/wheel/SpinTime'
+import { FEATURES } from '@/lib/edition'
+import { notFound } from 'next/navigation'
 
 const PAGE_SIZE = 20
 
@@ -41,6 +43,8 @@ export default async function WheelHistoryPage({
 }: {
   searchParams: { page?: string }
 }) {
+  // An edition without the wheel has no wheel history (lib/edition.ts).
+  if (!FEATURES.wheel) notFound()
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 

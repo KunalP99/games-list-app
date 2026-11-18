@@ -1,4 +1,5 @@
 import type { Game } from './types'
+import { FEATURES } from './edition'
 
 /** A play session as the strip needs it: which game, and when it started (and, if known, last ran). */
 export type SessionRow = {
@@ -62,15 +63,20 @@ export function orderByIds(games: Game[], ids: string[]): Game[] {
  * it on every write, so editing a game's notes would push it to the top of a
  * list that claims to be about playing.
  *
- * Ambient only, deliberately. Games that came from the wheel have their own
- * places to appear, and mixing them in here would blur exactly the line this
- * category exists to draw.
+ * Ambient only in the friends edition, deliberately. Games that came from the
+ * wheel have their own places to appear (Now Playing), and mixing them in here
+ * would blur exactly the line this category exists to draw.
+ *
+ * The public edition has no Ambient and no Now Playing (lib/edition.ts), so
+ * there this is every tracked Playing game, and it's the only place they're
+ * pulled out above the list: a longer list, from a deeper look at sessions.
  */
 export async function getRecentlyPlayed(
   supabase: { from: (t: string) => any },
   userId: string,
-  limit = 5,
+  limit = FEATURES.ambient ? 5 : 24,
 ): Promise<RecentlyPlayedGame[]> {
+  const status = FEATURES.ambient ? 'ambient' : 'playing'
   // More sessions than games wanted, since one game can hold many of the most
   // recent rows — an evening of the same game would otherwise fill the window.
   const { data: sessions } = await supabase
@@ -79,7 +85,7 @@ export async function getRecentlyPlayed(
     .eq('user_id', userId)
     .not('game_id', 'is', null)
     .order('started_at', { ascending: false })
-    .limit(60)
+    .limit(FEATURES.ambient ? 60 : 300)
 
   const rows = (sessions ?? []) as SessionRow[]
   const ids = recentGameIds(rows, limit * 8)
@@ -90,11 +96,11 @@ export async function getRecentlyPlayed(
     .from('games')
     .select('*')
     .eq('user_id', userId)
-    .eq('status', 'ambient')
+    .eq('status', status)
     .in('id', ids)
 
   // Filtering happens after the lookup, so a game that has since been moved out
-  // of Ambient drops out and the next one down takes its place.
+  // of the status drops out and the next one down takes its place.
   return orderByIds((games ?? []) as Game[], ids)
     .slice(0, limit)
     .map(g => ({ ...g, lastPlayedAt: lastPlayed.get(g.id)! }))

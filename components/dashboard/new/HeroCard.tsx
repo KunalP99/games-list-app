@@ -66,7 +66,9 @@ export default function HeroCard({ hero, wheelEnabled }: { hero: Hero<HeroGame> 
 
       <div className="relative p-6 flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0 flex-1 basis-[320px]">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1">
+          {/* -ml matches px: the badge's text lines up with the title below,
+              and its dark pill sits slightly out into the margin. */}
+          <span className="-ml-2.5 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1">
             {liveSince ? (
               <LiveIndicator startedAt={liveSince} dark />
             ) : (

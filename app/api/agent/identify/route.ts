@@ -9,6 +9,7 @@ import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent } from '@/lib/igdb'
 import { pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
 import { writeExeLink } from '@/lib/exe-links'
+import { editionStatus } from '@/lib/edition'
 
 export const dynamic = 'force-dynamic'
 
@@ -293,8 +294,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     })
   }
 
-  // New to them: file it as Ambient, with the same metadata any other add
-  // would get, so it does not sit in the library as a bare title.
+  // New to them: file it as Ambient (Playing in an edition without Ambient,
+  // lib/edition.ts), with the same metadata any other add would get, so it
+  // does not sit in the library as a bare title.
+  const filedStatus = editionStatus('ambient')
   const { getRawgGameDetail } = await import('@/lib/rawg')
   const detail = await getRawgGameDetail(igdbId)
 
@@ -303,7 +306,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       user_id: userId,
       title: detail?.name ?? resolvedName,
       developer: detail?.developers?.[0]?.name ?? null,
-      status: 'ambient',
+      status: filedStatus,
       platform,
       start_date: new Date().toISOString().slice(0, 10),
       steam_appid: steamAppId,
@@ -329,7 +332,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     result: 'added',
     gameId: created.id,
     title: created.title,
-    status: 'ambient',
+    status: filedStatus,
     igdbId,
   })
 }

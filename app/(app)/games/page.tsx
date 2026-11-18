@@ -12,6 +12,7 @@ import { getRecentlyPlayed } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import ProfileHero from '@/components/profile/ProfileHero'
 import { Suspense } from 'react'
+import { FEATURES } from '@/lib/edition'
 
 export default async function GamesPage({
   searchParams,
@@ -55,7 +56,9 @@ export default async function GamesPage({
     // "All": AND-ing this onto an explicit `status=ambient` (or `=playing`)
     // tab contradicts the eq() above and always returns nothing, which is
     // exactly what was making the Ambient tab render empty.
-    gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
+    // An edition without Ambient has no Now Playing either (lib/edition.ts),
+    // so there "All" really is everything.
+    if (FEATURES.ambient) gamesQuery = gamesQuery.not('status', 'in', '("playing","ambient")')
   }
   if (q) gamesQuery = gamesQuery.or(`title.ilike.%${q}%,developer.ilike.%${q}%`)
 
@@ -129,8 +132,10 @@ export default async function GamesPage({
         </div>
       </div>
 
-      {/* Now Playing strip — always visible if any games are in progress */}
-      {playingGames && playingGames.length > 0 && (
+      {/* Now Playing strip — always visible if any games are in progress.
+          Friends edition only: the public edition's Playing games show in
+          Recently played (tracked ones) and the Playing tab (lib/edition.ts). */}
+      {FEATURES.ambient && playingGames && playingGames.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
             Now Playing · {playingGames.length}
@@ -145,7 +150,8 @@ export default async function GamesPage({
       )}
 
       {/* Ambient games, newest session first — what has actually been running,
-          as opposed to what was deliberately picked up above. */}
+          as opposed to what was deliberately picked up above. In the public
+          edition, every Playing game the tracker has seen. */}
       <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner />
 
       <Suspense>

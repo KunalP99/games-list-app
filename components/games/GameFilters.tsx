@@ -2,14 +2,27 @@
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { FEATURES } from '@/lib/edition'
 
-const STATUS_TABS = [
-  { value: 'all', label: 'All' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'dnf', label: 'DNF' },
-  { value: 'ambient', label: 'Ambient' },
-]
+// Playing games have no tab in the friends edition: the Now Playing section
+// above the list shows them all. The public edition has no Now Playing (only
+// Recently played, for tracked games), so it lists Playing here instead of
+// Ambient, which it doesn't have (lib/edition.ts).
+const STATUS_TABS = FEATURES.ambient
+  ? [
+      { value: 'all', label: 'All' },
+      { value: 'completed', label: 'Completed' },
+      { value: 'backlog', label: 'Backlog' },
+      { value: 'dnf', label: 'DNF' },
+      { value: 'ambient', label: 'Ambient' },
+    ]
+  : [
+      { value: 'all', label: 'All' },
+      { value: 'playing', label: 'Playing' },
+      { value: 'completed', label: 'Completed' },
+      { value: 'backlog', label: 'Backlog' },
+      { value: 'dnf', label: 'DNF' },
+    ]
 
 const SORT_OPTIONS = [
   { value: 'created_at', label: 'Date Added' },

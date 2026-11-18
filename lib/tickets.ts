@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { TICKET_AWARDS, TICKET_PENALTIES } from './constants'
 import { createAdminClient } from './supabase/admin'
+import { FEATURES } from './edition'
 
 // The ticket functions (award_tickets, reverse_*) are SECURITY DEFINER and take
 // a user id as a plain argument, so they are not callable from the browser
@@ -62,11 +63,17 @@ export async function awardCompletionTickets(
   await checkAndAwardSequelBonus(supabase, userId, gameId)
 }
 
+/**
+ * Charges the DNF penalty. Every DNF path calls this, so it's also the one
+ * place the public edition skips it: no ticket is ever lost to a DNF there
+ * (lib/edition.ts).
+ */
 export async function applyDnfPenalty(
   supabase: SupabaseClient,
   userId: string,
   gameId: string,
 ) {
+  if (!FEATURES.dnfPenalty) return
   const { error } = await ledger().rpc('award_tickets', {
     p_user_id: userId,
     p_amount: TICKET_PENALTIES.assigned_game_incomplete,

@@ -1,10 +1,13 @@
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import WheelClient from '@/components/wheel/WheelClient'
 import { providerIdOf } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
+import { FEATURES, wheelOn } from '@/lib/edition'
 
 export default async function WheelPage() {
+  // An edition without the wheel has no wheel page at all (lib/edition.ts).
+  if (!FEATURES.wheel) notFound()
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -48,7 +51,7 @@ export default async function WheelPage() {
   // than in middleware.ts, which never touches `profiles` and shouldn't take a
   // DB round-trip on every request. Page-level is also naturally path-exact,
   // so /wheel/history stays reachable, which is the agreed behaviour.
-  if (!(profile.wheel_enabled ?? true)) redirect('/dashboard')
+  if (!wheelOn(profile)) redirect('/dashboard')
 
   // Unreleased games can't be played yet, so keep them off the wheel until their
   // release date passes (games with no date are treated as available).

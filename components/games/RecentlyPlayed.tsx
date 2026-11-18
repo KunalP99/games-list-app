@@ -131,9 +131,15 @@ export default function RecentlyPlayed({
         </Tile>
 
         <DragScroller className="no-scrollbar flex-1 min-w-0 overflow-x-auto cursor-grab active:cursor-grabbing select-none">
-          {/* Always four columns, filled or not, so two games don't balloon
-              into two giant covers. */}
-          <div className="grid grid-cols-[repeat(4,minmax(140px,1fr))] gap-4">
+          {/* Always four columns' worth, filled or not, so two games don't
+              balloon into two giant covers. Past four covers (the public
+              edition lists every tracked Playing game, lib/recently-played.ts)
+              they stay on one row at the same width and the row scrolls
+              sideways, rather than wrapping onto a second row and stretching
+              the hero to match. */}
+          <div className={rest.length > 4
+            ? 'grid grid-flow-col auto-cols-[max(140px,calc((100%-3rem)/4))] gap-4'
+            : 'grid grid-cols-[repeat(4,minmax(140px,1fr))] gap-4'}>
         {rest.map(game => {
           const live = liveSessions.get(game.id) ?? null
           return (

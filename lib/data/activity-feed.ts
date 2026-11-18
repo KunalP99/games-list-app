@@ -1,6 +1,7 @@
 import type { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
+import { FEATURES } from '@/lib/edition'
 import { buildActivityItems, groupActivityItems, suppressRepeatedStarts, type ActivityItem, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 
 type Supabase = ReturnType<typeof createClient>
@@ -38,12 +39,15 @@ export async function getActivityFeed(supabase: Supabase, userId: string, limit 
       .in('user_id', allUserIds)
       .order('updated_at', { ascending: false })
       .limit(60) as unknown as Promise<{ data: { id: string; user_id: string; title: string; status: string; image_url: string | null; cover_image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }[] | null }>,
-    supabase
-      .from('wheel_spins')
-      .select('id, user_id, spin_type, result_name, created_at')
-      .in('user_id', allUserIds)
-      .order('created_at', { ascending: false })
-      .limit(30) as unknown as Promise<{ data: { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null }>,
+    // No wheel in this edition, so no spins to read (lib/edition.ts).
+    FEATURES.wheel
+      ? supabase
+          .from('wheel_spins')
+          .select('id, user_id, spin_type, result_name, created_at')
+          .in('user_id', allUserIds)
+          .order('created_at', { ascending: false })
+          .limit(30) as unknown as Promise<{ data: { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] | null }>
+      : Promise.resolve({ data: [] as { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] }),
     supabase
       .from('play_sessions')
       .select('user_id, game_id, started_at, ended_at, minutes')

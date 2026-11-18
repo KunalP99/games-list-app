@@ -5,6 +5,7 @@ import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { cleanSubmittedSuffix } from '@/lib/detectable'
 import { writeExeLink } from '@/lib/exe-links'
+import { editionStatus } from '@/lib/edition'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,8 +67,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (kind === 'completed' && body?.status != null && body.status !== 'playing' && body.status !== 'ambient') {
     return NextResponse.json({ error: 'status must be "playing" or "ambient" when given' }, { status: 400 })
   }
-  const targetStatus: 'playing' | 'ambient' =
-    kind === 'backlog' || (kind === 'completed' && body?.status === 'ambient') ? body.status : 'playing'
+  // An edition without Ambient (lib/edition.ts) takes "Track as Ambient" as
+  // Playing: for a completed game that makes it a replay.
+  const targetStatus: 'playing' | 'ambient' = editionStatus(
+    kind === 'backlog' || (kind === 'completed' && body?.status === 'ambient') ? body.status : 'playing',
+  )
   const exeName = typeof body?.exeName === 'string' && body.exeName.trim()
     ? normaliseExeName(body.exeName)
     : null

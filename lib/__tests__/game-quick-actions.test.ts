@@ -12,6 +12,15 @@ describe('menuMoves', () => {
     expect(menuMoves('completed').map(m => m.kind)).toEqual(['status', 'status', 'dnf', 'status'])
     expect(menuMoves('dnf')).not.toContainEqual({ kind: 'dnf' })
   })
+
+  it('offers no Ambient move without Ambient (public edition)', () => {
+    expect(menuMoves('playing', false)).toEqual([
+      { kind: 'complete' },
+      { kind: 'status', to: 'backlog' },
+      { kind: 'dnf' },
+    ])
+    expect(menuMoves('backlog', false).map(m => m.kind === 'status' ? m.to : m.kind)).toEqual(['playing', 'complete', 'dnf'])
+  })
 })
 
 describe('statusChangeEffects', () => {
@@ -21,6 +30,23 @@ describe('statusChangeEffects', () => {
     expect(statusChangeEffects('dnf', 'backlog')).toEqual({ reverseCompletion: false, reverseDnf: true, applyDnf: false })
     expect(statusChangeEffects('playing', 'backlog')).toEqual({ reverseCompletion: false, reverseDnf: false, applyDnf: false })
     expect(statusChangeEffects('dnf', 'dnf').applyDnf).toBe(false)
+  })
+})
+
+describe('without a DNF penalty (public edition)', () => {
+  it('neither charges nor refunds anything for DNF', () => {
+    expect(statusChangeEffects('playing', 'dnf', false)).toEqual({ reverseCompletion: false, reverseDnf: false, applyDnf: false })
+    expect(statusChangeEffects('dnf', 'playing', false)).toEqual({ reverseCompletion: false, reverseDnf: false, applyDnf: false })
+  })
+
+  it('still takes back a completion’s tickets, so they can’t be earned twice', () => {
+    expect(statusChangeEffects('completed', 'dnf', false)).toEqual({ reverseCompletion: true, reverseDnf: false, applyDnf: false })
+    expect(moveWarning('completed', 'dnf', false)).toMatch(/takes back the tickets/)
+  })
+
+  it('lets a game be dropped without a warning', () => {
+    expect(moveWarning('playing', 'dnf', false)).toBeNull()
+    expect(moveWarning('playing', 'dnf', true)).toMatch(/DNF ticket penalty/)
   })
 })
 

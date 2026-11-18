@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import {
-  ACHIEVEMENTS,
+  AVAILABLE_ACHIEVEMENTS,
   CATEGORY_LABELS,
   levelProgress,
   type AchievementCategory,
@@ -29,14 +29,17 @@ export default async function AchievementsPage() {
 
   // Group achievements by category, in defined order
   const categoryOrder: AchievementCategory[] = ['completion', 'hours', 'tickets', 'perfection', 'variety', 'dedication', 'wheel', 'steam_deck', 'sessions', 'misc']
-  const groups = categoryOrder.map(cat => ({
-    category: cat,
-    label: CATEGORY_LABELS[cat],
-    items: ACHIEVEMENTS.filter(a => a.category === cat),
-  }))
+  // Categories this edition has none of (the wheel, where it's off) are left out.
+  const groups = categoryOrder
+    .map(cat => ({
+      category: cat,
+      label: CATEGORY_LABELS[cat],
+      items: AVAILABLE_ACHIEVEMENTS.filter(a => a.category === cat),
+    }))
+    .filter(g => g.items.length > 0)
 
   const totalUnlocked = unlocked.size
-  const totalAchievements = ACHIEVEMENTS.length
+  const totalAchievements = AVAILABLE_ACHIEVEMENTS.length
 
   return (
     <div className="space-y-8">

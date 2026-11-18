@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { isLoopbackCallback } from '@/lib/agent-auth'
 import PairDeviceForm from './PairDeviceForm'
+import { BRAND } from '@/lib/edition'
 
 /**
  * The desktop app opens this page to get a device token.
@@ -40,7 +41,7 @@ export default async function PairDevicePage({
         <div className="text-center">
           <h1 className="text-2xl font-bold text-fg-base">Connect this PC</h1>
           <p className="text-sm text-fg-muted mt-1">
-            So GamesList can log your hours while you play.
+            So {BRAND.name} can log your hours while you play.
           </p>
         </div>
 
@@ -52,7 +53,7 @@ export default async function PairDevicePage({
             <p className="text-sm text-fg-secondary leading-relaxed">
               A pairing link has to point back at the app running on your own
               computer. This one doesn&apos;t, so no token has been created.
-              Open the GamesList app and try connecting again.
+              Open the {BRAND.name} app and try connecting again.
             </p>
             <Link href="/settings" className="inline-block text-sm text-brand-600 hover:text-brand-700 dark:text-brand-400">
               Back to settings →

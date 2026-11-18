@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { createAdminClient } from './supabase/admin'
 import { fetchAllRows } from './data/fetch-all'
+import { FEATURES } from './edition'
 import {
   gameKey, sessionAchievementStats,
   type AchievementSession, type KeyedSession, type SessionAchievementStats,
@@ -171,6 +172,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'backlog_slayer',       name: 'Backlog Slayer',       description: 'Complete 10 games that were already in your library', icon: '⚔️', rarity: 'rare',     category: 'misc', xp: 250  },
   { id: 'quick_turnaround',     name: 'Quick Turnaround',     description: 'Complete a game within 7 days of adding it',         icon: '⚡', rarity: 'uncommon', category: 'misc', xp: 150  },
 ]
+
+/**
+ * The achievements this edition offers: all of them, minus the Wheel category
+ * in an edition without the wheel (lib/edition.ts). Lists, totals and unlocking
+ * use this; lookups by id can keep using ACHIEVEMENTS.
+ */
+export const AVAILABLE_ACHIEVEMENTS: Achievement[] = FEATURES.wheel
+  ? ACHIEVEMENTS
+  : ACHIEVEMENTS.filter(a => a.category !== 'wheel')
 
 export const CATEGORY_LABELS: Record<AchievementCategory, string> = {
   completion: 'Game Completion',
@@ -525,9 +535,12 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
     .gt('amount', 0) as { data: { amount: number }[] | null }
   const ticketsEarnedTotal = (earnedRows ?? []).reduce((sum, r) => sum + r.amount, 0)
 
-  const { data: spinRows } = await (supabase.from('wheel_spins') as any)
-    .select('spin_type')
-    .eq('user_id', userId) as { data: { spin_type: string }[] | null }
+  // No wheel in this edition, so no spins to read.
+  const { data: spinRows } = FEATURES.wheel
+    ? await (supabase.from('wheel_spins') as any)
+        .select('spin_type')
+        .eq('user_id', userId) as { data: { spin_type: string }[] | null }
+    : { data: [] as { spin_type: string }[] }
 
   const spins = spinRows ?? []
 
@@ -583,136 +596,255 @@ async function gatherStats(supabase: SupabaseClient, userId: string): Promise<St
   }
 }
 
+/**
+ * Achievements unlocked by a single number reaching a target: games completed,
+ * hours, sessions and so on. One entry per achievement, so the target is
+ * defined once — evaluateAchievement unlocks from it and nextAchievement
+ * measures progress towards it. Everything else (one-off conditions) stays in
+ * evaluateAchievement's switch.
+ */
+type Counted = { value: (s: Stats) => number; target: number; unit: CountUnit }
+type CountUnit = 'hours' | 'minutes' | { one: string; many: string }
+
+const n = (one: string, many = one + 's'): CountUnit => ({ one, many })
+const UNITS: Record<string, CountUnit> = {
+  completedCount: n('game to complete', 'games to complete'),
+  totalHours: 'hours',
+  ticketsEarnedTotal: n('ticket'),
+  perfectGameCount: n('100% game'),
+  fiveStarCount: n('5-star rating'),
+  topDeveloperCompletions: n('completion from one developer', 'completions from one developer'),
+  indieGameCount: n('indie game'),
+  retroGameCount: n('retro game'),
+  topGenreCompletions: n('completion in one genre', 'completions in one genre'),
+  uniqueGenres: n('genre'),
+  uniquePlatforms: n('platform'),
+  replayCount: n('replay'),
+  favouriteCount: n('favourite'),
+  libraryCount: n('game in your library', 'games in your library'),
+  dnfCount: n('dropped game'),
+  backlogSlayerCount: n('backlog game to finish', 'backlog games to finish'),
+  marathonGameCount: n('marathon game'),
+  reviewCount: n('review'),
+  assignedCompleteCount: n('wheel game to finish', 'wheel games to finish'),
+  totalSpins: n('spin'),
+  steamDeckCompletedCount: n('Steam Deck completion'),
+  steamDeckHours: 'hours',
+  steamDeckLibraryCount: n('Steam Deck game'),
+  'sessions.sessionCount': n('session'),
+  'sessions.longestDayStreak': n('day in a row', 'days in a row'),
+  'sessions.distinctGames': n('tracked game'),
+  'sessions.mostGamesInADay': n('game in one day', 'games in one day'),
+  'sessions.bestDayMinutes': 'minutes',
+  'sessions.bestWeekendMinutes': 'minutes',
+  'sessions.mostMinutesOnOneGame': 'minutes',
+}
+
+const COUNTED: Record<string, Counted> = {
+  first_clear: { value: s => s.completedCount, target: 1, unit: UNITS['completedCount'] },
+  five_clears: { value: s => s.completedCount, target: 5, unit: UNITS['completedCount'] },
+  ten_clears: { value: s => s.completedCount, target: 10, unit: UNITS['completedCount'] },
+  fifteen_clears: { value: s => s.completedCount, target: 15, unit: UNITS['completedCount'] },
+  twenty_five_clears: { value: s => s.completedCount, target: 25, unit: UNITS['completedCount'] },
+  fifty_clears: { value: s => s.completedCount, target: 50, unit: UNITS['completedCount'] },
+  seventy_five_clears: { value: s => s.completedCount, target: 75, unit: UNITS['completedCount'] },
+  hundred_clears: { value: s => s.completedCount, target: 100, unit: UNITS['completedCount'] },
+  one_fifty_clears: { value: s => s.completedCount, target: 150, unit: UNITS['completedCount'] },
+  two_hundred_clears: { value: s => s.completedCount, target: 200, unit: UNITS['completedCount'] },
+  two_fifty_clears: { value: s => s.completedCount, target: 250, unit: UNITS['completedCount'] },
+  three_hundred_clears: { value: s => s.completedCount, target: 300, unit: UNITS['completedCount'] },
+  four_hundred_clears: { value: s => s.completedCount, target: 400, unit: UNITS['completedCount'] },
+  five_hundred_clears: { value: s => s.completedCount, target: 500, unit: UNITS['completedCount'] },
+  ten_hours: { value: s => s.totalHours, target: 10, unit: UNITS['totalHours'] },
+  fifty_hours: { value: s => s.totalHours, target: 50, unit: UNITS['totalHours'] },
+  hundred_hours: { value: s => s.totalHours, target: 100, unit: UNITS['totalHours'] },
+  two_fifty_hours: { value: s => s.totalHours, target: 250, unit: UNITS['totalHours'] },
+  five_hundred_hours: { value: s => s.totalHours, target: 500, unit: UNITS['totalHours'] },
+  thousand_hours: { value: s => s.totalHours, target: 1000, unit: UNITS['totalHours'] },
+  twenty_five_hundred_hours: { value: s => s.totalHours, target: 2500, unit: UNITS['totalHours'] },
+  five_thousand_hours: { value: s => s.totalHours, target: 5000, unit: UNITS['totalHours'] },
+  seventy_five_hundred_hours: { value: s => s.totalHours, target: 7500, unit: UNITS['totalHours'] },
+  ten_thousand_hours: { value: s => s.totalHours, target: 10000, unit: UNITS['totalHours'] },
+  ten_tickets: { value: s => s.ticketsEarnedTotal, target: 10, unit: UNITS['ticketsEarnedTotal'] },
+  fifty_tickets: { value: s => s.ticketsEarnedTotal, target: 50, unit: UNITS['ticketsEarnedTotal'] },
+  hundred_tickets: { value: s => s.ticketsEarnedTotal, target: 100, unit: UNITS['ticketsEarnedTotal'] },
+  five_hundred_tickets: { value: s => s.ticketsEarnedTotal, target: 500, unit: UNITS['ticketsEarnedTotal'] },
+  perfect_completion: { value: s => s.perfectGameCount, target: 1, unit: UNITS['perfectGameCount'] },
+  three_perfect: { value: s => s.perfectGameCount, target: 3, unit: UNITS['perfectGameCount'] },
+  five_perfect: { value: s => s.perfectGameCount, target: 5, unit: UNITS['perfectGameCount'] },
+  ten_perfect: { value: s => s.perfectGameCount, target: 10, unit: UNITS['perfectGameCount'] },
+  twenty_five_perfect: { value: s => s.perfectGameCount, target: 25, unit: UNITS['perfectGameCount'] },
+  fifty_perfect: { value: s => s.perfectGameCount, target: 50, unit: UNITS['perfectGameCount'] },
+  seventy_five_perfect: { value: s => s.perfectGameCount, target: 75, unit: UNITS['perfectGameCount'] },
+  hundred_perfect: { value: s => s.perfectGameCount, target: 100, unit: UNITS['perfectGameCount'] },
+  easy_to_please: { value: s => s.fiveStarCount, target: 5, unit: UNITS['fiveStarCount'] },
+  developer_loyalist: { value: s => s.topDeveloperCompletions, target: 3, unit: UNITS['topDeveloperCompletions'] },
+  indie_darling: { value: s => s.indieGameCount, target: 5, unit: UNITS['indieGameCount'] },
+  old_school: { value: s => s.retroGameCount, target: 5, unit: UNITS['retroGameCount'] },
+  completionists_journey: { value: s => s.topGenreCompletions, target: 10, unit: UNITS['topGenreCompletions'] },
+  five_genres: { value: s => s.uniqueGenres, target: 5, unit: UNITS['uniqueGenres'] },
+  ten_genres: { value: s => s.uniqueGenres, target: 10, unit: UNITS['uniqueGenres'] },
+  genre_master: { value: s => s.topGenreCompletions, target: 5, unit: UNITS['topGenreCompletions'] },
+  three_platforms: { value: s => s.uniquePlatforms, target: 3, unit: UNITS['uniquePlatforms'] },
+  five_platforms: { value: s => s.uniquePlatforms, target: 5, unit: UNITS['uniquePlatforms'] },
+  ten_platforms: { value: s => s.uniquePlatforms, target: 10, unit: UNITS['uniquePlatforms'] },
+  replay_game: { value: s => s.replayCount, target: 1, unit: UNITS['replayCount'] },
+  five_replays: { value: s => s.replayCount, target: 5, unit: UNITS['replayCount'] },
+  ten_replays: { value: s => s.replayCount, target: 10, unit: UNITS['replayCount'] },
+  twenty_replays: { value: s => s.replayCount, target: 20, unit: UNITS['replayCount'] },
+  thirty_replays: { value: s => s.replayCount, target: 30, unit: UNITS['replayCount'] },
+  ten_favourites: { value: s => s.favouriteCount, target: 10, unit: UNITS['favouriteCount'] },
+  twenty_five_favourites: { value: s => s.favouriteCount, target: 25, unit: UNITS['favouriteCount'] },
+  the_grind: { value: s => s.marathonGameCount, target: 3, unit: UNITS['marathonGameCount'] },
+  dedicated_reviewer: { value: s => s.reviewCount, target: 10, unit: UNITS['reviewCount'] },
+  prolific_critic: { value: s => s.reviewCount, target: 25, unit: UNITS['reviewCount'] },
+  first_spin: { value: s => s.totalSpins, target: 1, unit: UNITS['totalSpins'] },
+  ten_spins: { value: s => s.totalSpins, target: 10, unit: UNITS['totalSpins'] },
+  twenty_five_spins: { value: s => s.totalSpins, target: 25, unit: UNITS['totalSpins'] },
+  fifty_spins: { value: s => s.totalSpins, target: 50, unit: UNITS['totalSpins'] },
+  hundred_spins: { value: s => s.totalSpins, target: 100, unit: UNITS['totalSpins'] },
+  assigned_complete: { value: s => s.assignedCompleteCount, target: 1, unit: UNITS['assignedCompleteCount'] },
+  five_assigned: { value: s => s.assignedCompleteCount, target: 5, unit: UNITS['assignedCompleteCount'] },
+  ten_assigned: { value: s => s.assignedCompleteCount, target: 10, unit: UNITS['assignedCompleteCount'] },
+  deck_debut: { value: s => s.steamDeckCompletedCount, target: 1, unit: UNITS['steamDeckCompletedCount'] },
+  couch_commander: { value: s => s.steamDeckCompletedCount, target: 5, unit: UNITS['steamDeckCompletedCount'] },
+  portable_pro: { value: s => s.steamDeckCompletedCount, target: 10, unit: UNITS['steamDeckCompletedCount'] },
+  deck_devotee: { value: s => s.steamDeckCompletedCount, target: 25, unit: UNITS['steamDeckCompletedCount'] },
+  deck_legend: { value: s => s.steamDeckCompletedCount, target: 50, unit: UNITS['steamDeckCompletedCount'] },
+  deck_hours_50: { value: s => s.steamDeckHours, target: 50, unit: UNITS['steamDeckHours'] },
+  deck_hours_250: { value: s => s.steamDeckHours, target: 250, unit: UNITS['steamDeckHours'] },
+  deck_hours_500: { value: s => s.steamDeckHours, target: 500, unit: UNITS['steamDeckHours'] },
+  deck_collector: { value: s => s.steamDeckLibraryCount, target: 20, unit: UNITS['steamDeckLibraryCount'] },
+  press_start: { value: s => s.sessions.sessionCount, target: 1, unit: UNITS['sessions.sessionCount'] },
+  regular_visitor: { value: s => s.sessions.sessionCount, target: 50, unit: UNITS['sessions.sessionCount'] },
+  frequent_flyer: { value: s => s.sessions.sessionCount, target: 250, unit: UNITS['sessions.sessionCount'] },
+  season_ticket: { value: s => s.sessions.sessionCount, target: 1000, unit: UNITS['sessions.sessionCount'] },
+  daily_driver: { value: s => s.sessions.longestDayStreak, target: 7, unit: UNITS['sessions.longestDayStreak'] },
+  creature_of_habit: { value: s => s.sessions.longestDayStreak, target: 30, unit: UNITS['sessions.longestDayStreak'] },
+  weekend_warrior: { value: s => s.sessions.bestWeekendMinutes, target: 6 * 60, unit: UNITS['sessions.bestWeekendMinutes'] },
+  bank_holiday: { value: s => s.sessions.bestDayMinutes, target: 10 * 60, unit: UNITS['sessions.bestDayMinutes'] },
+  channel_surfer: { value: s => s.sessions.mostGamesInADay, target: 3, unit: UNITS['sessions.mostGamesInADay'] },
+  wanderer: { value: s => s.sessions.distinctGames, target: 10, unit: UNITS['sessions.distinctGames'] },
+  one_true_love: { value: s => s.sessions.mostMinutesOnOneGame, target: 50 * 60, unit: UNITS['sessions.mostMinutesOnOneGame'] },
+  backlog_twenty: { value: s => s.libraryCount, target: 20, unit: UNITS['libraryCount'] },
+  backlog_fifty: { value: s => s.libraryCount, target: 50, unit: UNITS['libraryCount'] },
+  library_hundred: { value: s => s.libraryCount, target: 100, unit: UNITS['libraryCount'] },
+  library_two_fifty: { value: s => s.libraryCount, target: 250, unit: UNITS['libraryCount'] },
+  library_five_hundred: { value: s => s.libraryCount, target: 500, unit: UNITS['libraryCount'] },
+  library_thousand: { value: s => s.libraryCount, target: 1000, unit: UNITS['libraryCount'] },
+  dnf_five: { value: s => s.dnfCount, target: 5, unit: UNITS['dnfCount'] },
+  backlog_slayer: { value: s => s.backlogSlayerCount, target: 10, unit: UNITS['backlogSlayerCount'] },
+}
+
 function evaluateAchievement(id: string, s: Stats): boolean {
+  // "A number reaches a target" achievements live in COUNTED, so the same
+  // target drives both unlocking and the progress shown towards it.
+  const counted = COUNTED[id]
+  if (counted) return counted.value(s) >= counted.target
   switch (id) {
-    // Completion
-    case 'first_clear':            return s.completedCount >= 1
-    case 'five_clears':            return s.completedCount >= 5
-    case 'ten_clears':             return s.completedCount >= 10
-    case 'fifteen_clears':         return s.completedCount >= 15
-    case 'twenty_five_clears':     return s.completedCount >= 25
-    case 'fifty_clears':           return s.completedCount >= 50
-    case 'seventy_five_clears':    return s.completedCount >= 75
-    case 'hundred_clears':         return s.completedCount >= 100
-    case 'one_fifty_clears':       return s.completedCount >= 150
-    case 'two_hundred_clears':     return s.completedCount >= 200
-    case 'two_fifty_clears':       return s.completedCount >= 250
-    case 'three_hundred_clears':   return s.completedCount >= 300
-    case 'four_hundred_clears':    return s.completedCount >= 400
-    case 'five_hundred_clears':    return s.completedCount >= 500
-    // Hours
-    case 'ten_hours':              return s.totalHours >= 10
-    case 'fifty_hours':            return s.totalHours >= 50
-    case 'hundred_hours':          return s.totalHours >= 100
-    case 'two_fifty_hours':        return s.totalHours >= 250
-    case 'five_hundred_hours':     return s.totalHours >= 500
-    case 'thousand_hours':          return s.totalHours >= 1000
-    case 'twenty_five_hundred_hours': return s.totalHours >= 2500
-    case 'five_thousand_hours':     return s.totalHours >= 5000
-    case 'seventy_five_hundred_hours': return s.totalHours >= 7500
-    case 'ten_thousand_hours':      return s.totalHours >= 10000
-    // Tickets
-    case 'ten_tickets':            return s.ticketsEarnedTotal >= 10
-    case 'fifty_tickets':          return s.ticketsEarnedTotal >= 50
-    case 'hundred_tickets':        return s.ticketsEarnedTotal >= 100
-    case 'five_hundred_tickets':   return s.ticketsEarnedTotal >= 500
     // Perfection
-    case 'perfect_completion':     return s.perfectGameCount >= 1
-    case 'three_perfect':          return s.perfectGameCount >= 3
-    case 'five_perfect':           return s.perfectGameCount >= 5
-    case 'ten_perfect':            return s.perfectGameCount >= 10
-    case 'twenty_five_perfect':    return s.perfectGameCount >= 25
-    case 'fifty_perfect':          return s.perfectGameCount >= 50
-    case 'seventy_five_perfect':   return s.perfectGameCount >= 75
-    case 'hundred_perfect':        return s.perfectGameCount >= 100
     case 'five_rating':            return s.hasFiveRating
-    case 'easy_to_please':         return s.fiveStarCount >= 5
     case 'harsh_critic':           return s.hasOneRating
     // Variety
-    case 'developer_loyalist':     return s.topDeveloperCompletions >= 3
-    case 'indie_darling':          return s.indieGameCount >= 5
-    case 'old_school':             return s.retroGameCount >= 5
-    case 'completionists_journey': return s.topGenreCompletions >= 10
-    case 'five_genres':            return s.uniqueGenres >= 5
-    case 'ten_genres':             return s.uniqueGenres >= 10
-    case 'genre_master':           return s.topGenreCompletions >= 5
     case 'retro_fan':              return s.hasRetroGame
     case 'day_one':                return s.hasDayOneCompletion
-    case 'three_platforms':        return s.uniquePlatforms >= 3
-    case 'five_platforms':         return s.uniquePlatforms >= 5
-    case 'ten_platforms':          return s.uniquePlatforms >= 10
     // Dedication
-    case 'replay_game':            return s.replayCount >= 1
-    case 'five_replays':           return s.replayCount >= 5
-    case 'ten_replays':            return s.replayCount >= 10
-    case 'twenty_replays':         return s.replayCount >= 20
-    case 'thirty_replays':         return s.replayCount >= 30
     case 'sequel_hunter':          return s.hasSequelComplete
-    case 'ten_favourites':         return s.favouriteCount >= 10
-    case 'twenty_five_favourites': return s.favouriteCount >= 25
     case 'marathon':               return s.hasMarathonGame
     case 'committed':              return s.hasCommittedGame
     case 'absorbed':               return s.hasAbsorbedGame
-    case 'the_grind':              return s.marathonGameCount >= 3
     case 'single_session':         return s.hasSingleSession
     case 'speed_run':              return s.hasSpeedRun
     case 'hot_streak':             return s.hotStreakMonth
     case 'prolific_year':          return s.hasProlificYear
     case 'consistent':             return s.hasConsistentStreak
     case 'trilogy':                return s.hasTrilogy
-    case 'dedicated_reviewer':     return s.reviewCount >= 10
-    case 'prolific_critic':        return s.reviewCount >= 25
     case 'novel':                  return s.hasNovelReview
     // Wheel
-    case 'first_spin':             return s.totalSpins >= 1
-    case 'ten_spins':              return s.totalSpins >= 10
-    case 'twenty_five_spins':      return s.totalSpins >= 25
-    case 'fifty_spins':            return s.totalSpins >= 50
-    case 'hundred_spins':          return s.totalSpins >= 100
-    case 'assigned_complete':      return s.assignedCompleteCount >= 1
-    case 'five_assigned':          return s.assignedCompleteCount >= 5
-    case 'ten_assigned':           return s.assignedCompleteCount >= 10
     case 'assigned_loved':         return s.hasAssignedLoved
     case 'used_reroll':            return s.hasUsedReroll
     case 'skipped_choose':         return s.hasSkippedChoose
     // Steam Deck
-    case 'deck_debut':             return s.steamDeckCompletedCount >= 1
-    case 'couch_commander':        return s.steamDeckCompletedCount >= 5
-    case 'portable_pro':           return s.steamDeckCompletedCount >= 10
-    case 'deck_devotee':           return s.steamDeckCompletedCount >= 25
-    case 'deck_legend':            return s.steamDeckCompletedCount >= 50
-    case 'deck_hours_50':          return s.steamDeckHours >= 50
-    case 'deck_hours_250':         return s.steamDeckHours >= 250
-    case 'deck_hours_500':         return s.steamDeckHours >= 500
     case 'deck_perfect':           return s.hasSteamDeckPerfect
-    case 'deck_collector':         return s.steamDeckLibraryCount >= 20
     case 'big_screen_small_deck':  return s.hasBigScreenSmallDeck
     // Play Sessions
-    case 'press_start':            return s.sessions.sessionCount >= 1
-    case 'regular_visitor':        return s.sessions.sessionCount >= 50
-    case 'frequent_flyer':         return s.sessions.sessionCount >= 250
-    case 'season_ticket':          return s.sessions.sessionCount >= 1000
-    case 'daily_driver':           return s.sessions.longestDayStreak >= 7
-    case 'creature_of_habit':      return s.sessions.longestDayStreak >= 30
-    case 'weekend_warrior':        return s.sessions.bestWeekendMinutes >= 6 * 60
-    case 'bank_holiday':           return s.sessions.bestDayMinutes >= 10 * 60
-    case 'channel_surfer':         return s.sessions.mostGamesInADay >= 3
-    case 'wanderer':               return s.sessions.distinctGames >= 10
-    case 'one_true_love':          return s.sessions.mostMinutesOnOneGame >= 50 * 60
     case 'squad_up':               return s.sessions.hasSquadUp
     // Misc
-    case 'backlog_twenty':        return s.libraryCount >= 20
-    case 'backlog_fifty':          return s.libraryCount >= 50
-    case 'library_hundred':        return s.libraryCount >= 100
-    case 'library_two_fifty':      return s.libraryCount >= 250
-    case 'library_five_hundred':   return s.libraryCount >= 500
-    case 'library_thousand':       return s.libraryCount >= 1000
-    case 'dnf_five':               return s.dnfCount >= 5
     case 'dnf_redemption':         return s.hasDnfRedemption
-    case 'backlog_slayer':         return s.backlogSlayerCount >= 10
     case 'quick_turnaround':       return s.hasQuickTurnaround
     default: return false
   }
+}
+
+// ─── Next achievement ───────────────────────────────────────────────────────
+
+export type NextAchievement = {
+  achievement: Achievement
+  current: number
+  target: number
+  /** 0–100, how far along. */
+  percent: number
+  /** What's left, e.g. "3h to go", "2 more games to complete". */
+  remaining: string
+}
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${Math.ceil(minutes)}m`
+  const h = Math.floor(minutes / 60)
+  const m = Math.ceil(minutes % 60)
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
+}
+
+/** "3h to go", "1 more session", "2 more games to complete". */
+export function remainingLabel(unit: CountUnit, remaining: number): string {
+  if (unit === 'hours') return `${Math.ceil(remaining)}h to go`
+  if (unit === 'minutes') return `${formatMinutes(remaining)} to go`
+  const count = Math.ceil(remaining)
+  return `${count} more ${count === 1 ? unit.one : unit.many}`
+}
+
+/**
+ * The locked achievement the user is closest to, among those with a number to
+ * reach (COUNTED); one-off conditions have no "how close". Closest means the
+ * highest share of the target already reached; ties go to the smaller target,
+ * which is the sooner one. `null` when every counted achievement is unlocked.
+ */
+export function nextAchievement(
+  stats: Stats,
+  unlocked: Set<string>,
+  pool: Achievement[] = AVAILABLE_ACHIEVEMENTS,
+): NextAchievement | null {
+  let best: NextAchievement | null = null
+  let bestRatio = -1
+  for (const achievement of pool) {
+    const counted = COUNTED[achievement.id]
+    if (!counted || unlocked.has(achievement.id)) continue
+    const current = Math.max(0, counted.value(stats))
+    if (current >= counted.target) continue // due to unlock on the next check
+    const ratio = current / counted.target
+    if (ratio > bestRatio || (ratio === bestRatio && best && counted.target < best.target)) {
+      bestRatio = ratio
+      best = {
+        achievement,
+        current,
+        target: counted.target,
+        percent: Math.floor(ratio * 100),
+        remaining: remainingLabel(counted.unit, counted.target - current),
+      }
+    }
+  }
+  return best
+}
+
+/** `nextAchievement` for a user, reading their stats and what they've unlocked. */
+export async function getNextAchievement(supabase: SupabaseClient, userId: string): Promise<NextAchievement | null> {
+  const [{ data: rows }, stats] = await Promise.all([
+    (supabase.from('user_achievements') as any)
+      .select('achievement_id')
+      .eq('user_id', userId) as Promise<{ data: { achievement_id: string }[] | null }>,
+    gatherStats(supabase, userId),
+  ])
+  return nextAchievement(stats, new Set((rows ?? []).map(r => r.achievement_id)))
 }
 
 /**
@@ -731,7 +863,7 @@ export async function checkAndAwardAchievements(
   const stats = await gatherStats(supabase, userId)
   const newlyUnlocked: UnlockedAchievement[] = []
 
-  for (const ach of ACHIEVEMENTS) {
+  for (const ach of AVAILABLE_ACHIEVEMENTS) {
     if (unlocked.has(ach.id)) continue
     if (!evaluateAchievement(ach.id, stats)) continue
 

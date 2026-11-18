@@ -6,6 +6,8 @@ import { useState, useEffect, useRef } from 'react'
 import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
 import UserDropdown from '@/components/layout/UserDropdown'
+import Wordmark from '@/components/layout/Wordmark'
+import { FEATURES, wheelOn } from '@/lib/edition'
 
 const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -18,9 +20,12 @@ const navItemsAfter = [
   { href: '/stats', label: 'Stats' },
 ]
 
+// What the History menu lists depends on the edition (lib/edition.ts): Wheel
+// History needs the wheel, and the public edition leaves Ticket History out of
+// the nav (the page still exists). With nothing in it, the menu isn't shown.
 const historyItems = [
-  { href: '/tickets', label: '🎟️ Ticket History' },
-  { href: '/wheel/history', label: '🎰 Wheel History' },
+  ...(FEATURES.ticketHistoryNav ? [{ href: '/tickets', label: '🎟️ Ticket History' }] : []),
+  ...(FEATURES.wheel ? [{ href: '/wheel/history', label: '🎰 Wheel History' }] : []),
 ]
 
 // `notificationSlot` is a server-rendered node (the bell plus its data, behind
@@ -28,10 +33,10 @@ const historyItems = [
 // queries before it can render.
 export default function Nav({ profile, notificationSlot }: { profile: Profile; notificationSlot?: React.ReactNode }) {
   const pathname = usePathname()
-  // Opting out of wheel turns in Settings takes the Wheel tab out of the nav.
-  // Wheel History stays — it's shared history, and still worth looking back on.
-  // Accounts predating the column read as opted in.
-  const primaryNavItems = (profile.wheel_enabled ?? true)
+  // Opting out of wheel turns in Settings takes the Wheel tab out of the nav,
+  // as does an edition without the wheel. Wheel History stays for an opted-out
+  // user — it's shared history, and still worth looking back on.
+  const primaryNavItems = wheelOn(profile)
     ? navItemsBefore
     : navItemsBefore.filter(item => item.href !== '/wheel')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -102,7 +107,7 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
                 </svg>
               </div>
               <span className="font-orbitron text-sm font-bold tracking-tight">
-                <span className="text-fg-base">Games</span><span className="text-brand-600 dark:text-brand-400">List</span>
+                <Wordmark />
               </span>
             </Link>
           </div>
@@ -127,6 +132,7 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
             })}
 
             {/* History dropdown — 4th position */}
+            {historyItems.length > 0 && (
             <div className="relative" ref={historyRef}>
               {(() => {
                 const active = pathname.startsWith('/tickets') || pathname.startsWith('/wheel/history')
@@ -164,6 +170,7 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
                 </div>
               )}
             </div>
+            )}
 
             {navItemsAfter.map((item) => {
               const active = pathname.startsWith(item.href)
@@ -224,7 +231,7 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
               </svg>
             </div>
             <span className="font-orbitron text-base font-bold tracking-tight">
-              <span className="text-fg-base">Games</span><span className="text-brand-600 dark:text-brand-400">List</span>
+              <Wordmark />
             </span>
           </Link>
           <button
@@ -258,7 +265,9 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
           })}
 
           {/* History group */}
-          <p className="px-3 pt-3 pb-1 text-xs font-semibold text-fg-subtle uppercase tracking-wider">History</p>
+          {historyItems.length > 0 && (
+            <p className="px-3 pt-3 pb-1 text-xs font-semibold text-fg-subtle uppercase tracking-wider">History</p>
+          )}
           {historyItems.map((item) => {
             const active = pathname.startsWith(item.href)
             return (

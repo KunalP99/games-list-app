@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import StatusBadge from './StatusBadge'
-import MarkCompletedButton from './MarkCompletedButton'
 import LiveIndicator from './LiveIndicator'
 import GameActions, { GameActionsTrigger } from './GameActionsMenu'
 import type { Game } from '@/lib/types'
@@ -84,7 +83,8 @@ function GameCardBody({
             </div>
           )}
           <div className="mt-1.5 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 text-xs text-white/70 flex-wrap drop-shadow">
+            {/* One line, like the cover card's stats, so cards stay one height. */}
+            <div className="flex items-center gap-3 text-xs text-white/70 min-w-0 flex-nowrap overflow-hidden whitespace-nowrap drop-shadow">
               {releaseLabel && <span className="font-medium text-white/90">📅 Releases {releaseLabel}</span>}
               {game.is_replay && <span className="text-base text-orange-400 leading-none" title="Replay">↩</span>}
               {game.is_sequel && (
@@ -102,7 +102,6 @@ function GameCardBody({
                   : <span>{Math.round(game.achievement_progress)}%</span>
               )}
             </div>
-            {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} initialFavourite={game.is_favourite} />}
           </div>
         </div>
       </Link>
@@ -172,7 +171,6 @@ function GameCardBody({
               : <span>{Math.round(game.achievement_progress)}% achievements</span>
           )}
         </div>
-        {game.status === 'playing' && isOwner && <MarkCompletedButton gameId={game.id} initialFavourite={game.is_favourite} />}
       </div>
     </Link>
   )
