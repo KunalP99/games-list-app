@@ -15,6 +15,12 @@ import {
   parseHours, parseAchievementProgress, parseDlc, parseYoutubeVideos, parseStringList, type GameVideo,
 } from '@/lib/game-input'
 
+// Status changes are written only if the status is still what was just read
+// (`.eq('status', …)`). Two requests at once — a double-click, a retried
+// request, two tabs — used to both apply their ticket effects; now the second
+// changes nothing and gets this message instead.
+const STATUS_CHANGED = 'This game was just changed somewhere else. Refresh the page and try again.'
+
 // If `gameId` is the profile's most recent wheel outcome, consume that pointer.
 // When `revert` is true (the game is being DNF'd) also hand the wheel turn back
 // to the turn that produced it. Returns whether a turn revert actually happened.
@@ -301,7 +307,7 @@ export async function updateGame(id: string, formData: FormData) {
 
   const startDate = status !== 'backlog' ? ((formData.get('start_date') as string) || null) : null
 
-  const { error } = await (supabase.from('games') as any).update({
+  const { data: updated, error } = await (supabase.from('games') as any).update({
     title: (formData.get('title') as string).trim(),
     developer: (formData.get('developer') as string)?.trim() || null,
     release_date: releaseDate,
@@ -335,8 +341,13 @@ export async function updateGame(id: string, formData: FormData) {
     youtube_videos: youtubeVideos,
     dlc,
   }).eq('id', id).eq('user_id', user.id)
+    // Only if the status is still what was read above, so two saves at once
+    // (a double submit) can't both run the ticket effects below.
+    .eq('status', existing.status)
+    .select('id')
 
   if (error) return { error: error.message }
+  if (!updated?.length) return { error: STATUS_CHANGED }
 
   const wasCompleted = existing?.status === 'completed'
   const isCompleted = status === 'completed'
@@ -472,12 +483,17 @@ export async function markAsCompleted(
     update.completion_date = new Date().toISOString().split('T')[0]
   }
 
-  const { error } = await (supabase.from('games') as any)
+  const { data: updated, error } = await (supabase.from('games') as any)
     .update(update)
     .eq('id', id)
     .eq('user_id', user.id)
+    // Only if it hasn't changed since it was read: a double-click used to
+    // complete the game twice and award its tickets twice.
+    .eq('status', before.status)
+    .select('id')
 
   if (error) return { error: error.message }
+  if (!updated?.length) return { error: STATUS_CHANGED }
 
   if (before.status === 'dnf') await reverseDnfPenalty(supabase, user.id, id)
   await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
@@ -511,7 +527,7 @@ export async function markAsDnf(id: string) {
     .single() as { data: { status: string } | null }
   if (!existing) return { error: 'Game not found' }
 
-  const { error } = await (supabase.from('games') as any)
+  const { data: updated, error } = await (supabase.from('games') as any)
     .update({
       status: 'dnf',
       completion_date: new Date().toISOString().split('T')[0],
@@ -519,7 +535,10 @@ export async function markAsDnf(id: string) {
     })
     .eq('id', id)
     .eq('user_id', user.id)
+    .eq('status', existing.status) // as in markAsCompleted: one penalty per drop
+    .select('id')
   if (error) return { error: error.message }
+  if (!updated?.length) return { error: STATUS_CHANGED }
 
   if (existing.status !== 'dnf') {
     // Same ledger rules as a full edit: a completed game loses its completion
@@ -590,7 +609,7 @@ export async function setGameStatus(id: string, rawTo: string) {
 
   // Same field rules as updateGame: completion/drop dates only belong to
   // completed and DNF games, and a backlog game hasn't been started.
-  const { error } = await (supabase.from('games') as any)
+  const { data: updated, error } = await (supabase.from('games') as any)
     .update({
       status: to,
       completion_date: null,
@@ -599,7 +618,10 @@ export async function setGameStatus(id: string, rawTo: string) {
     })
     .eq('id', id)
     .eq('user_id', user.id)
+    .eq('status', existing.status) // as in markAsCompleted: ticket effects once per move
+    .select('id')
   if (error) return { error: error.message }
+  if (!updated?.length) return { error: STATUS_CHANGED }
 
   const fx = statusChangeEffects(existing.status, to)
   if (fx.reverseCompletion) await reverseGameCompletionTickets(supabase, user.id, id)

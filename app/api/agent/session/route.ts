@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
-import { validateSessionPayload, computeHoursDelta, addHours } from '@/lib/agent-session'
+import { validateSessionPayload, computeHoursDelta, roundHours } from '@/lib/agent-session'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { isTrackable, pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
 import { pickLegacyLink, type ExeLinkRow } from '@/lib/exe-links'
@@ -113,33 +113,69 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     nowMs: Date.now(),
   })
 
-  let totalHours = game.hours_played ?? 0
-  if (delta > 0) {
-    totalHours = addHours(game.hours_played, delta)
-    const { error: updateError } = await (sb.from('games') as any)
-      // Only this column. updateGame is a full-row update and must not be
-      // reused here — it would null out every field the agent doesn't know.
-      .update({ hours_played: totalHours })
-      .eq('id', game.id)
-      .eq('user_id', identity.userId)
-      // Re-asserted in the write itself, not just the read above: the status
-      // could have changed in between.
-      .in('status', ['playing', 'ambient'])
-    if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
-  }
-
-  const { error: sessionError } = await (sb.from('play_sessions') as any).upsert({
-    user_id: identity.userId,
+  // ── Claim this checkpoint on the session row, then add the hours ──────────
+  // Two copies of the same checkpoint at once (the tracker retrying while the
+  // first is still being processed) used to both read the same applied_hours
+  // and both add the same delta. Now the session row is moved on only if
+  // applied_hours is still what was read: exactly one request wins and adds
+  // the hours; the other changes nothing and reports 0 added.
+  // Rounded like the numeric(6,1) column, so the rollback below can match it.
+  const claimedHours = roundHours(appliedHours + delta)
+  const sessionFields = {
     game_id: game.id,
     device_id: identity.deviceId,
-    client_session_id: clientSessionId,
     minutes,
     started_at: startedAt,
     ended_at: endedAt,
-    applied_hours: appliedHours + delta,
+    applied_hours: claimedHours,
     last_checkpoint_at: nowIso,
-  }, { onConflict: 'user_id,client_session_id' })
-  if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 })
+  }
+  const raced = () => NextResponse.json({
+    ok: true, gameId: game!.id, title: game!.title, addedHours: 0, totalHours: game!.hours_played ?? 0,
+  })
+
+  if (existing) {
+    const { data: claimed, error: claimError } = await (sb.from('play_sessions') as any)
+      .update(sessionFields)
+      .eq('id', existing.id)
+      .eq('applied_hours', existing.applied_hours)
+      .select('id')
+    if (claimError) return NextResponse.json({ error: claimError.message }, { status: 500 })
+    if (!claimed?.length) return raced()
+  } else {
+    const { error: insertError } = await (sb.from('play_sessions') as any).insert({
+      user_id: identity.userId,
+      client_session_id: clientSessionId,
+      ...sessionFields,
+    })
+    // 23505: the same session's first checkpoint, inserted by the other copy.
+    if (insertError?.code === '23505') return raced()
+    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+  }
+
+  let totalHours = game.hours_played ?? 0
+  if (delta > 0) {
+    // hours_played + delta in one statement (db/review-fixes.sql), so two
+    // sessions at once (two PCs) can't overwrite each other's hours. Only this
+    // column, and only while the game is still Playing or Ambient — re-checked
+    // in the write itself, since the status could have changed since the read.
+    const { data: newTotal, error: addError } = await (sb as any).rpc('add_game_hours', {
+      p_user_id: identity.userId,
+      p_game_id: game.id,
+      p_delta: delta,
+    })
+    if (addError) {
+      // Give the claim back, so the tracker's retry can apply these hours.
+      await (sb.from('play_sessions') as any)
+        .update({ applied_hours: appliedHours })
+        .eq('user_id', identity.userId)
+        .eq('client_session_id', clientSessionId)
+        .eq('applied_hours', claimedHours)
+      return NextResponse.json({ error: addError.message }, { status: 500 })
+    }
+    // null: the game stopped being trackable in between, so nothing was added.
+    if (newTotal != null) totalHours = Number(newTotal)
+  }
 
   // Hours achievements count across every status, so tracked time can unlock
   // them. Record the unlock even though the toast (a cookie set by a server

@@ -21,19 +21,46 @@ import { escapeLike } from '@/lib/query-escape'
 // user-owned tables (games, wheel_spins) keep using the caller's own client.
 const privileged = () => createAdminClient()
 
-async function advanceTurn(
-  _supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  current: WheelTurn,
-  wonGameId?: string | null,
-) {
-  // Also record the "pending" wheel outcome: the game this action produced and
+// ─── Ending a turn ──────────────────────────────────────────────────────────
+// A turn is ended in two steps. claimTurn moves wheel_turn on, but only if it
+// is still `current`: of two finishing requests at once (a double-click, a
+// retry), exactly one gets the turn, and the other stops before adding a game,
+// writing history or awarding anything. Before this, both ran in full and the
+// turn advanced twice (Spin → Spin+Reroll → Choose from one accept).
+// finishTurn then records the outcome once the game (if any) is added.
+
+const ALREADY_FINISHED = { error: 'This turn has already been finished. Refresh the page.' }
+
+async function claimTurn(userId: string, current: WheelTurn): Promise<boolean> {
+  const { data, error } = await (privileged().from('profiles') as any)
+    .update({ wheel_turn: nextWheelTurn(current) })
+    .eq('id', userId)
+    .eq('wheel_turn', current)
+    .select('id')
+  if (error) {
+    console.error('claimTurn failed:', error.message)
+    return false
+  }
+  return (data ?? []).length > 0
+}
+
+// Hands a claimed turn back, when the step that had to follow the claim (a
+// ticket spend or award) didn't happen. Only if nothing has moved it since.
+async function releaseTurn(userId: string, current: WheelTurn) {
+  const { error } = await (privileged().from('profiles') as any)
+    .update({ wheel_turn: current })
+    .eq('id', userId)
+    .eq('wheel_turn', nextWheelTurn(current))
+  if (error) console.error('releaseTurn failed:', error.message)
+}
+
+async function finishTurn(userId: string, current: WheelTurn, wonGameId?: string | null) {
+  // Records the "pending" wheel outcome: the game this action produced and
   // the turn that produced it. DNF-ing that game reverts the turn (games/actions).
   // Any action that added no game clears the pointer, so only the MOST RECENT
   // wheel outcome is ever revertable.
   const { error } = await (privileged().from('profiles') as any)
     .update({
-      wheel_turn: nextWheelTurn(current),
       pending_wheel_game_id: wonGameId ?? null,
       pending_wheel_turn: wonGameId ? current : null,
       // The turn is over, so there is nothing left to resume. Every finalizing
@@ -41,7 +68,20 @@ async function advanceTurn(
       wheel_session: null,
     })
     .eq('id', userId)
-  if (error) console.error('advanceTurn failed:', error.message)
+  if (error) console.error('finishTurn failed:', error.message)
+}
+
+// Spends tickets with the balance checked under a lock (db/review-fixes.sql),
+// so two paid actions at once can't both pass a balance check made earlier.
+async function spendTickets(userId: string, amount: number, reason: string): Promise<{ error: string } | null> {
+  const { data: spent, error } = await (privileged() as any).rpc('spend_tickets', {
+    p_user_id: userId,
+    p_amount: amount,
+    p_reason: reason,
+  })
+  if (error) return { error: `Could not spend tickets: ${error.message}` }
+  if (spent !== true) return { error: `You need ${amount} tickets for that.` }
+  return null
 }
 
 // ─── Resumable turn state ───────────────────────────────────────────────────
@@ -97,7 +137,7 @@ export async function saveWheelSession(session: unknown) {
   return { success: true as const }
 }
 
-// Clearing is separate from advanceTurn so the client can reset without one.
+// Clearing is separate from finishTurn so the client can reset without one.
 export async function clearWheelSession() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -256,6 +296,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
   const profile = await getProfile(supabase, user.id)
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
+  if (!(await claimTurn(user.id, turn))) return ALREADY_FINISHED
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
@@ -269,7 +310,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
     finalized_via: finalizedVia,
     ticket_spends: spendsOrNull(spends),
   })
-  await advanceTurn(supabase, user.id, turn, wonId)
+  await finishTurn(user.id, turn, wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -298,13 +339,9 @@ export async function paySpinAgain(games: string[], exclude: string[] = [], sess
   const pool = games.filter(g => !exclude.includes(g))
   const winner = pickWinner(pool.length > 0 ? pool : games)
 
-  const { error: spendError } = await privileged().rpc('award_tickets', {
-    p_user_id: user.id,
-    p_amount: -TICKET_COSTS.spin,
-    p_reason: 'spin',
-  })
   // Don't hand back a result the user wasn't charged for.
-  if (spendError) return { error: `Could not spend tickets: ${spendError.message}` }
+  const spendFailed = await spendTickets(user.id, TICKET_COSTS.spin, 'spin')
+  if (spendFailed) return spendFailed
 
   // Record it immediately. Previously the winner existed only in this response,
   // so a closed tab meant 3 tickets gone and nothing to show for them.
@@ -347,12 +384,8 @@ export async function payUpgradeToSpinReroll(
   const pool = games.filter(g => !skip.has(g))
   const nextGame = pickWinner(pool.length > 0 ? pool : games)
 
-  const { error: spendError } = await privileged().rpc('award_tickets', {
-    p_user_id: user.id,
-    p_amount: -TICKET_COSTS.spin_reroll,
-    p_reason: 'spin_reroll',
-  })
-  if (spendError) return { error: `Could not spend tickets: ${spendError.message}` }
+  const spendFailed = await spendTickets(user.id, TICKET_COSTS.spin_reroll, 'spin_reroll')
+  if (spendFailed) return spendFailed
 
   const merged = mergePaidResult(
     session,
@@ -426,6 +459,7 @@ export async function finalizeUpgradeChoice(
   const profile = await getProfile(supabase, user.id)
   const turn = profile?.wheel_turn
   if (turn !== 'spin' && turn !== 'spin_reroll') return { error: 'Not a spin turn' }
+  if (!(await claimTurn(user.id, turn))) return ALREADY_FINISHED
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
@@ -441,7 +475,7 @@ export async function finalizeUpgradeChoice(
     finalized_via: 'upgrade_choice',
     ticket_spends: spendsOrNull(spends),
   })
-  await advanceTurn(supabase, user.id, turn, wonId)
+  await finishTurn(user.id, turn, wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -466,13 +500,15 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
   }
   if (!gameName.trim()) return { error: 'Game name cannot be empty' }
 
-  const { error: spendError } = await privileged().rpc('award_tickets', {
-    p_user_id: user.id,
-    p_amount: -TICKET_COSTS.choose_game,
-    p_reason: 'choose_game',
-  })
+  // Claim the turn first, then pay: a second request stops at the claim
+  // without being charged, and a failed payment hands the turn back.
+  if (!(await claimTurn(user.id, turn))) return ALREADY_FINISHED
   // Bail rather than handing over a game the user wasn't charged for.
-  if (spendError) return { error: `Could not spend tickets: ${spendError.message}` }
+  const spendFailed = await spendTickets(user.id, TICKET_COSTS.choose_game, 'choose_game')
+  if (spendFailed) {
+    await releaseTurn(user.id, turn)
+    return spendFailed
+  }
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
@@ -489,7 +525,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
     ticket_spends: spendsOrNull(spends),
   })
 
-  await advanceTurn(supabase, user.id, turn, wonId)
+  await finishTurn(user.id, turn, wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -530,6 +566,7 @@ export async function finalizeSpinReroll(
 
   const profile = await getProfile(supabase, user.id)
   if (profile?.wheel_turn !== 'spin_reroll') return { error: 'Not a spin_reroll turn' }
+  if (!(await claimTurn(user.id, 'spin_reroll'))) return ALREADY_FINISHED
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
@@ -546,7 +583,7 @@ export async function finalizeSpinReroll(
     ticket_spends: spendsOrNull(spends),
   })
 
-  await advanceTurn(supabase, user.id, 'spin_reroll', wonId)
+  await finishTurn(user.id, 'spin_reroll', wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -570,6 +607,7 @@ export async function chooseGameWithRawg(rawgGame: {
   const profile = await getProfile(supabase, user.id)
   if (!profile) return { error: 'Profile not found' }
   if (profile.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
+  if (!(await claimTurn(user.id, 'choose'))) return ALREADY_FINISHED
 
   const wonId = await addWonGameToLibrary(supabase, user.id, rawgGame, platform, artworkUrl)
 
@@ -580,7 +618,7 @@ export async function chooseGameWithRawg(rawgGame: {
     finalized_via: 'choose',
   })
 
-  await advanceTurn(supabase, user.id, 'choose', wonId)
+  await finishTurn(user.id, 'choose', wonId)
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/games')
@@ -598,6 +636,7 @@ export async function chooseGame(gameName: string) {
   if (!profile) return { error: 'Profile not found' }
   if (profile.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
   if (!gameName.trim()) return { error: 'Game name cannot be empty' }
+  if (!(await claimTurn(user.id, 'choose'))) return ALREADY_FINISHED
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -606,7 +645,7 @@ export async function chooseGame(gameName: string) {
     finalized_via: 'choose',
   })
 
-  await advanceTurn(supabase, user.id, 'choose')
+  await finishTurn(user.id, 'choose')
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   revalidatePath('/achievements')
@@ -620,6 +659,8 @@ export async function skipChooseTurn() {
 
   const profile = await getProfile(supabase, user.id)
   if (profile?.wheel_turn !== 'choose') return { error: 'Not a choose turn' }
+  // Claimed before the reward, so a double-click can't award +2 twice.
+  if (!(await claimTurn(user.id, 'choose'))) return ALREADY_FINISHED
 
   const { error: awardError } = await privileged().rpc('award_tickets', {
     p_user_id: user.id,
@@ -627,7 +668,10 @@ export async function skipChooseTurn() {
     p_reason: 'turn_skipped',
   })
   // Don't burn the turn if the reward for skipping it never landed.
-  if (awardError) return { error: `Could not award tickets: ${awardError.message}` }
+  if (awardError) {
+    await releaseTurn(user.id, 'choose')
+    return { error: `Could not award tickets: ${awardError.message}` }
+  }
 
   await (supabase.from('wheel_spins') as any).insert({
     user_id: user.id,
@@ -635,7 +679,7 @@ export async function skipChooseTurn() {
     finalized_via: 'skip',
   })
 
-  await advanceTurn(supabase, user.id, 'choose')
+  await finishTurn(user.id, 'choose')
   await checkAndAwardAchievements(supabase, user.id)
   revalidatePath('/wheel')
   return { success: true }

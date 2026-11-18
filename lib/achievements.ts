@@ -867,14 +867,17 @@ export async function checkAndAwardAchievements(
     if (unlocked.has(ach.id)) continue
     if (!evaluateAchievement(ach.id, stats)) continue
 
-    const { error: insertError } = await (supabase.from('user_achievements') as any).insert({
-      user_id: userId,
-      achievement_id: ach.id,
+    // One database step adds the achievement and its XP, and does nothing if
+    // it's already unlocked (db/review-fixes.sql). Users can't write
+    // user_achievements themselves any more: deleting your own row used to let
+    // the next action unlock it, and award its XP, again and again.
+    const { data: unlockedNow, error: unlockError } = await (createAdminClient() as any).rpc('unlock_achievement', {
+      p_user_id: userId,
+      p_achievement_id: ach.id,
+      p_xp: ach.xp,
     })
-    if (insertError) continue
+    if (unlockError || unlockedNow !== true) continue
 
-    // award_xp is service-role only (db/security-hardening.sql).
-    await createAdminClient().rpc('award_xp', { p_user_id: userId, p_amount: ach.xp })
     newlyUnlocked.push({ ...ach, unlocked_at: new Date().toISOString() })
   }
 

@@ -40,11 +40,13 @@ export function normaliseUsername(raw: string): string {
   return raw.trim().toLowerCase()
 }
 
+/** Words refused anywhere inside a username. The sign-up trigger in db/public-auth.sql keeps a copy. */
+export const RESERVED_SUBSTRINGS: readonly string[] = ['fuck', 'shit', 'cunt', 'nigger', 'nigga', 'faggot', 'retard', 'whore', 'nazi', 'hitler']
+
 /** Reserved outright, or containing one of the abuse words anywhere in it. */
 function isReserved(name: string, extraReserved: string[]): boolean {
   if (RESERVED_USERNAMES.has(name) || extraReserved.includes(name)) return true
-  const abuse = ['fuck', 'shit', 'cunt', 'nigger', 'nigga', 'faggot', 'retard', 'whore', 'nazi', 'hitler']
-  return abuse.some(w => name.includes(w))
+  return RESERVED_SUBSTRINGS.some(w => name.includes(w))
 }
 
 /**

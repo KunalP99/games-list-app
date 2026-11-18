@@ -33,11 +33,17 @@ create policy "Signed-in users read username redirects" on public.username_redir
   for select to authenticated using (true);
 -- No insert/update/delete policies: written by the server (service role) only.
 
--- The sign-up trigger. A valid, free `username` in the sign-up metadata is
--- used as chosen (the public edition's sign-up form sends one; the same rules
--- as validateUsername in lib/username.ts, minus the reserved list, which the
--- form and server action enforce). Otherwise the email's local part, exactly
--- as before, with a short random suffix if that's taken, marked not chosen.
+-- The sign-up trigger. A valid, free, not-reserved `username` in the sign-up
+-- metadata is used as chosen (the public edition's sign-up form sends one; the
+-- same rules as validateUsername in lib/username.ts). Otherwise the email's
+-- local part, exactly as before, with a short random suffix if that's taken,
+-- marked not chosen, so the public edition asks for a username at /welcome.
+--
+-- The reserved list is checked here too, not only by the form and server
+-- action: anyone can call Supabase's sign-up directly with the public anon key
+-- and skip both. Keep these two lists in step with RESERVED_USERNAMES and the
+-- abuse words in lib/username.ts (lib/__tests__/username-sql.test.ts checks).
+-- The deployment's brand name is reserved by the app only.
 create or replace function public.handle_new_user() returns trigger
   language plpgsql security definer
   set search_path = public
@@ -50,6 +56,17 @@ declare
 begin
   if wanted is not null
      and wanted ~ '^[a-z][a-z0-9_]{2,19}$'
+     and not (wanted = any (array[
+       'admin', 'administrator', 'root', 'api', 'auth', 'login', 'logout', 'signin', 'signup', 'register',
+       'settings', 'dashboard', 'games', 'game', 'users', 'user', 'stats', 'tickets', 'ticket', 'welcome',
+       'achievements', 'activity', 'wheel', 'videos', 'notifications', 'download', 'privacy', 'terms',
+       'about', 'help', 'support', 'contact', 'reset', 'password', 'forgot', 'callback', 'new', 'edit',
+       'null', 'undefined', 'me', 'you', 'everyone', 'anonymous', 'unknown',
+       'staff', 'mod', 'mods', 'moderator', 'system', 'official', 'team', 'owner', 'bot',
+       'gameslist', 'games_list', 'untitled',
+       'fuck', 'shit', 'cunt', 'nigger', 'nigga', 'faggot', 'retard', 'whore', 'slut', 'nazi', 'hitler'
+     ]))
+     and wanted !~ '(fuck|shit|cunt|nigger|nigga|faggot|retard|whore|nazi|hitler)'
      and not exists (select 1 from public.profiles p where lower(p.username) = wanted) then
     candidate := wanted;
     chosen := true;
