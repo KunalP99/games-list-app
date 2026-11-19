@@ -1,3 +1,5 @@
+// Holds a secret key: importing this from browser code is a build error.
+import 'server-only'
 // Server-only IGDB (via Twitch OAuth) provider. Returns the same shapes as
 // lib/rawg.ts so it can stand in for RAWG behind the METADATA_PROVIDER flag.
 // Auth: client-credentials app token (cached). Requests: POST apicalypse bodies.

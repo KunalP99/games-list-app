@@ -1,8 +1,10 @@
+import 'server-only'
 import { createClient } from '@supabase/supabase-js'
 
 // Service-role Supabase client for server-side jobs (e.g. the playlist-sync cron)
 // that must bypass RLS and act across every user's rows. Uses the secret service
-// role key — NEVER import this into a Client Component.
+// role key — never import this into a Client Component (the `server-only`
+// import above makes doing so a build error, not just a mistake).
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY

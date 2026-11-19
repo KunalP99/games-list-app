@@ -15,6 +15,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // `import 'server-only'` (lib/supabase/admin.ts and the API key modules)
+      // throws outside Next.js's server build; the unit tests are server code.
+      'server-only': path.resolve(__dirname, 'lib/__tests__/server-only-stub.ts'),
     },
   },
 })

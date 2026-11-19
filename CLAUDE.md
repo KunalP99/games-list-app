@@ -265,7 +265,7 @@ ships with it) and ensures `uuid-ossp` up front, because column defaults call
 
 ### Supabase client pattern
 
-Two clients — never mix them:
+Two clients — never mix them (plus the service-role `lib/supabase/admin.ts`, which starts with `import 'server-only'`, as do `lib/igdb.ts`, `lib/rawg.ts` and `lib/youtube-api.ts`: importing any of them from browser code is a build error. Type-only imports are fine. Vitest maps `server-only` to an empty stub):
 - `lib/supabase/server.ts` — use in Server Components, Server Actions, Route Handlers. Reads/writes cookies via `next/headers`.
 - `lib/supabase/client.ts` — use in Client Components only.
 

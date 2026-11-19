@@ -1,3 +1,5 @@
+// Holds a secret key: importing this from browser code is a build error.
+import 'server-only'
 const RAWG_BASE = 'https://api.rawg.io/api'
 // Fail fast if RAWG is slow/down (it returns 522s during outages) so a page
 // that awaits a RAWG call doesn't hang ~20s waiting for the socket to time out.

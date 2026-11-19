@@ -1,3 +1,5 @@
+// Holds a secret key: importing this from browser code is a build error.
+import 'server-only'
 // Server-only YouTube Data API v3 access (needs YOUTUBE_API_KEY). Mirrors the
 // safe-fallback pattern in lib/rawg.ts. Used to enumerate the videos inside a
 // playlist — something the keyless oEmbed endpoint can't do.
