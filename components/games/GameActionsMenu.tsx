@@ -18,7 +18,7 @@ import {
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { Game, GameStatus } from '@/lib/types'
-import { menuMoves, moveWarning, deleteWarning, type MenuMove } from '@/lib/game-quick-actions'
+import { menuMoves, moveWarning, deleteWarning, deleteTicketChange, formatBalance, formatChange, type MenuMove } from '@/lib/game-quick-actions'
 import { setGameStatus, setFavourite, markAsCompleted, markAsDnf, deleteGame, deleteImpact } from '@/app/(app)/games/actions'
 import { CompleteGameModal, type CompletionDetails } from './MarkCompletedButton'
 
@@ -29,15 +29,18 @@ export type Confirm = {
   body: string
   confirmLabel: string
   danger: boolean
-  /** Still working out what to say: the confirm button waits. */
+  /** Still checking the tickets: the confirm button waits. */
   loading?: boolean
+  /** Tickets the action takes or gives back, shown as a small chip with the balance before and after. */
+  tickets?: { change: number; before: number; after: number } | null
   run: () => Promise<ActionResult>
 }
 
 /**
- * Opens the delete confirmation for a game, then fills in exactly what it
- * does to the owner's tickets once `deleteImpact` answers (the confirm button
- * waits for that; if it fails, the general wording stays and it can go ahead).
+ * Opens the delete confirmation for a game, then adds exactly what it does to
+ * the owner's tickets once `deleteImpact` answers: a "−3" chip with the
+ * balance before and after (the confirm button waits for that; if the check
+ * fails, the text says the tickets are taken back and it can go ahead).
  * Shared by the quick-actions menu and the game page's Delete button.
  */
 export function openDeleteConfirm(
@@ -47,11 +50,11 @@ export function openDeleteConfirm(
 ) {
   const title = `Delete ${game.title}?`
   setConfirm({ title, body: deleteWarning(game.status), confirmLabel: 'Delete', danger: true, loading: true, run })
-  const settle = (body: string) =>
-    setConfirm(c => (c && c.title === title ? { ...c, body, loading: false } : c))
-  deleteImpact(game.id)
-    .then(impact => settle(deleteWarning(game.status, impact)))
-    .catch(() => settle(deleteWarning(game.status)))
+  const settle = (impact: Awaited<ReturnType<typeof deleteImpact>>) =>
+    setConfirm(c => (c && c.title === title
+      ? { ...c, body: deleteWarning(game.status, impact), tickets: deleteTicketChange(impact), loading: false }
+      : c))
+  deleteImpact(game.id).then(settle).catch(() => settle(null))
 }
 
 const STATUS_DOT: Record<GameStatus, string> = {
@@ -377,7 +380,7 @@ function Divider() {
 // ── Dialogs ─────────────────────────────────────────────────────────────
 
 export function ConfirmDialog({
-  title, body, confirmLabel, danger, loading, onCancel, onConfirm,
+  title, body, confirmLabel, danger, loading, tickets, onCancel, onConfirm,
 }: Confirm & { onCancel: () => void; onConfirm: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
@@ -395,7 +398,14 @@ export function ConfirmDialog({
       <div role="alertdialog" aria-modal className="relative w-full max-w-sm bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-fg-base break-words">{title}</h2>
-          <p className="text-sm text-fg-muted mt-1" aria-live="polite">{body}</p>
+          <p className="text-sm text-fg-muted mt-1">{body}</p>
+        </div>
+        <div aria-live="polite" className="empty:hidden">
+          {loading ? (
+            <p className="text-xs text-fg-subtle">Checking your tickets…</p>
+          ) : tickets ? (
+            <TicketChange {...tickets} />
+          ) : null}
         </div>
         <div className="flex justify-end gap-3 pt-1">
           <button
@@ -420,6 +430,27 @@ export function ConfirmDialog({
       </div>
     </div>,
     document.body,
+  )
+}
+
+/** "−3" (red, tickets lost) or "+5" (green, given back) in a small pill, then the balance before and after. */
+function TicketChange({ change, before, after }: { change: number; before: number; after: number }) {
+  const lost = change < 0
+  return (
+    <p className="flex flex-wrap items-center gap-2.5 text-xs tabular-nums">
+      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-semibold ${lost
+        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300'
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z" /><path d="M14 5v2M14 11v2M14 17v2" />
+        </svg>
+        {formatChange(change)}<span className="sr-only"> tickets</span>
+      </span>
+      <span className="text-fg-muted">
+        Balance {formatBalance(before)} →{' '}
+        <span className={`font-semibold ${after < 0 ? 'text-red-700 dark:text-red-400' : 'text-fg-base'}`}>{formatBalance(after)}</span>
+      </span>
+    </p>
   )
 }
 

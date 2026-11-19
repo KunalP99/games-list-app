@@ -54,7 +54,8 @@ test('game page: names the tickets lost, Cancel keeps the game, Delete takes the
 
   await page.goto(`/games/${id}`)
   await page.getByRole('button', { name: 'Delete', exact: true }).first().click()
-  await expect(dialog()).toContainText('You lose the 3 tickets you earned for completing it. Your balance goes from 10 to 7.')
+  await expect(dialog()).toContainText('−3 tickets')
+  await expect(dialog()).toContainText('Balance 10 → 7')
 
   await dialog().getByRole('button', { name: 'Cancel' }).click()
   await expect(dialog()).toHaveCount(0)
@@ -62,7 +63,7 @@ test('game page: names the tickets lost, Cancel keeps the game, Delete takes the
   expect(await balance()).toBe(10)
 
   await page.getByRole('button', { name: 'Delete', exact: true }).first().click()
-  await expect(dialog()).toContainText('from 10 to 7')
+  await expect(dialog()).toContainText('Balance 10 → 7')
   await dialog().getByRole('button', { name: 'Delete' }).click()
   await expect(page).toHaveURL(/\/games(\?|$)/)
   await expect.poll(() => exists(id)).toBe(false)
@@ -77,19 +78,23 @@ test('games list menu: the same warning, and a balance can go below zero', async
   await page.goto(`/games?status=completed&q=${encodeURIComponent(title)}`)
   await page.getByRole('heading', { name: title }).first().click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Delete…' }).click()
-  await expect(dialog()).toContainText('You lose the 3 tickets you earned for completing it. Your balance goes from 0 to −3.')
+  await expect(dialog()).toContainText('−3 tickets')
+  await expect(dialog()).toContainText('Balance 0 → −3')
   await dialog().getByRole('button', { name: 'Delete' }).click()
 
   await expect.poll(() => exists(id)).toBe(false)
   expect(await balance()).toBe(-3)
 })
 
-test('a completed game that earned nothing says the balance stays the same', async () => {
+test('a completed game that earned nothing shows no ticket change', async () => {
   const id = await games.add({ title: `${TITLE} nothing`, status: 'completed', completion_date: '2026-01-01' })
   await setBalance(4)
   await page.goto(`/games/${id}`)
   await page.getByRole('button', { name: 'Delete', exact: true }).first().click()
-  await expect(dialog()).toContainText("It didn't earn any tickets, so your balance stays the same.")
+  await expect(dialog()).toContainText('It comes off your list for good')
+  await expect(dialog().getByText('Checking your tickets…')).toHaveCount(0)
+  await expect(dialog().getByText(/Balance/)).toHaveCount(0)
+  await expect(dialog().getByRole('button', { name: 'Delete' })).toBeEnabled()
   await dialog().getByRole('button', { name: 'Cancel' }).click()
 })
 
@@ -100,6 +105,7 @@ test('a DNF game says its penalty comes back (friends edition)', async () => {
   await setBalance(-2)
   await page.goto(`/games/${id}`)
   await page.getByRole('button', { name: 'Delete', exact: true }).first().click()
-  await expect(dialog()).toContainText('The 5 tickets you lost for dropping it are given back. Your balance goes from −2 to 3.')
+  await expect(dialog()).toContainText('+5 tickets')
+  await expect(dialog()).toContainText('Balance −2 → 3')
   await dialog().getByRole('button', { name: 'Cancel' }).click()
 })

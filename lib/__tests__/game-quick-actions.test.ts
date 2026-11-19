@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { menuMoves, moveWarning, statusChangeEffects, isQuickStatus, deleteWarning } from '../game-quick-actions'
+import { menuMoves, moveWarning, statusChangeEffects, isQuickStatus, deleteWarning, deleteTicketChange, formatChange, formatBalance } from '../game-quick-actions'
 
 describe('menuMoves', () => {
   it('offers every other status, in a fixed order', () => {
@@ -73,34 +73,42 @@ describe('isQuickStatus', () => {
 })
 
 describe('deleteWarning', () => {
-  it('mentions tickets only for a completed game while the amount is unknown', () => {
-    expect(deleteWarning('completed')).toMatch(/tickets/)
-    expect(deleteWarning('backlog')).not.toMatch(/tickets/)
-    expect(deleteWarning('dnf')).not.toMatch(/tickets/)
+  const plain = 'It comes off your list for good, along with its hours and notes.'
+
+  it('is one plain line while checking and once the figures are known', () => {
+    expect(deleteWarning('completed')).toBe(plain)
+    expect(deleteWarning('completed', { change: -3, balance: 10 })).toBe(plain)
+    expect(deleteWarning('backlog', { change: 0, balance: 3 })).toBe(plain)
   })
 
-  it('names the exact tickets lost and the balance after', () => {
-    expect(deleteWarning('completed', { change: -3, balance: 10 }))
-      .toMatch(/You lose the 3 tickets you earned for completing it\. Your balance goes from 10 to 7\.$/)
-    expect(deleteWarning('completed', { change: -1, balance: 4 })).toMatch(/the 1 ticket you earned/)
+  it('says the tickets are taken back if the check failed', () => {
+    expect(deleteWarning('completed', null)).toMatch(/tickets you earned for completing it are taken back/)
+    expect(deleteWarning('playing', null)).toBe(plain)
+  })
+})
+
+describe('deleteTicketChange', () => {
+  it('gives the change and the balance before and after', () => {
+    expect(deleteTicketChange({ change: -3, balance: 10 })).toEqual({ change: -3, before: 10, after: 7 })
+    expect(deleteTicketChange({ change: 5, balance: -2 })).toEqual({ change: 5, before: -2, after: 3 })
   })
 
-  it('shows a balance going below zero with a real minus sign', () => {
-    expect(deleteWarning('completed', { change: -3, balance: 0 })).toMatch(/from 0 to −3\.$/)
-    expect(deleteWarning('completed', { change: -2, balance: -4 })).toMatch(/from −4 to −6\.$/)
+  it('can go below zero', () => {
+    expect(deleteTicketChange({ change: -3, balance: 1 })).toEqual({ change: -3, before: 1, after: -2 })
   })
 
-  it('says so when a completed game earned nothing', () => {
-    expect(deleteWarning('completed', { change: 0, balance: 5 })).toMatch(/didn't earn any tickets, so your balance stays the same/)
+  it('is nothing when nothing changes or nothing is known', () => {
+    expect(deleteTicketChange({ change: 0, balance: 5 })).toBeNull()
+    expect(deleteTicketChange(null)).toBeNull()
+    expect(deleteTicketChange()).toBeNull()
   })
+})
 
-  it('tells a DNF game\'s owner the penalty comes back', () => {
-    expect(deleteWarning('dnf', { change: 5, balance: -2 }))
-      .toMatch(/The 5 tickets you lost for dropping it are given back\. Your balance goes from −2 to 3\.$/)
-    expect(deleteWarning('dnf', { change: 0, balance: 3 })).not.toMatch(/tickets/) // public: no penalty
-  })
-
-  it('leaves other statuses alone even with an answer', () => {
-    expect(deleteWarning('playing', { change: 0, balance: 3 })).not.toMatch(/tickets/)
+describe('formatChange / formatBalance', () => {
+  it('use a real minus sign and sign gains', () => {
+    expect(formatChange(-3)).toBe('−3')
+    expect(formatChange(5)).toBe('+5')
+    expect(formatBalance(-2)).toBe('−2')
+    expect(formatBalance(0)).toBe('0')
   })
 })

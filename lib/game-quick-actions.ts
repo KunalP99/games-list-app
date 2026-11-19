@@ -80,30 +80,32 @@ export const DNF_TICKET_REASONS = ['assigned_game_incomplete'] as const
 /** What deleting a game does to the balance (from `deleteImpact`). */
 export type DeleteImpact = { change: number; balance: number }
 
-const tickets = (n: number) => `${n} ticket${n === 1 ? '' : 's'}`
 /** A balance for display: a real minus sign, so −3 doesn't read as a dash. */
 export const formatBalance = (n: number) => (n < 0 ? `−${-n}` : `${n}`)
+/** A change for display, always signed: "−3", "+5". */
+export const formatChange = (n: number) => (n > 0 ? `+${n}` : formatBalance(n))
 
 /**
- * The delete confirmation's text. With `impact` it names the exact tickets
- * and the balance before and after (which can go below zero, by design: see
- * CLAUDE.md, ticket system); without it (still loading, or the check failed)
- * it says what happens in general.
+ * The delete confirmation's text: one plain line. The tickets are shown
+ * separately (`deleteTicketChange`, a small chip with the balance before and
+ * after). `impact` undefined = still checking (the chip's place says so);
+ * null = the check failed, so a completed game says in words that its
+ * tickets are taken back.
  */
 export function deleteWarning(status: GameStatus, impact?: DeleteImpact | null): string {
   const gone = 'It comes off your list for good, along with its hours and notes.'
-  const after = (i: DeleteImpact) =>
-    `Your balance goes from ${formatBalance(i.balance)} to ${formatBalance(i.balance + i.change)}.`
-
-  if (status === 'completed') {
-    if (!impact) return `${gone} The tickets you earned for completing it are taken back.`
-    if (impact.change < 0) {
-      return `${gone} You lose the ${tickets(-impact.change)} you earned for completing it. ${after(impact)}`
-    }
-    return `${gone} It didn't earn any tickets, so your balance stays the same.`
-  }
-  if (status === 'dnf' && impact && impact.change > 0) {
-    return `${gone} The ${tickets(impact.change)} you lost for dropping it are given back. ${after(impact)}`
-  }
+  if (status === 'completed' && impact === null) return `${gone} The tickets you earned for completing it are taken back.`
   return gone
+}
+
+/**
+ * The tickets a delete takes (negative: a completed game's earnings) or
+ * gives back (positive: a DNF penalty), with the balance before and after,
+ * for the dialog's chip. Null when nothing changes (or isn't known yet), so
+ * no chip shows. The balance can go below zero, by design (CLAUDE.md, ticket
+ * system).
+ */
+export function deleteTicketChange(impact?: DeleteImpact | null): { change: number; before: number; after: number } | null {
+  if (!impact || impact.change === 0) return null
+  return { change: impact.change, before: impact.balance, after: impact.balance + impact.change }
 }
