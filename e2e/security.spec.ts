@@ -17,6 +17,41 @@ test('every response carries the hardening headers', async () => {
   expect(res.headers.get('permissions-policy')).toContain('camera=()')
 })
 
+test('pages only run scripts carrying that request\'s nonce', async () => {
+  const nonceOf = (csp: string | null) => csp?.match(/'nonce-([^']+)'/)?.[1]
+  const [a, b] = await Promise.all([fetch(`${BASE}/login`), fetch(`${BASE}/login`)])
+  const csp = a.headers.get('content-security-policy') ?? ''
+  expect(csp).toContain("object-src 'none'")
+  expect(csp).toContain("'strict-dynamic'")
+  expect(csp, 'scripts must not be allowed inline').not.toMatch(/script-src[^;]*'unsafe-inline'/)
+  const nonce = nonceOf(csp)
+  expect(nonce).toBeTruthy()
+  expect(nonceOf(b.headers.get('content-security-policy')), 'a fresh nonce per request').not.toBe(nonce)
+
+  const html = await a.text()
+  const scripts = html.match(/<script\b[^>]*>/g) ?? []
+  expect(scripts.length).toBeGreaterThan(0)
+  for (const tag of scripts) expect(tag, 'every script tag carries the nonce').toContain(`nonce="${nonce}"`)
+})
+
+// What an injection looks like: markup smuggled into the page with code in an
+// attribute. (A script the page's own trusted code creates is allowed on
+// purpose, 'strict-dynamic': that's how Turnstile's loader works.)
+test('injected markup cannot run code', async ({ page }) => {
+  await page.goto('/login')
+  const result = await page.evaluate(async () => {
+    const w = window as unknown as { __injected?: boolean }
+    let blocked = false
+    document.addEventListener('securitypolicyviolation', () => { blocked = true })
+    const div = document.createElement('div')
+    div.innerHTML = '<img src="data:," onload="window.__injected = true" onerror="window.__injected = true">'
+    document.body.appendChild(div)
+    await new Promise(r => setTimeout(r, 300))
+    return { ran: w.__injected === true, blocked }
+  })
+  expect(result).toEqual({ ran: false, blocked: true })
+})
+
 test('signed-out visitors are sent to /login before any page runs', async () => {
   for (const path of ['/dashboard', '/stats', '/settings', '/achievements', '/activity', '/import', '/admin/exe-links']) {
     const res = await fetch(BASE + path, { redirect: 'manual' })

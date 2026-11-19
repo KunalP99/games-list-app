@@ -79,6 +79,7 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
     context = await browser.newContext()
     page = await context.newPage()
     page.on('pageerror', e => errors.push(e.message))
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(`CSP: ${m.text()}`) })
     await login(page, TEST_USER)
   })
   test.afterAll(async () => { await context?.close() })
@@ -153,6 +154,7 @@ test.describe(`smoke (${EDITION} edition), signed out`, () => {
   test('login page works', async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', e => errors.push(e.message))
+    page.on('console', m => { if (/Content Security Policy/i.test(m.text())) errors.push(`CSP: ${m.text()}`) })
     const response = await page.goto('/login')
     expect(response?.status()).toBeLessThan(400)
     await expect(page.getByLabel('Email')).toBeVisible()

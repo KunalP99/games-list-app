@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import localFont from 'next/font/local'
 import { Anton, Orbitron } from 'next/font/google'
 import './globals.css'
@@ -29,11 +30,14 @@ export const metadata: Metadata = {
   description: BRAND.tagline,
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The per-request nonce from proxy.ts (Content-Security-Policy, lib/csp.ts):
+  // without it the browser refuses this inline script.
+  const nonce = (await headers()).get('x-nonce') ?? undefined
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})();` }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})();` }} />
       </head>
       <body className={`${geistSans.variable} ${orbitron.variable} ${anton.variable} font-sans antialiased`}>
         {children}

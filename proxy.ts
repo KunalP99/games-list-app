@@ -1,8 +1,29 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { contentSecurityPolicy, makeNonce } from '@/lib/csp'
 
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request })
+  // Content-Security-Policy with a fresh nonce per request (lib/csp.ts). Next.js
+  // reads the policy off the request to put the nonce on its own scripts; the
+  // root layout reads x-nonce for the theme script.
+  const nonce = makeNonce()
+  const csp = contentSecurityPolicy({
+    nonce,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    dev: process.env.NODE_ENV === 'development',
+  })
+  // Rebuilt from the request's current headers each time, so cookies the
+  // session refresh below writes onto the request are passed on too.
+  const next = () => {
+    const headers = new Headers(request.headers)
+    headers.set('x-nonce', nonce)
+    headers.set('content-security-policy', csp)
+    const response = NextResponse.next({ request: { headers } })
+    response.headers.set('Content-Security-Policy', csp)
+    return response
+  }
+
+  let supabaseResponse = next()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +37,7 @@ export async function proxy(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
-          supabaseResponse = NextResponse.next({ request })
+          supabaseResponse = next()
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
