@@ -13,7 +13,7 @@ import WelcomeForm from './WelcomeForm'
  */
 export default async function WelcomePage() {
   if (!FEATURES.secureAuth) notFound()
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

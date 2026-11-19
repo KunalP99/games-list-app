@@ -24,8 +24,9 @@ import { FEATURES } from '@/lib/edition'
 import { withOwnerNotes } from '@/lib/data/private-notes'
 import { rewardExplanation, type RewardWhy } from '@/lib/completion-rewards'
 
-export default async function GameDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createClient()
+export default async function GameDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const { data: gameRow } = await supabase
@@ -163,7 +164,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
             >
               {ownerProfile.display_name ?? ownerProfile.username}
             </Link>
-            's library
+            &apos;s library
           </span>
         </div>
       )}
@@ -515,7 +516,7 @@ export default async function GameDetailPage({ params }: { params: { id: string 
         </Link>
       ) : ownerProfile ? (
         <Link href={`/users/${encodeURIComponent(ownerProfile.username)}`} className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
-          ← Back to {ownerProfile.display_name ?? ownerProfile.username}'s profile
+          ← Back to {ownerProfile.display_name ?? ownerProfile.username}&apos;s profile
         </Link>
       ) : null}
     </div>

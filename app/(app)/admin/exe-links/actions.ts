@@ -8,7 +8,7 @@ import { cleanSubmittedSuffix } from '@/lib/detectable'
 type Result = { success: true } | { success: false; error: string }
 
 async function requireAdmin() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data: profile } = await supabase

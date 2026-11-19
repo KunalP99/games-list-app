@@ -35,7 +35,7 @@ type GameRow = HeroGame & { completion_date: string | null }
  * what's coming up.
  */
 export default async function NewDashboard({ userId }: { userId: string }) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const sessionsFrom = new Date(Date.now() - SESSION_WINDOW_DAYS * 86_400_000).toISOString()
 
   const [profile, gamesRes, sessions, live, playingNow, weekTicketsRes, friendProfilesRes] = await Promise.all([

@@ -28,7 +28,7 @@ const STATUS_CHANGED = 'This game was just changed somewhere else. Refresh the p
 // When `revert` is true (the game is being DNF'd) also hand the wheel turn back
 // to the turn that produced it. Returns whether a turn revert actually happened.
 async function consumeWheelPending(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   gameId: string,
   revert: boolean,
@@ -58,7 +58,7 @@ async function consumeWheelPending(
 export async function fetchGameMedia(url: string): Promise<
   { success: true; videos: GameVideo[]; playlistUrl: string | null } | { success: false; error: string }
 > {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -172,7 +172,7 @@ async function reverseCompletionRewards(supabase: Awaited<ReturnType<typeof crea
 }
 
 export async function createGame(formData: FormData) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -294,7 +294,7 @@ export async function createGame(formData: FormData) {
 }
 
 export async function updateGame(id: string, formData: FormData) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -485,7 +485,7 @@ export async function markAsCompleted(
     isFavourite: boolean
   },
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -581,7 +581,7 @@ export async function markAsCompleted(
 // Quick-DNF a game from the detail page. Applies the DNF ticket penalty and, if
 // this was the most recent wheel outcome, hands the wheel turn back.
 export async function markAsDnf(id: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -626,7 +626,7 @@ export async function markAsDnf(id: string) {
 // `stay`: the quick-actions menu deletes from the list itself, so it skips
 // the redirect and gets a result back instead.
 export async function deleteGame(id: string, opts?: { stay?: boolean }) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -660,7 +660,7 @@ export async function setGameStatus(id: string, rawTo: string) {
   // Ambient becomes Playing in an edition without it (lib/edition.ts).
   const to = editionStatus(rawTo)
   if (!isQuickStatus(to)) return { error: 'Not a status this can set.' }
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -702,7 +702,7 @@ export async function setGameStatus(id: string, rawTo: string) {
 }
 
 export async function setFavourite(id: string, isFavourite: boolean) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -718,7 +718,7 @@ export async function setFavourite(id: string, isFavourite: boolean) {
 }
 
 export async function addRecommendationToBacklog(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 

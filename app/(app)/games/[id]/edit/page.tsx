@@ -4,8 +4,9 @@ import type { Game } from '@/lib/types'
 import GameForm from '@/components/games/GameForm'
 import { withOwnerNotes } from '@/lib/data/private-notes'
 
-export default async function EditGamePage({ params }: { params: { id: string } }) {
-  const supabase = createClient()
+export default async function EditGamePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const { data: row } = await supabase

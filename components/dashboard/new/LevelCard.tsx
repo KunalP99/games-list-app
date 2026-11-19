@@ -12,7 +12,7 @@ import { getNextAchievement, levelProgress } from '@/lib/achievements'
  */
 export default async function LevelCard({ userId, xp }: { userId: string; xp: number }) {
   const progress = levelProgress(xp)
-  const next = await getNextAchievement(createClient(), userId).catch(() => null)
+  const next = await getNextAchievement(await createClient(), userId).catch(() => null)
   const toNext = progress.nextThreshold - progress.xp
 
   return (

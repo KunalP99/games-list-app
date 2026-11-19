@@ -18,16 +18,17 @@ import { Suspense } from 'react'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { escapeLike, ilikeAnyFilter } from '@/lib/query-escape'
 
-export default async function UserProfilePage({
-  params,
-  searchParams,
-}: {
-  params: { username: string }
-  searchParams: { status?: string; sort?: string; view?: string; q?: string }
-}) {
+export default async function UserProfilePage(
+  props: {
+    params: Promise<{ username: string }>
+    searchParams: Promise<{ status?: string; sort?: string; view?: string; q?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
 
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   // The friends edition matches the name exactly, as it always has. The public
@@ -175,7 +176,7 @@ export default async function UserProfilePage({
   // shown (currently 4, to sit level with the genre card next to it).
   const activityItems = buildActivityItems(recentGames, recentSpins, profileMap, ticketsByGame, user?.id ?? '', achievementUnlocks, sessions).slice(0, 12)
 
-  const rawView = searchParams.view ?? cookies().get('gameView')?.value
+  const rawView = searchParams.view ?? (await cookies()).get('gameView')?.value
   // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
   const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 

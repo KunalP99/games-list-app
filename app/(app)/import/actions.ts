@@ -88,7 +88,7 @@ export async function bulkImportGames(
   backlogGames: BacklogGameRow[],
   enrichWithRawg: boolean,
 ): Promise<ImportResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { imported: 0, failed: [] }
 
@@ -96,8 +96,8 @@ export async function bulkImportGames(
   let imported = 0
 
   // ── Enrich completed + backlog games with RAWG data ───────────────────────
-  let rawgMap = new Map<string, RawgData | null>()
-  let backlogRawgMap = new Map<string, RawgData | null>()
+  const rawgMap = new Map<string, RawgData | null>()
+  const backlogRawgMap = new Map<string, RawgData | null>()
   if (enrichWithRawg) {
     if (completedGames.length > 0) {
       const enriched = await withConcurrency(

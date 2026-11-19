@@ -9,7 +9,7 @@ import WhatsNewModal from '@/components/layout/WhatsNewModal'
  * usually not shown at all.
  */
 export default async function WhatsNewLoader() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const { data: latestChangelog } = await supabase

@@ -18,7 +18,7 @@ import { usernameStatus, type UsernameStatus } from '@/lib/data/usernames'
 type Me = { id: string; username: string; username_chosen: boolean; username_changed_at: string | null }
 
 async function me(): Promise<Me | null> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const { data } = await (createAdminClient().from('profiles') as any)

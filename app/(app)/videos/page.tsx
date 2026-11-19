@@ -12,8 +12,9 @@ type GameMedia = { id: string; title: string; youtube_videos: GameVideo[] | null
 // One individual video from any source, with a date + searchable text.
 type FlatVideo = { card: VideoCardData; date: string; haystack: string }
 
-export default async function VideosPage({ searchParams }: { searchParams: { q?: string; sort?: string } }) {
-  const supabase = createClient()
+export default async function VideosPage(props: { searchParams: Promise<{ q?: string; sort?: string }> }) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

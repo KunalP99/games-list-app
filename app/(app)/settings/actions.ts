@@ -11,7 +11,7 @@ import { FEATURES } from '@/lib/edition'
 import { validatePassword } from '@/lib/username'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -28,7 +28,7 @@ export async function updateProfile(formData: FormData): Promise<ActionResult> {
 }
 
 export async function updatePassword(formData: FormData): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const newPassword = formData.get('new_password') as string
   const confirmPassword = formData.get('confirm_password') as string
 
@@ -96,7 +96,7 @@ async function checkCurrentPassword(email: string, password: string, captcha: st
 
 export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult> {
   if (!FEATURES.wheel) return { success: false, error: 'The wheel isn’t available here' }
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -121,7 +121,7 @@ export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult
 }
 
 export async function updateAppearance(formData: FormData): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -148,7 +148,7 @@ export async function updateAppearance(formData: FormData): Promise<ActionResult
  * is the point: a readable token in the database would be a second password.
  */
 export async function createDeviceToken(label: string): Promise<ActionResult<{ token: string }>> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -169,7 +169,7 @@ export async function createDeviceToken(label: string): Promise<ActionResult<{ t
 }
 
 export async function revokeDevice(deviceId: string): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -186,7 +186,7 @@ export async function revokeDevice(deviceId: string): Promise<ActionResult> {
 
 /** Link an executable to one of the user's games (the agent's "No" path). */
 export async function linkExecutable(exeName: string, gameId: string): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -235,7 +235,7 @@ export async function approveDevicePairing(
 
 /** Forget an executable → game link, from the website. */
 export async function unlinkExecutable(exeName: string): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -261,7 +261,7 @@ export async function unlinkExecutable(exeName: string): Promise<ActionResult> {
  * than just going un-asked-about.
  */
 export async function ignoreExecutable(exeName: string): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
@@ -287,7 +287,7 @@ export async function ignoreExecutable(exeName: string): Promise<ActionResult> {
 
 /** Undo `ignoreExecutable` — the program can be detected again from here on. */
 export async function unignoreExecutable(exeName: string): Promise<ActionResult> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 

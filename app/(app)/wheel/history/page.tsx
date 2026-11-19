@@ -38,14 +38,15 @@ type RawSpin = {
   } | null
 }
 
-export default async function WheelHistoryPage({
-  searchParams,
-}: {
-  searchParams: { page?: string }
-}) {
+export default async function WheelHistoryPage(
+  props: {
+    searchParams: Promise<{ page?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
   // An edition without the wheel has no wheel history (lib/edition.ts).
   if (!FEATURES.wheel) notFound()
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const { data: spins } = await (supabase

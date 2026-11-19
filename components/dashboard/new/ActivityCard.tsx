@@ -24,7 +24,7 @@ function List({ items, empty }: { items: ActivityItem[]; empty: string }) {
  * Suspense boundary, since it's the heaviest read on the page.
  */
 export default async function ActivityCard({ userId }: { userId: string }) {
-  const items = await getActivityFeed(createClient(), userId, 40)
+  const items = await getActivityFeed(await createClient(), userId, 40)
 
   return (
     <div className="rounded-2xl bg-surface-base border border-edge-base px-4 pt-4 pb-1">

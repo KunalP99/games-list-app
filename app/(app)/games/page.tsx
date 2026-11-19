@@ -15,12 +15,13 @@ import { Suspense } from 'react'
 import { FEATURES } from '@/lib/edition'
 import { ilikeAnyFilter } from '@/lib/query-escape'
 
-export default async function GamesPage({
-  searchParams,
-}: {
-  searchParams: { status?: string; sort?: string; q?: string; view?: string }
-}) {
-  const supabase = createClient()
+export default async function GamesPage(
+  props: {
+    searchParams: Promise<{ status?: string; sort?: string; q?: string; view?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   // Default to Completed in place rather than redirecting. /games used to bounce
@@ -39,7 +40,7 @@ export default async function GamesPage({
 
   const GAME_LIST_COLS = 'id, title, status, hours_played, achievement_progress, rating, completion_date, completion_date_precision, release_date, release_date_precision, created_at, updated_at, image_url, cover_image_url, artwork_url, developer, platform, genres, rawg_id, is_favourite, is_replay, is_sequel, dominant_color, start_date, steam_deck'
 
-  const rawView = searchParams.view ?? cookies().get('gameView')?.value
+  const rawView = searchParams.view ?? (await cookies()).get('gameView')?.value
   // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
   const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 

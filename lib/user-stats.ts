@@ -53,7 +53,7 @@ export type UserStats = {
 }
 
 export async function computeUserStats(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
 ): Promise<UserStats> {
   const [gamesRes, ticketsRes, achievementsRes, profileRes] = await Promise.all([

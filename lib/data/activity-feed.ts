@@ -5,7 +5,7 @@ import { FEATURES } from '@/lib/edition'
 import { settleSession } from '@/lib/presence'
 import { buildActivityItems, groupActivityItems, suppressRepeatedStarts, type ActivityItem, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 
-type Supabase = ReturnType<typeof createClient>
+type Supabase = Awaited<ReturnType<typeof createClient>>
 
 /**
  * You and your friends' recent activity, newest first: completions, DNFs,

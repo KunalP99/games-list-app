@@ -9,7 +9,7 @@ import {
 } from '@/lib/achievements'
 
 export default async function AchievementsPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

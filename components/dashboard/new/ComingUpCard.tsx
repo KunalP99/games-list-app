@@ -14,7 +14,7 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '
  * for an hour, `getCachedEvents` in lib/data/upcoming-events.ts).
  */
 export default async function ComingUpCard({ userId }: { userId: string }) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const today = londonDay(new Date().toISOString())
 
   const [{ data: releases }, events] = await Promise.all([

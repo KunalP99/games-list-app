@@ -70,7 +70,7 @@ function toTitleCase(str: string): string {
       return word
     })
     .join(' ')
-    .replace(/:\s*(\w)/g, (_, c) => `: ${c.toUpperCase()}`)
+    .replace(/:\s*(\w)/g, (_, c) => `: ${c.toUpperCase()}`);
 }
 
 function ReasonBadge({ reason, amount }: { reason: string; amount: number }) {
@@ -141,12 +141,13 @@ function groupTransactions(transactions: RawTx[]): Group[] {
   return groups
 }
 
-export default async function TicketsPage({
-  searchParams,
-}: {
-  searchParams: { page?: string }
-}) {
-  const supabase = createClient()
+export default async function TicketsPage(
+  props: {
+    searchParams: Promise<{ page?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   // Everyone's tickets in the friends edition; only the viewer's own in the

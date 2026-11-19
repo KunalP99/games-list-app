@@ -98,7 +98,7 @@ Full ledger of all ticket activity for all players: date, user, game, reason bad
 
 | Layer | Tech |
 |-------|------|
-| Framework | [Next.js 14](https://nextjs.org) — App Router, TypeScript |
+| Framework | [Next.js 16](https://nextjs.org) — App Router, React 19, TypeScript |
 | Backend & Database | [Supabase](https://supabase.com) — PostgreSQL, Auth, RLS, RPCs |
 | Styling | [Tailwind CSS](https://tailwindcss.com) + CSS custom properties for dynamic theming |
 | Charts | [Recharts](https://recharts.org) |

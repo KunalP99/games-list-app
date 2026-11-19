@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 
 export const getProfile = cache(async (userId: string): Promise<Profile | null> => {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data } = await supabase
     .from('profiles')
     .select('*')

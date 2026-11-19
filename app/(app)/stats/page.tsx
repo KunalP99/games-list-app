@@ -12,12 +12,13 @@ const DEFAULT_ACCENT = '#ff5722'
  * Stats, "Wrapped" style. Opens on your own stats; the dropdown switches to a
  * head-to-head with a friend (`?compare=<username>`), and "Just me" goes back.
  */
-export default async function StatsPage({
-  searchParams,
-}: {
-  searchParams: { compare?: string }
-}) {
-  const supabase = createClient()
+export default async function StatsPage(
+  props: {
+    searchParams: Promise<{ compare?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   const { data: allProfiles } = await supabase

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import ImportClient from '@/components/import/ImportClient'
 
 export default async function ImportPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

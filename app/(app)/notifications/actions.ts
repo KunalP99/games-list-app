@@ -6,7 +6,7 @@ import { NOTIFICATIONS_PAGE_SIZE, type NotificationWithGame } from '@/lib/notifi
 // One page of the current user's notifications (newest first), for "Load more".
 // Embeds the linked game's portrait cover.
 export async function fetchNotifications(offset: number): Promise<NotificationWithGame[]> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
 
@@ -22,7 +22,7 @@ export async function fetchNotifications(offset: number): Promise<NotificationWi
 
 // Mark all of the current user's unread notifications as read.
 export async function markNotificationsRead(): Promise<{ success: boolean }> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false }
 

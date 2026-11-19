@@ -3,11 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { getGameImages } from '@/lib/rawg'
 import { allowRequest, tooManyRequests, IGDB_LOOKUP } from '@/lib/rate-limit'
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { id: string } },
-): Promise<NextResponse> {
-  const supabase = createClient()
+export async function GET(_request: NextRequest, props: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const params = await props.params;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json([], { status: 401 })
 

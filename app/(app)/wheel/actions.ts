@@ -128,7 +128,7 @@ function mergePaidResult(
 // Client-driven save for the cheap transitions (entry list, mode, reaching a
 // stable phase). Validated and version-checked before it is stored.
 export async function saveWheelSession(session: unknown) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in' }
 
@@ -141,7 +141,7 @@ export async function saveWheelSession(session: unknown) {
 
 // Clearing is separate from finishTurn so the client can reset without one.
 export async function clearWheelSession() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not signed in' }
 
@@ -274,7 +274,7 @@ async function addWonGameToLibrary(
 // Finalization happens via acceptSpinResult / finalizeSpinReroll / paid options.
 
 export async function performSpin(games: string[], mode: 'elimination' | 'first_land') {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -291,7 +291,7 @@ export async function performSpin(games: string[], mode: 'elimination' | 'first_
 // ─── SPIN turn — free accept ─────────────────────────────────────────────────
 
 export async function acceptSpinResult(resultName: string, mode: 'elimination' | 'first_land', gamesList: string[], ticketsSpent: number, wonGame?: WonGame | null, finalizedVia: 'accept' | 'spin_again' = 'accept', spends?: TicketSpend[], platform?: string | null, artworkUrl?: string | null) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -324,7 +324,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
 // ─── SPIN turn — paid: Spin Again (−3) ──────────────────────────────────────
 
 export async function paySpinAgain(games: string[], exclude: string[] = [], session?: unknown) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -369,7 +369,7 @@ export async function payUpgradeToSpinReroll(
   session?: unknown,
   upgradeMaxGames = 3,
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -411,7 +411,7 @@ export async function pickNextUpgradeGame(
   session?: unknown,
   upgradeMaxGames = 3,
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -454,7 +454,7 @@ export async function finalizeUpgradeChoice(
   platform?: string | null,
   artworkUrl?: string | null,
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -489,7 +489,7 @@ export async function finalizeUpgradeChoice(
 // ─── SPIN turn — paid: Choose Any Game (−9) ──────────────────────────────────
 
 export async function payChooseAnyGame(gameName: string, mode: 'elimination' | 'first_land', gamesList: string[], priorTicketsSpent: number, wonGame?: WonGame | null, spends?: TicketSpend[], platform?: string | null, artworkUrl?: string | null) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -539,7 +539,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
 // ─── SPIN+REROLL turn ────────────────────────────────────────────────────────
 
 export async function performReroll(games: string[], excludeGame: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -562,7 +562,7 @@ export async function finalizeSpinReroll(
   platform?: string | null,
   artworkUrl?: string | null,
 ) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -602,7 +602,7 @@ export async function chooseGameWithRawg(rawgGame: {
   released: string | null
   background_image: string | null
 }, platform?: string | null, artworkUrl?: string | null) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -630,7 +630,7 @@ export async function chooseGameWithRawg(rawgGame: {
 }
 
 export async function chooseGame(gameName: string) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -655,7 +655,7 @@ export async function chooseGame(gameName: string) {
 }
 
 export async function skipChooseTurn() {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

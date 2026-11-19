@@ -8,7 +8,7 @@ import { FEATURES, wheelOn } from '@/lib/edition'
 export default async function WheelPage() {
   // An edition without the wheel has no wheel page at all (lib/edition.ts).
   if (!FEATURES.wheel) notFound()
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
@@ -48,7 +48,7 @@ export default async function WheelPage() {
 
   // Opted out of wheel turns in Settings — the nav hides this page, so anyone
   // landing here came from a stale link or typed the URL. Guarded here rather
-  // than in middleware.ts, which never touches `profiles` and shouldn't take a
+  // than in proxy.ts, which never touches `profiles` and shouldn't take a
   // DB round-trip on every request. Page-level is also naturally path-exact,
   // so /wheel/history stays reachable, which is the agreed behaviour.
   if (!wheelOn(profile)) redirect('/dashboard')

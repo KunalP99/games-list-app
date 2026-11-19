@@ -38,7 +38,7 @@ One codebase runs two sites. The **friends** edition is the original app for Kun
 ```bash
 npm run dev      # Start development server (http://localhost:3000)
 npm run build    # Production build
-npm run lint     # Run Next.js linter
+npm run lint     # ESLint (flat config in eslint.config.mjs; 0 errors expected, warnings to review)
 npm test         # Run the Vitest suite (~600 unit tests, lib/__tests__/)
 npm run test:e2e # Playwright: smoke test of every page + wheel tests (see below)
 ```
@@ -216,14 +216,14 @@ ships with it) and ensures `uuid-ossp` up front, because column defaults call
 
 ## Architecture
 
-**GamesList** is a Next.js 14 App Router app using Supabase for auth and PostgreSQL.
+**GamesList** is a Next.js 16 App Router app (React 19) using Supabase for auth and PostgreSQL. Since Next.js 15, `cookies()`, `headers()` and page/route `params`/`searchParams` are async: always `await createClient()` (lib/supabase/server.ts) and `await props.params`.
 
 ### Route structure
 
 - `app/(auth)/` — unauthenticated pages (login/signup). Route group does not appear in URL.
 - `app/(app)/` — authenticated pages (dashboard, games, users, tickets, wheel, changelog). Route group does not appear in URL.
 - `app/auth/callback/route.ts` — must live outside route groups to match the `/auth/callback` URL Supabase sends confirmation emails to.
-- `middleware.ts` — redirects unauthenticated users away from protected routes and authenticated users away from `/login`. Also refreshes the session cookie on every request.
+- `proxy.ts` (Next.js 16's name for middleware; function `proxy`) — redirects unauthenticated users away from protected routes and authenticated users away from `/login`. Also refreshes the session cookie on every request.
 
 ### Supabase client pattern
 

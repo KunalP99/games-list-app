@@ -38,7 +38,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T,
 const fetchOEmbed = fetchYouTubeOEmbed
 
 export async function createVideo(formData: FormData): Promise<Result> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await requireAdmin(supabase)
   if (!user) return { success: false, error: 'Only the curator can add videos.' }
 
@@ -73,7 +73,7 @@ export async function createVideo(formData: FormData): Promise<Result> {
 }
 
 export async function deleteVideo(id: string): Promise<Result> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await requireAdmin(supabase)
   if (!user) return { success: false, error: 'Only the curator can remove videos.' }
 
@@ -86,7 +86,7 @@ export async function deleteVideo(id: string): Promise<Result> {
 // Create an in-site playlist: a titled collection of individual videos, with an
 // optional YouTube playlist link for viewers who'd rather watch it on YouTube.
 export async function createPlaylist(formData: FormData): Promise<Result> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await requireAdmin(supabase)
   if (!user) return { success: false, error: 'Only the curator can add playlists.' }
 
@@ -158,7 +158,7 @@ export async function fetchPlaylistForImport(playlistUrl: string): Promise<
   | { success: true; title: string; youtubeUrl: string; videos: { url: string; title: string }[] }
   | { success: false; error: string }
 > {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await requireAdmin(supabase)
   if (!user) return { success: false, error: 'Only the curator can import playlists.' }
 
@@ -184,7 +184,7 @@ export async function fetchPlaylistForImport(playlistUrl: string): Promise<
 }
 
 export async function deletePlaylist(id: string): Promise<Result> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const user = await requireAdmin(supabase)
   if (!user) return { success: false, error: 'Only the curator can remove playlists.' }
 

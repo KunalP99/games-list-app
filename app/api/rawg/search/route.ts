@@ -4,7 +4,7 @@ import { searchRawgGames, SEARCH_PAGE_SIZE } from '@/lib/rawg'
 import { allowRequest, tooManyRequests, IGDB_SEARCH } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ results: [], hasMore: false }, { status: 401 })
 

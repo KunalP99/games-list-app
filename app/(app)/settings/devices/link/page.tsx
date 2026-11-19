@@ -9,12 +9,13 @@ import LinkExecutableForm from './LinkExecutableForm'
  * the tray's "Link a game". Lives in the app rather than being a native window
  * so it picks up the user's accent, theme and fonts for free.
  */
-export default async function LinkExecutablePage({
-  searchParams,
-}: {
-  searchParams: { exe?: string; suggest?: string }
-}) {
-  const supabase = createClient()
+export default async function LinkExecutablePage(
+  props: {
+    searchParams: Promise<{ exe?: string; suggest?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 

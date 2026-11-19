@@ -11,7 +11,7 @@ import { readFlashAchievements } from '@/lib/achievements'
 import { FEATURES } from '@/lib/edition'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const {
     data: { user },
@@ -33,7 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect('/welcome')
   }
 
-  const pendingAchievements = readFlashAchievements()
+  const pendingAchievements = await readFlashAchievements()
 
   // The bell's notifications and the changelog entry used to be awaited right
   // here, which put two more Supabase round trips on the critical path of every

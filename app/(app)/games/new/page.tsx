@@ -3,7 +3,8 @@ import { FEATURES } from '@/lib/edition'
 
 const VALID_STATUSES = ['playing', 'completed', 'backlog', 'dnf', ...(FEATURES.ambient ? ['ambient'] : [])]
 
-export default function NewGamePage({ searchParams }: { searchParams: { status?: string; title?: string } }) {
+export default async function NewGamePage(props: { searchParams: Promise<{ status?: string; title?: string }> }) {
+  const searchParams = await props.searchParams;
   const defaultStatus = VALID_STATUSES.includes(searchParams.status ?? '') ? searchParams.status : undefined
   // The desktop agent sends a guessed title here when it can't match a running
   // program to anything already in the library — a starting point for the

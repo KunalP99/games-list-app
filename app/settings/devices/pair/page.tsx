@@ -20,12 +20,13 @@ import { BRAND } from '@/lib/edition'
  * its ThemeInitialiser, so the brand accent is the site default here rather
  * than the signed-in user's own colour) — supplied directly below instead.
  */
-export default async function PairDevicePage({
-  searchParams,
-}: {
-  searchParams: { callback?: string; label?: string }
-}) {
-  const supabase = createClient()
+export default async function PairDevicePage(
+  props: {
+    searchParams: Promise<{ callback?: string; label?: string }>
+  }
+) {
+  const searchParams = await props.searchParams;
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   // Not signed in: the normal login page. The app watches for the window to
   // land somewhere authenticated and brings it back here.

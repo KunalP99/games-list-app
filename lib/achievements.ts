@@ -882,7 +882,7 @@ export async function checkAndAwardAchievements(
   }
 
   if (newlyUnlocked.length > 0) {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const existingValue = cookieStore.get(FLASH_COOKIE)?.value
     const existingList: UnlockedAchievement[] = existingValue ? safeParse(existingValue) : []
     cookieStore.set(FLASH_COOKIE, JSON.stringify([...existingList, ...newlyUnlocked]), {
@@ -905,8 +905,8 @@ function safeParse(v: string): UnlockedAchievement[] {
   }
 }
 
-export function readFlashAchievements(): UnlockedAchievement[] {
-  const cookieStore = cookies()
+export async function readFlashAchievements(): Promise<UnlockedAchievement[]> {
+  const cookieStore = await cookies()
   const value = cookieStore.get(FLASH_COOKIE)?.value
   return value ? safeParse(value) : []
 }

@@ -17,7 +17,7 @@ export default async function NotificationBellData({
   userId: string
   accentColour: string
 }) {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   // Two queries, not three: PostgREST returns the *total* matching count
   // alongside a limited page, so `totalCount` comes free with the rows.

@@ -4,7 +4,7 @@ import { getActivityFeed } from '@/lib/data/activity-feed'
 import ActivityRow from '@/components/activity/ActivityRow'
 
 export default async function ActivityPage() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const {
     data: { user },

@@ -9,8 +9,8 @@ import { usernameStatus, type UsernameStatus } from '@/lib/data/usernames'
 import { siteOriginFrom } from '@/lib/site-origin'
 
 /** This site's own address, for links Supabase emails out (confirm, reset). See lib/site-origin.ts. */
-function siteOrigin(): string {
-  const h = headers()
+async function siteOrigin(): Promise<string> {
+  const h = await headers()
   return siteOriginFrom(process.env, name => h.get(name))
 }
 
@@ -21,7 +21,7 @@ function captchaToken(formData: FormData): string | undefined {
 }
 
 export async function signIn(formData: FormData) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const { error } = await supabase.auth.signInWithPassword({
@@ -42,7 +42,7 @@ export async function signUp(formData: FormData) {
 
 /** The friends edition's sign-up: name, email, password. Unchanged. */
 async function signUpSimple(formData: FormData) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const name = (formData.get('name') as string).trim()
@@ -79,13 +79,13 @@ async function signUpSecure(formData: FormData) {
   const pw = validatePassword(password)
   if (!pw.ok) return { error: `Password: ${pw.error}` }
 
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { username: status.username, display_name: displayName || status.username },
-      emailRedirectTo: `${siteOrigin()}/auth/callback`,
+      emailRedirectTo: `${await siteOrigin()}/auth/callback`,
       captchaToken: captchaToken(formData),
     },
   })
@@ -109,9 +109,9 @@ export async function requestPasswordReset(formData: FormData) {
   if (!FEATURES.secureAuth) return { error: 'Not available.' }
   const email = ((formData.get('email') as string | null) ?? '').trim()
   if (!email) return { error: 'Enter your email.' }
-  const supabase = createClient()
+  const supabase = await createClient()
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteOrigin()}/auth/callback?next=/reset-password`,
+    redirectTo: `${await siteOrigin()}/auth/callback?next=/reset-password`,
     captchaToken: captchaToken(formData),
   })
   // A captcha failure or rate limit is worth showing; "no such user" never is
@@ -128,7 +128,7 @@ export async function resetPassword(formData: FormData) {
   if (password !== confirm) return { error: 'Passwords do not match.' }
   const pw = validatePassword(password)
   if (!pw.ok) return { error: pw.error }
-  const supabase = createClient()
+  const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'This reset link has expired. Ask for a new one.' }
   const { error } = await supabase.auth.updateUser({ password })
@@ -137,7 +137,7 @@ export async function resetPassword(formData: FormData) {
 }
 
 export async function signOut() {
-  const supabase = createClient()
+  const supabase = await createClient()
   await supabase.auth.signOut()
   redirect('/login')
 }
