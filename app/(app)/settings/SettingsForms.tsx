@@ -6,6 +6,7 @@ import { applyAccentPalette } from '@/lib/accent'
 import type { Profile } from '@/lib/types'
 import { FEATURES } from '@/lib/edition'
 import UsernameSetting from './UsernameSetting'
+import Turnstile from '@/components/auth/Turnstile'
 
 const input = 'w-full px-3 py-2 border border-edge-input rounded-lg text-sm text-fg-base placeholder-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-surface-input'
 
@@ -28,7 +29,9 @@ function StatusMessage({ msg }: { msg: { ok: boolean; text: string } | null }) {
 
 export type DeviceRow = { id: string; label: string; last_seen_at: string | null; created_at: string }
 
-export default function SettingsForms({ profile, email, devices = [], ignoredExecutables = [] }: { profile: Profile; email: string; devices?: DeviceRow[]; ignoredExecutables?: string[] }) {
+export default function SettingsForms({ profile, email, hasPassword = true, devices = [], ignoredExecutables = [] }: { profile: Profile; email: string; hasPassword?: boolean; devices?: DeviceRow[]; ignoredExecutables?: string[] }) {
+  // Turnstile tokens are single-use: remount the widget after each attempt.
+  const [turnstileKey, setTurnstileKey] = useState(0)
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [profileLoading, setProfileLoading] = useState(false)
 
@@ -71,6 +74,7 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
     const result = await updatePassword(new FormData(e.currentTarget))
     setPasswordMsg(result.success ? { ok: true, text: 'Password updated.' } : { ok: false, text: result.error })
     if (result.success) (e.target as HTMLFormElement).reset()
+    setTurnstileKey(k => k + 1)
     setPasswordLoading(false)
   }
 
@@ -224,6 +228,19 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider">Security</h2>
         <form onSubmit={handlePassword} className="space-y-4">
+          {hasPassword && (
+            <div className="sm:max-w-[calc(50%-0.5rem)]">
+              <label className="block text-sm font-medium text-fg-secondary mb-1">Current Password</label>
+              <input
+                name="current_password"
+                type="password"
+                required
+                className={input}
+                placeholder="Your current password"
+                autoComplete="current-password"
+              />
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-fg-secondary mb-1">New Password</label>
@@ -249,6 +266,9 @@ export default function SettingsForms({ profile, email, devices = [], ignoredExe
               />
             </div>
           </div>
+          {/* The public project asks for a bot check on every sign-in, including
+              the one that confirms your current password. */}
+          {FEATURES.secureAuth && hasPassword && <Turnstile key={turnstileKey} />}
           <div className="flex items-center gap-3">
             <button
               type="submit"

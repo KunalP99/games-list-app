@@ -31,6 +31,9 @@ All notable changes to **GamesList** are documented here, newest first.
   - A small 🔥 streak pill beside the date counts the days in a row you've played. It's orange once you've played today, and grey with a "play today to keep it" nudge if your last session was yesterday.
 
 ### Fixed
+- **Changing your password asks for your current one**, so a session left open on someone else's screen can't be used to take over your account. Accounts made with Google or Discord, which have no password yet, can still set one without it.
+- **Safer by default:** the site can no longer be shown inside other websites (a trick used to make people click things without knowing), and browsers are told to use only secure connections and not to share more than needed about where you came from.
+- **Limits on game searches and lookups:** each account can make up to 60 game searches and 120 game lookups a minute (and the desktop app 30 identifications), so no one account can use up the game database's quota for everyone.
 - **A play session the desktop app never closed no longer shows as "– now" forever.** If the app was restarted, crashed or the PC slept mid-game, the activity feed (dashboard, Activity page and profiles) kept that session running indefinitely and added "playing now" to the day's row. It now ends at the last time the app checked in, matching the game's own Play Sessions list, and a new session of the same game on the same PC closes the old one properly.
 - **Searching for a title with a comma or brackets works.** Searching your games (or a friend's) for "Warhammer 40,000" or "Ratchet (2016)" used to fail and show nothing. Search now always looks for exactly what you typed, including `%` and `_`.
 - **Tickets can only be earned from your own games.** Saving an edit with a game that wasn't yours could still hand out completion tickets and XP. It now just says the game wasn't found.

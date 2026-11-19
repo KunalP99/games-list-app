@@ -14,6 +14,10 @@ export default defineConfig({
   fullyParallel: false, // tests share two seeded accounts; parallel runs would race each other's wheel_session
   retries: 0, // a flaky e2e test hiding a real bug is worse than a red run
   reporter: 'list',
+  // The dev server compiles a page the first time it's opened after a change
+  // or restart, which can take well over the default 5s; the wheel tests
+  // timed out on that more than once.
+  expect: { timeout: 15_000 },
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'retain-on-failure',

@@ -40,9 +40,58 @@ export async function updatePassword(formData: FormData): Promise<ActionResult> 
     if (!pw.ok) return { success: false, error: pw.error }
   } else if (newPassword.length < 6) return { success: false, error: 'Password must be at least 6 characters' }
 
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Ask for the current password, so a session left open on someone else's
+  // screen (or a stolen session cookie) can't be turned into a taken-over
+  // account (code review SEC-009). Accounts made with Google/Discord have no
+  // password yet: for them this form sets their first one.
+  if (hasPasswordLogin(user) && user.email) {
+    const current = (formData.get('current_password') as string | null) ?? ''
+    if (!current) return { success: false, error: 'Enter your current password.' }
+    const check = await checkCurrentPassword(user.email, current, captchaToken(formData))
+    if (check) return { success: false, error: check }
+  }
+
   const { error } = await supabase.auth.updateUser({ password: newPassword })
   if (error) return { success: false, error: error.message }
   return { success: true, data: undefined }
+}
+
+/** Whether the account signs in with a password (not only Google/Discord). */
+function hasPasswordLogin(user: { identities?: { provider: string }[] | null }): boolean {
+  // Accounts from before identities were recorded have none listed; they're
+  // email-and-password accounts.
+  if (!user.identities || user.identities.length === 0) return true
+  return user.identities.some(i => i.provider === 'email')
+}
+
+function captchaToken(formData: FormData): string | undefined {
+  if (!FEATURES.secureAuth) return undefined
+  return (formData.get('cf-turnstile-response') as string | null) || undefined
+}
+
+/**
+ * Checks a password by signing in with it on a separate, throwaway client: the
+ * caller's own session (cookies) is never touched. Returns an error message,
+ * or null when it's right. The public project requires a Turnstile token on
+ * every sign-in, hence `captcha`.
+ */
+async function checkCurrentPassword(email: string, password: string, captcha: string | undefined): Promise<string | null> {
+  const { createClient: createPlainClient } = await import('@supabase/supabase-js')
+  const probe = createPlainClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { error } = await probe.auth.signInWithPassword({ email, password, options: { captchaToken: captcha } })
+  if (!error) {
+    // Only this throwaway session; 'global' would sign the user out everywhere.
+    await probe.auth.signOut({ scope: 'local' }).catch(() => {})
+    return null
+  }
+  if (/captcha/i.test(error.message)) return 'Please complete the check below and try again.'
+  if (/rate|too many/i.test(error.message)) return 'Too many attempts. Wait a minute and try again.'
+  return 'Your current password is incorrect.'
 }
 
 export async function updateWheelEnabled(enabled: boolean): Promise<ActionResult> {

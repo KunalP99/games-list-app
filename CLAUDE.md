@@ -39,7 +39,8 @@ One codebase runs two sites. The **friends** edition is the original app for Kun
 npm run dev      # Start development server (http://localhost:3000)
 npm run build    # Production build
 npm run lint     # Run Next.js linter
-npm test         # Run Vitest suite (45 tests across tickets, wheel, achievements)
+npm test         # Run the Vitest suite (~600 unit tests, lib/__tests__/)
+npm run test:e2e # Playwright: smoke test of every page + wheel tests (see below)
 ```
 
 **Run `npm test` after every change.** Test files live in `lib/__tests__/`.
@@ -390,7 +391,6 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/games/new` | `app/(app)/games/new/page.tsx` | Add game form |
 | `/games/[id]` | `app/(app)/games/[id]/page.tsx` | Game detail. Edit/delete only shown to owner (`isOwner` check) |
 | `/games/[id]/edit` | `app/(app)/games/[id]/edit/page.tsx` | Edit form |
-| `/users` | `app/(app)/users/page.tsx` | Friends list — excludes the current user |
 | `/users/[username]` | `app/(app)/users/[username]/page.tsx` | Read-only profile. `isOwner` controls Mark Complete button visibility |
 | `/tickets` | `app/(app)/tickets/page.tsx` | Full ticket ledger for all users, grouped by game, paginated 20/page |
 | `/wheel` | `app/(app)/wheel/page.tsx` | Wheel spin — shows current turn, game input, spin animation, result flow |
@@ -430,10 +430,12 @@ The full implementation plan (including all database SQL per phase) is at:
 
 | Action | Ticket behaviour |
 |---|---|
-| `createGame` | Awards if `status === 'completed'` on creation |
-| `updateGame` | Fetches existing status first. `not_completed → completed`: award. `completed → completed`: reverse + re-award. `completed → other`: reverse only. |
-| `markAsCompleted` | Always awards (only callable when game is `playing`) |
-| `deleteGame` | No ticket change — transactions retain `game_id` as null after cascade |
+| `createGame` | Grants completion rewards if `status === 'completed'` on creation |
+| `updateGame` | Refuses a game that isn't the caller's. Reads the status first and writes only if it's unchanged (`STATUS_CHANGED` otherwise). `not_completed → completed`: grant. `completed → completed`: reverse + re-grant when something the reward depends on changed (hours, achievements, completion date, sequel flag, linked game). `completed → other`: reverse tickets **and** completion XP. |
+| `markAsCompleted` | Grants (refuses an already-completed game; from DNF, refunds the penalty first). Same compare-and-set on status as `updateGame`. |
+| `deleteGame` | Reverses a completed game's completion tickets and XP, or a DNF game's penalty, then deletes |
+
+"Grant" = `grantCompletionRewards` (tickets + completion XP, recorded in `completion_rewards`); "reverse" = `reverseCompletionRewards`. Rules per edition in `lib/completion-rewards.ts`.
 
 ---
 
@@ -449,7 +451,7 @@ The full implementation plan (including all database SQL per phase) is at:
 | hours > 100 | `game_completed_bonus_hours` | +1 per 20h beyond 100 |
 | achievements === 100 | `achievement_100_percent` | +3 |
 
-`awardCompletionTickets` calls the `award_tickets` RPC once per entry.
+That's the friends edition's table (typed hours, plus `sequel_back_to_back` +1 when the sequel flag is set). The public edition uses tracked hours instead and no 100%/sequel bonus (`completionReward` in `lib/completion-rewards.ts`). `grantCompletionRewards` (`app/(app)/games/actions.ts`) calls the `award_tickets` RPC once per entry.
 
 ---
 
@@ -473,6 +475,7 @@ directly; wheel state (`wheel_turn`, `pending_wheel_*`, `wheel_session`) and
 
 | `record_completion_reward(p_user_id, p_game_id, p_tickets, p_xp, p_untracked, p_why)` / `reverse_completion_reward(p_user_id, p_game_id)` | Record a completion's reward in `completion_rewards` and add its XP (replacing, never doubling, an existing row) / delete it and take its XP back. From `db/batch3.sql`. Wheel history (`wheel_spins`) is likewise written only by the server (`privileged()` in the wheel actions) and is read-only for users. |
 | `edition_is_public()` | Whether this database serves the public edition (`app_settings`; missing = public). Used by the read rules; callable by everyone. |
+| `take_rate_limit(p_user_id, p_bucket, p_limit, p_window_seconds)` | Counts a request in `rate_limits` and says whether it's within the limit, in one statement (`db/batch4.sql`). Used through `allowRequest` in `lib/rate-limit.ts` by the IGDB-backed routes (`/api/rawg/*`, `/api/agent/identify`); fails open if the database can't be reached. |
 
 All of these, and the "only once" rules around them, come from `db/review-fixes.sql` (code review batch 2) and `db/batch3.sql` (batch 3); `db/privileges.sql` holds every permission rule for them in one place. Status changes in `app/(app)/games/actions.ts` are written with `.eq('status', <status just read>)` and do nothing (returning `STATUS_CHANGED`) if it moved; wheel turns are ended with `claimTurn` (`wheel_turn` compare-and-set) before anything else happens, and `releaseTurn` hands a claim back if the spend/award that follows fails.
 
@@ -653,6 +656,6 @@ ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEF
 ## Known caveats
 
 - **Usernames with special characters** — Usernames are derived from the email local part via the `handle_new_user` trigger (`split_part(email, '@', 1)`). Emails with `+` aliases (e.g. `user+tag@gmail.com`) produce usernames like `user+tag`, which can cause routing issues on `/users/[username]`. Prefer using user IDs in URLs in future iterations.
-- **Email confirmation disabled** — Supabase email confirmation is turned off for this deployment. The `signUp` action redirects directly to `/dashboard` when a session is returned. The email redirect flow is still there as a fallback.
+- **Email confirmation** — off in the friends project: its `signUp` action redirects straight to `/dashboard` when a session is returned (the email redirect flow is still there as a fallback). On in the public project (`FEATURES.secureAuth`, setup step 4) and in the local stack (`supabase/config.toml`).
 - **`lib/database.types.ts` is hand-written** — It must be manually kept in sync when schema changes. The DNF status and all Phase 2–4 columns have been added manually.
-- **No test suite** — All verification is manual.
+- **Tests** — Vitest covers the pure rules (`lib/__tests__/`); Playwright covers every page (smoke) and the wheel's resumable turns (`e2e/`). Neither covers the desktop app, the crons, emails or OAuth; check those by hand.

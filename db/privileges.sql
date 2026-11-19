@@ -30,7 +30,8 @@ begin
     'public.spend_tickets(uuid, integer, public.ticket_reason, text)',
     'public.add_game_hours(uuid, uuid, numeric)',
     'public.record_completion_reward(uuid, uuid, integer, integer, boolean, text)',
-    'public.reverse_completion_reward(uuid, uuid)'
+    'public.reverse_completion_reward(uuid, uuid)',
+    'public.take_rate_limit(uuid, text, integer, integer)'
   ]
   loop
     if to_regprocedure(f) is not null then

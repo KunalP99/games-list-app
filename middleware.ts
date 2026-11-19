@@ -37,10 +37,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // Redirect unauthenticated users away from protected pages
+  // Redirect unauthenticated users away from protected pages. Every signed-in
+  // page is listed (app/(app)/layout.tsx also sends a signed-out visitor to
+  // /login; this is the first of the two checks, not the only one).
   // /reset-password and /welcome need the session their link or sign-in just
   // created (public edition's secure sign-up; both 404 in the friends edition).
-  const protectedPrefixes = ['/dashboard', '/games', '/users', '/tickets', '/wheel', '/changelog', '/reset-password', '/welcome']
+  const protectedPrefixes = [
+    '/dashboard', '/games', '/users', '/tickets', '/wheel', '/changelog',
+    '/stats', '/achievements', '/activity', '/settings', '/import', '/videos', '/admin',
+    '/reset-password', '/welcome',
+  ]
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))
   if (!user && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))

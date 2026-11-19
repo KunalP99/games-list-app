@@ -40,6 +40,8 @@ export default async function SettingsPage() {
       <SettingsForms
         profile={profile}
         email={user.email ?? ''}
+        // Google/Discord-only accounts have no password to confirm yet.
+        hasPassword={!user.identities?.length || user.identities.some(i => i.provider === 'email')}
         devices={devices ?? []}
         ignoredExecutables={(ignored ?? []).map(i => i.exe_name)}
       />

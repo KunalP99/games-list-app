@@ -65,7 +65,7 @@ test('an elimination run survives closing the tab mid-run', async ({ page }) => 
   await page.getByRole('button', { name: '🎰 Spin!' }).click()
 
   // The animation is 4s; elim_step is the settled, waiting-for-input phase.
-  await expect(page.getByText('Eliminated')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByText('Eliminated')).toBeVisible({ timeout: 20_000 })
   const eliminatedGame = await page.locator('p.text-lg.font-bold').first().innerText()
   const remainingBefore = await page.getByText(/remaining$/).innerText()
 
@@ -85,7 +85,7 @@ test('a spin result awaiting Accept survives closing the tab', async ({ page }) 
   await page.getByRole('button', { name: 'First Land' }).click() // single spin, no elimination loop
   await page.getByRole('button', { name: '🎰 Spin!' }).click()
 
-  await expect(page.getByText('You got')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByText('You got')).toBeVisible({ timeout: 20_000 })
   const winner = await page.locator('p.text-2xl.font-bold').first().innerText()
 
   const resumedPage = await closeAndReopen(page, '/wheel')
@@ -105,7 +105,7 @@ test('a paid Spin Again is not lost if the tab closes before its animation finis
   await addAllBacklogGames(page)
   await page.getByRole('button', { name: 'First Land' }).click()
   await page.getByRole('button', { name: '🎰 Spin!' }).click()
-  await expect(page.getByText('You got')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByText('You got')).toBeVisible({ timeout: 20_000 })
 
   const balanceBefore = await readTicketBalance(page)
   test.skip(balanceBefore < 3, 'test-alex needs at least 3 tickets for this test')
@@ -119,7 +119,7 @@ test('a paid Spin Again is not lost if the tab closes before its animation finis
 
   // Landed on the settled result rather than replaying the animation, and
   // charged exactly once.
-  await expect(resumedPage.getByText('You got')).toBeVisible({ timeout: 8_000 })
+  await expect(resumedPage.getByText('You got')).toBeVisible({ timeout: 20_000 })
   await expect(resumedPage.getByText('Turn resumed.')).toBeVisible()
   const balanceAfter = await readTicketBalance(resumedPage)
   expect(balanceAfter).toBe(balanceBefore - 3)
@@ -134,7 +134,7 @@ test('a finalized turn does not resurrect on the next visit', async ({ page }) =
   await addAllBacklogGames(page)
   await page.getByRole('button', { name: 'First Land' }).click()
   await page.getByRole('button', { name: '🎰 Spin!' }).click()
-  await expect(page.getByText('You got')).toBeVisible({ timeout: 8_000 })
+  await expect(page.getByText('You got')).toBeVisible({ timeout: 20_000 })
 
   await page.getByRole('button', { name: '✅ Accept this game' }).click()
   // A won game with no IGDB identity (free-text add) skips the review modal
@@ -145,12 +145,12 @@ test('a finalized turn does not resurrect on the next visit', async ({ page }) =
     await page.getByRole('combobox').selectOption({ index: 1 })
     await page.getByRole('button', { name: 'Add to my list' }).click()
   }
-  await expect(page.getByText('Good luck!')).toBeVisible({ timeout: 8_000 }) // 'done' phase settled
+  await expect(page.getByText('Good luck!')).toBeVisible({ timeout: 20_000 }) // 'done' phase settled
 
   const resumedPage = await closeAndReopen(page, '/wheel')
 
   // wheel_session was cleared by advanceTurn — no stale "You got" screen.
   await expect(resumedPage.getByRole('button', { name: '🎰 Spin!' }).or(
     resumedPage.getByText('Pick a Game', { exact: false }),
-  )).toBeVisible({ timeout: 8_000 })
+  )).toBeVisible({ timeout: 20_000 })
 })

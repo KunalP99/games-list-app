@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { authenticateDevice } from '@/lib/agent-auth'
+import { allowRequest, tooManyRequests, AGENT_IDENTIFY } from '@/lib/rate-limit'
 import { resolveSteamApp } from '@/lib/steam-games'
 import { findGameByExactName } from '@/lib/name-games'
 import { cleanSubmittedSuffix, uniqueByBasename } from '@/lib/detectable'
@@ -113,6 +114,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Captured as its own const: TypeScript's narrowing of `identity` from the
   // check above does not reach inside the linkExe closure defined below.
   const userId = identity.userId
+  // Each identify can call IGDB several times; cap it per account. The
+  // tracker treats any failed identify as "try again later" (10-minute back-off).
+  if (!(await allowRequest(userId, AGENT_IDENTIFY))) return tooManyRequests(AGENT_IDENTIFY)
 
   let body: any
   try {
