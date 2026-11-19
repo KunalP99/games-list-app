@@ -91,7 +91,6 @@ export default function VideoCard({ video }: { video: VideoCardData }) {
                 src={youtubeEmbedUrl(video.kind, video.youtube_id)}
                 title={video.title}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                allowFullScreen
                 className="absolute inset-0 w-full h-full"
               />
             </div>
