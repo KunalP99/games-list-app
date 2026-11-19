@@ -181,4 +181,30 @@ syncBackActive()
 
 fs.copyFileSync(SOURCES[target], ACTIVE)
 console.log(`Switched to ${target.toUpperCase()} (project ref · edition: ${identityOf(ACTIVE)})`)
+await syncLocalEdition()
 console.log('Restart `npm run dev` for it to take effect.')
+
+// The local database's own read rules depend on which edition it serves
+// (public.app_settings, db/batch3.sql), and `dev` and `dev-public` share one
+// local database. So switching between them also flips that setting, keeping
+// the database's rules in step with the edition being run. Local only: a real
+// project's edition is set once, by hand (db/edition-*.sql).
+async function syncLocalEdition() {
+  const env = parseKeys(fs.readFileSync(ACTIVE, 'utf8'))
+  const url = env.get('NEXT_PUBLIC_SUPABASE_URL') ?? ''
+  const serviceKey = env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url) || !serviceKey) return
+  const edition = editionOf(ACTIVE)
+  try {
+    const { createClient } = await import('@supabase/supabase-js')
+    const sb = createClient(url, serviceKey, { auth: { persistSession: false } })
+    const { error } = await sb.from('app_settings').upsert({ key: 'edition', value: edition }, { onConflict: 'key' })
+    if (error) {
+      console.log(`Note: couldn't set the local database's edition (${error.message}). Run db/edition-${edition}.sql in local Studio.`)
+    } else {
+      console.log(`Local database set to the ${edition} edition.`)
+    }
+  } catch (err) {
+    console.log(`Note: couldn't reach the local database to set its edition (${err.message}). Is \`npm run supabase:start\` running?`)
+  }
+}

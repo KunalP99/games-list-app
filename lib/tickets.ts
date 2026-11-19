@@ -42,26 +42,9 @@ export function calculateCompletionAwards(
   return awards
 }
 
-export async function awardCompletionTickets(
-  supabase: SupabaseClient,
-  userId: string,
-  gameId: string,
-  hours: number | null,
-  achievementProgress: number | null,
-) {
-  const awards = calculateCompletionAwards(hours, achievementProgress)
-  const admin = ledger()
-  for (const { reason, amount } of awards) {
-    const { error } = await admin.rpc('award_tickets', {
-      p_user_id: userId,
-      p_amount: amount,
-      p_reason: reason,
-      p_game_id: gameId,
-    })
-    if (error) throw new Error(`awardCompletionTickets failed (${reason}): ${error.message}`)
-  }
-  await checkAndAwardSequelBonus(supabase, userId, gameId)
-}
+// Completion tickets (and the sequel bonus) are awarded by
+// grantCompletionRewards in app/(app)/games/actions.ts, using the per-edition
+// rules in lib/completion-rewards.ts.
 
 /**
  * Charges the DNF penalty. Every DNF path calls this, so it's also the one
@@ -93,26 +76,4 @@ export async function reverseDnfPenalty(
     p_game_id: gameId,
   })
   if (error) throw new Error(`reverseDnfPenalty failed: ${error.message}`)
-}
-
-async function checkAndAwardSequelBonus(
-  supabase: SupabaseClient,
-  userId: string,
-  gameId: string,
-) {
-  const { data: game } = await supabase
-    .from('games')
-    .select('is_sequel')
-    .eq('id', gameId)
-    .single()
-
-  if (!game?.is_sequel) return
-
-  const { error } = await ledger().rpc('award_tickets', {
-    p_user_id: userId,
-    p_amount: TICKET_AWARDS.sequel_back_to_back,
-    p_reason: 'sequel_back_to_back',
-    p_game_id: gameId,
-  })
-  if (error) throw new Error(`checkAndAwardSequelBonus failed: ${error.message}`)
 }

@@ -30,6 +30,11 @@ describe('featuresFor', () => {
     expect(featuresFor('public').secureAuth).toBe(true)
   })
 
+  it('has verified completion rewards in the public edition only', () => {
+    expect(featuresFor('friends').verifiedRewards).toBe(false)
+    expect(featuresFor('public').verifiedRewards).toBe(true)
+  })
+
   it('shares the ticket ledger in the friends edition only', () => {
     expect(featuresFor('friends').sharedTicketLedger).toBe(true)
     expect(featuresFor('public').sharedTicketLedger).toBe(false)

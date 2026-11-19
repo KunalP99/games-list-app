@@ -20,20 +20,31 @@ import { mapGameVideos } from '@/lib/youtube'
 import PlaySessionsCard from '@/components/games/PlaySessionsCard'
 import { toTrackedSessions, type PlaySessionRow } from '@/lib/play-sessions'
 import { escapeLike } from '@/lib/query-escape'
+import { FEATURES } from '@/lib/edition'
+import { withOwnerNotes } from '@/lib/data/private-notes'
+import { rewardExplanation, type RewardWhy } from '@/lib/completion-rewards'
 
 export default async function GameDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: game } = await supabase
+  const { data: gameRow } = await supabase
     .from('games')
     .select('*')
     .eq('id', params.id)
     .single() as { data: Game | null }
 
-  if (!game) notFound()
+  if (!gameRow) notFound()
 
+  // The owner sees their private notes, which live in their own table.
+  const game = await withOwnerNotes(supabase, gameRow, user?.id)
   const isOwner = game.user_id === user?.id
+
+  // Public edition: what completing this game earned, and why (the owner only).
+  const { data: completionReward } = isOwner && FEATURES.verifiedRewards && game.status === 'completed'
+    ? await (supabase as any).from('completion_rewards').select('tickets, xp, why').eq('game_id', game.id).maybeSingle() as { data: { tickets: number; xp: number; why: RewardWhy } | null }
+    : { data: null }
+  const rewardNote = completionReward ? rewardExplanation(completionReward.why, completionReward.tickets, completionReward.xp) : null
 
   const { data: ownerProfile } = !isOwner
     ? await supabase
@@ -399,6 +410,13 @@ export default async function GameDetailPage({ params }: { params: { id: string 
           </p>
           <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.review}</p>
         </div>
+      )}
+
+      {/* Public edition: what completing this game earned, and why */}
+      {rewardNote && (
+        <p className="text-sm text-fg-muted bg-surface-sunken border border-edge-base rounded-xl px-4 py-3">
+          🎟️ {rewardNote}
+        </p>
       )}
 
       {/* Notes — public to everyone, private only to owner */}

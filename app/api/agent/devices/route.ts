@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { authenticateDevice, generateDeviceToken, hashToken } from '@/lib/agent-auth'
+import { authenticateDevice } from '@/lib/agent-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,31 +35,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   })
 }
 
-/** Issue a new device token — for pairing a *different* PC while sitting at this one. */
+/**
+ * Used to issue a new device token from an existing one (the desktop app's
+ * "Add device", for pairing a *different* PC). Retired: a stolen token could
+ * use it to mint more, and revoking the stolen device left those working. A PC
+ * is now only ever paired by signing in (the app's Connect button →
+ * /settings/devices/pair). The desktop app shows this message until its next
+ * release removes the button.
+ */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const sb = createAdminClient()
   const identity = await authenticateDevice(sb as any, request.headers.get('authorization'))
   if (!identity) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-
-  let body: any
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'invalid json' }, { status: 400 })
-  }
-  const label = typeof body?.label === 'string' ? body.label.trim() : ''
-  if (!label) return NextResponse.json({ error: 'Give the device a name' }, { status: 400 })
-  if (label.length > 60) return NextResponse.json({ error: 'That name is too long' }, { status: 400 })
-
-  const token = generateDeviceToken()
-  const { error } = await (sb.from('device_tokens') as any).insert({
-    user_id: identity.userId,
-    token_hash: hashToken(token),
-    label,
-  })
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // The only time the plaintext token is ever returned — only its hash is
-  // stored, so it cannot be shown again after this response.
-  return NextResponse.json({ token })
+  return NextResponse.json(
+    { error: 'To add a PC, open the app on that PC and click Connect.' },
+    { status: 410 },
+  )
 }

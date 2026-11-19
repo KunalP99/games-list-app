@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { searchRawgGames, getRawgGameDetail, PROVIDER_ID_COLUMN } from '@/lib/rawg'
+import { saveGameNotes } from '@/lib/data/private-notes'
 
 export type CompletedGameRow = {
   title: string
@@ -135,7 +136,9 @@ export async function bulkImportGames(
           hours_played: g.hours_played ?? null,
           achievement_progress: g.achievement_progress ?? null,
           rating: g.rating ?? null,
-          notes: g.notes ?? null,
+          // Imported notes are private (notes_public defaults to false), so
+          // they're saved to game_private_notes below, not in the game's row.
+          notes: null,
           completion_date: g.completion_date ?? null,
           completion_date_precision: g.completion_date_precision,
           release_date: releaseDate,
@@ -157,6 +160,9 @@ export async function bulkImportGames(
       if (error || !game) {
         failed.push({ title: g.title, reason: error?.message ?? 'Insert failed' })
         continue
+      }
+      if (g.notes?.trim()) {
+        await saveGameNotes(supabase, { gameId: game.id, userId: user.id, notes: g.notes, isPublic: false })
       }
 
       imported++

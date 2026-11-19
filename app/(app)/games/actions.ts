@@ -4,13 +4,16 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { awardCompletionTickets, applyDnfPenalty, reverseDnfPenalty } from '@/lib/tickets'
-import { checkAndAwardAchievements, gameCompletionXp } from '@/lib/achievements'
+import { applyDnfPenalty, reverseDnfPenalty } from '@/lib/tickets'
+import { checkAndAwardAchievements } from '@/lib/achievements'
+import { completionReward, rewardTickets } from '@/lib/completion-rewards'
+import { londonDay } from '@/lib/activity'
+import { saveGameNotes } from '@/lib/data/private-notes'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
 import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 import { isFutureDate } from '@/lib/dates'
 import { isQuickStatus, statusChangeEffects } from '@/lib/game-quick-actions'
-import { editionStatus } from '@/lib/edition'
+import { editionStatus, FEATURES } from '@/lib/edition'
 import {
   parseHours, parseAchievementProgress, parseDlc, parseYoutubeVideos, parseStringList, type GameVideo,
 } from '@/lib/game-input'
@@ -97,24 +100,75 @@ export async function fetchGameMedia(url: string): Promise<
   }
 }
 
-async function awardGameCompletionXp(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  hours: number | null,
-  achievementProgress: number | null,
-) {
-  const xp = gameCompletionXp(hours, achievementProgress)
-  if (xp > 0) {
-    await createAdminClient().rpc('award_xp', { p_user_id: userId, p_amount: xp })
+// ─── Completion rewards ─────────────────────────────────────────────────────
+// Tickets and completion XP for a game that has just become (or stays)
+// Completed. The rules are in lib/completion-rewards.ts (friends: as before;
+// public: verified). Everything is read back from the database after the
+// game's row was written, so every caller gets the same answer from the same
+// facts. The reward, including its XP and why, is recorded per game in
+// completion_rewards (service role only), which is what lets it be taken back
+// exactly when the game stops being completed.
+async function grantCompletionRewards(userId: string, gameId: string) {
+  const admin = createAdminClient() as any
+  const [{ data: game }, { data: sessions }, { data: profile }, { data: recent }] = await Promise.all([
+    admin.from('games')
+      .select('hours_played, achievement_progress, is_sequel, igdb_id, rawg_id, completion_date')
+      .eq('id', gameId).eq('user_id', userId).single(),
+    admin.from('play_sessions').select('applied_hours').eq('game_id', gameId).eq('user_id', userId),
+    admin.from('profiles').select('created_at').eq('id', userId).single(),
+    // Untracked rewards in the last 26h, narrowed to today's UK day below.
+    admin.from('completion_rewards').select('awarded_at')
+      .eq('user_id', userId).eq('untracked', true)
+      .gte('awarded_at', new Date(Date.now() - 26 * 3_600_000).toISOString()),
+  ])
+  if (!game) return
+
+  const today = londonDay(new Date().toISOString())
+  const reward = completionReward({
+    verified: FEATURES.verifiedRewards,
+    typedHours: game.hours_played == null ? null : Number(game.hours_played),
+    achievementProgress: game.achievement_progress == null ? null : Number(game.achievement_progress),
+    isSequel: !!game.is_sequel,
+    trackedHours: (sessions ?? []).reduce((sum: number, s: { applied_hours: number | string }) => sum + Number(s.applied_hours ?? 0), 0),
+    providerLinked: game.igdb_id != null || game.rawg_id != null,
+    completionDate: game.completion_date ?? null,
+    joinedDay: profile?.created_at ? londonDay(profile.created_at) : today,
+    untrackedRewardsToday: (recent ?? []).filter((r: { awarded_at: string }) => londonDay(r.awarded_at) === today).length,
+  })
+
+  for (const { reason, amount } of reward.tickets) {
+    const { error } = await admin.rpc('award_tickets', {
+      p_user_id: userId, p_amount: amount, p_reason: reason, p_game_id: gameId,
+    })
+    if (error) throw new Error(`grantCompletionRewards failed (${reason}): ${error.message}`)
   }
+  const { error } = await admin.rpc('record_completion_reward', {
+    p_user_id: userId,
+    p_game_id: gameId,
+    p_tickets: rewardTickets(reward),
+    p_xp: reward.xp,
+    p_untracked: reward.untracked,
+    p_why: reward.why,
+  })
+  if (error) throw new Error(`grantCompletionRewards failed (record): ${error.message}`)
 }
 
-async function reverseGameCompletionTickets(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, gameId: string) {
-  const { error } = await createAdminClient().rpc('reverse_game_completion_tickets', {
+// Takes back everything a completion earned: its tickets and, since batch 3,
+// its completion XP (which used to stay, so completing → un-completing →
+// completing added the XP again each time). A correction, not a penalty, so
+// both editions.
+async function reverseCompletionRewards(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, gameId: string) {
+  const admin = createAdminClient() as any
+  const { error } = await admin.rpc('reverse_game_completion_tickets', {
     p_user_id: userId,
     p_game_id: gameId,
   })
-  if (error) throw new Error(`reverseGameCompletionTickets failed: ${error.message}`)
+  if (error) throw new Error(`reverseCompletionRewards failed: ${error.message}`)
+  const { error: xpError } = await admin.rpc('reverse_completion_reward', {
+    p_user_id: userId,
+    p_game_id: gameId,
+  })
+  if (xpError) throw new Error(`reverseCompletionRewards failed (xp): ${xpError.message}`)
 }
 
 export async function createGame(formData: FormData) {
@@ -191,7 +245,8 @@ export async function createGame(formData: FormData) {
     rating: (status === 'completed' || status === 'dnf') && formData.get('rating') ? Number(formData.get('rating')) : null,
     achievement_progress: achievementProgress,
     review: (formData.get('review') as string)?.trim() || null,
-    notes: (formData.get('notes') as string)?.trim() || null,
+    // Public notes only; private ones go to game_private_notes (saveGameNotes below).
+    notes: formData.get('notes_public') === 'public' ? ((formData.get('notes') as string)?.trim() || null) : null,
     notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
     cover_image_url: coverImage,
@@ -215,12 +270,15 @@ export async function createGame(formData: FormData) {
 
   if (error) return { error: error.message }
 
+  await saveGameNotes(supabase, {
+    gameId: game.id, userId: user.id,
+    notes: formData.get('notes') as string | null,
+    isPublic: formData.get('notes_public') === 'public',
+  })
+
   if (status === 'completed') {
-    await awardCompletionTickets(supabase, user.id, game.id, hours, achievementProgress)
-    await Promise.all([
-      awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
-      checkAndAwardAchievements(supabase, user.id),
-    ])
+    await grantCompletionRewards(user.id, game.id)
+    await checkAndAwardAchievements(supabase, user.id)
   } else if (status === 'dnf') {
     await applyDnfPenalty(supabase, user.id, game.id)
     await checkAndAwardAchievements(supabase, user.id)
@@ -242,10 +300,10 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Fetch current status, rawg_id, and description before updating to detect transitions
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress, steam_appid')
+    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress, steam_appid, completion_date, is_sequel')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null } | null }
+    .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null; completion_date: string | null; is_sequel: boolean | null } | null }
 
   // Not this user's game (or no such game). Without this the update below
   // matches no rows, which isn't an error, and the ticket logic further down
@@ -320,7 +378,8 @@ export async function updateGame(id: string, formData: FormData) {
     rating: (status === 'completed' || status === 'dnf') && formData.get('rating') ? Number(formData.get('rating')) : null,
     achievement_progress: achievementProgress,
     review: (formData.get('review') as string)?.trim() || null,
-    notes: (formData.get('notes') as string)?.trim() || null,
+    // Public notes only; private ones go to game_private_notes (saveGameNotes below).
+    notes: formData.get('notes_public') === 'public' ? ((formData.get('notes') as string)?.trim() || null) : null,
     notes_public: formData.get('notes_public') === 'public',
     image_url: (formData.get('image_url') as string)?.trim() || null,
     cover_image_url: coverImage,
@@ -349,31 +408,40 @@ export async function updateGame(id: string, formData: FormData) {
   if (error) return { error: error.message }
   if (!updated?.length) return { error: STATUS_CHANGED }
 
+  await saveGameNotes(supabase, {
+    gameId: id, userId: user.id,
+    notes: formData.get('notes') as string | null,
+    isPublic: formData.get('notes_public') === 'public',
+  })
+
   const wasCompleted = existing?.status === 'completed'
   const isCompleted = status === 'completed'
   const wasDnf = existing?.status === 'dnf'
   const isDnf = status === 'dnf'
 
   if (wasCompleted && isCompleted) {
-    // Only reverse+re-award if the ticket-relevant fields changed
-    const hoursChanged = hours !== (existing?.hours_played ?? null)
-    const achievementChanged = achievementProgress !== (existing?.achievement_progress ?? null)
-    if (hoursChanged || achievementChanged) {
-      await reverseGameCompletionTickets(supabase, user.id, id)
-      await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
+    // Only reverse + re-award if something the reward depends on changed:
+    // hours, achievements, the completion date (public: before/after
+    // joining), the sequel flag, or which game it's linked to.
+    const rewardChanged =
+      Number(hours ?? -1) !== Number(existing.hours_played ?? -1) ||
+      Number(achievementProgress ?? -1) !== Number(existing.achievement_progress ?? -1) ||
+      completionDate !== (existing.completion_date ?? null) ||
+      (formData.get('is_sequel') === 'on') !== !!existing.is_sequel ||
+      (rawgId ?? null) !== (existingProviderId ?? null)
+    if (rewardChanged) {
+      await reverseCompletionRewards(supabase, user.id, id)
+      await grantCompletionRewards(user.id, id)
     }
     await checkAndAwardAchievements(supabase, user.id)
   } else if (!wasCompleted && isCompleted) {
-    // Newly completed — award tickets; also reverse any DNF penalty if coming from DNF
+    // Newly completed — award tickets and XP; also reverse any DNF penalty if coming from DNF
     if (wasDnf) await reverseDnfPenalty(supabase, user.id, id)
-    await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
-    await Promise.all([
-      awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
-      checkAndAwardAchievements(supabase, user.id),
-    ])
+    await grantCompletionRewards(user.id, id)
+    await checkAndAwardAchievements(supabase, user.id)
   } else if (wasCompleted && !isCompleted) {
     // Un-completing — reverse completion awards; apply DNF penalty if moving to DNF
-    await reverseGameCompletionTickets(supabase, user.id, id)
+    await reverseCompletionRewards(supabase, user.id, id)
     if (isDnf) await applyDnfPenalty(supabase, user.id, id)
     await checkAndAwardAchievements(supabase, user.id)
   } else if (!wasDnf && isDnf) {
@@ -496,11 +564,8 @@ export async function markAsCompleted(
   if (!updated?.length) return { error: STATUS_CHANGED }
 
   if (before.status === 'dnf') await reverseDnfPenalty(supabase, user.id, id)
-  await awardCompletionTickets(supabase, user.id, id, hours, achievementProgress)
-  await Promise.all([
-    awardGameCompletionXp(supabase, user.id, hours, achievementProgress),
-    checkAndAwardAchievements(supabase, user.id),
-  ])
+  await grantCompletionRewards(user.id, id)
+  await checkAndAwardAchievements(supabase, user.id)
 
   // Completing the game the wheel gave you consumes its pending pointer, so a
   // later completed→DNF edit can't hand the turn back.
@@ -543,7 +608,7 @@ export async function markAsDnf(id: string) {
   if (existing.status !== 'dnf') {
     // Same ledger rules as a full edit: a completed game loses its completion
     // tickets on the way to DNF.
-    if (existing.status === 'completed') await reverseGameCompletionTickets(supabase, user.id, id)
+    if (existing.status === 'completed') await reverseCompletionRewards(supabase, user.id, id)
     await applyDnfPenalty(supabase, user.id, id)
     const reverted = await consumeWheelPending(supabase, user.id, id, true)
     if (reverted) revalidatePath('/wheel')
@@ -573,7 +638,7 @@ export async function deleteGame(id: string, opts?: { stay?: boolean }) {
     .single() as { data: { status: string } | null }
 
   if (game?.status === 'completed') {
-    await reverseGameCompletionTickets(supabase, user.id, id)
+    await reverseCompletionRewards(supabase, user.id, id)
   } else if (game?.status === 'dnf') {
     await reverseDnfPenalty(supabase, user.id, id)
   }
@@ -624,7 +689,7 @@ export async function setGameStatus(id: string, rawTo: string) {
   if (!updated?.length) return { error: STATUS_CHANGED }
 
   const fx = statusChangeEffects(existing.status, to)
-  if (fx.reverseCompletion) await reverseGameCompletionTickets(supabase, user.id, id)
+  if (fx.reverseCompletion) await reverseCompletionRewards(supabase, user.id, id)
   if (fx.reverseDnf) await reverseDnfPenalty(supabase, user.id, id)
   await checkAndAwardAchievements(supabase, user.id)
 

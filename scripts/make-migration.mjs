@@ -52,6 +52,12 @@ const header = [
 const body = fs.readFileSync(dump, 'utf8')
   .replace(/^CREATE SCHEMA public;$/m, '-- CREATE SCHEMA public;  (removed: already exists)')
 
-fs.writeFileSync(outFile, header + body)
+// The dump has no GRANT/REVOKE (--no-privileges), so the permission rules are
+// appended from db/privileges.sql: a database built from this migration is
+// secure from the start instead of after someone remembers to run them (OPS-001).
+const privileges = fs.readFileSync(path.join(ROOT, 'db', 'privileges.sql'), 'utf8')
+const footer = '\n\n-- ── Permissions (appended from db/privileges.sql by scripts/make-migration.mjs) ──\n\n' + privileges
+
+fs.writeFileSync(outFile, header + body + footer)
 console.log(`Wrote ${path.relative(ROOT, outFile)}`)
 console.log('Apply it with: npx supabase db reset')

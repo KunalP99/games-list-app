@@ -17,8 +17,10 @@ import { escapeLike } from '@/lib/query-escape'
 // ticket functions are not writable by the browser roles — otherwise anyone
 // could hand themselves a Choose turn or a balance from the browser console
 // (db/security-hardening.sql). Those writes go through the service-role client
-// instead, always scoped to the id from auth.getUser(). Reads and the
-// user-owned tables (games, wheel_spins) keep using the caller's own client.
+// instead, always scoped to the id from auth.getUser(). Wheel history
+// (wheel_spins) is written here too: users can read it but not edit or delete
+// it (db/batch3.sql), so a costly turn can't be removed from view. Reads and
+// the games table keep using the caller's own client.
 const privileged = () => createAdminClient()
 
 // ─── Ending a turn ──────────────────────────────────────────────────────────
@@ -300,7 +302,7 @@ export async function acceptSpinResult(resultName: string, mode: 'elimination' |
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: turn,
     spin_mode: mode,
@@ -463,7 +465,7 @@ export async function finalizeUpgradeChoice(
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: turn,
     spin_mode: mode,
@@ -512,7 +514,7 @@ export async function payChooseAnyGame(gameName: string, mode: 'elimination' | '
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: turn,
     // The wheel was still spun this turn before paying to override the result,
@@ -570,7 +572,7 @@ export async function finalizeSpinReroll(
 
   const wonId = await addWonGameToLibrary(supabase, user.id, wonGame, platform, artworkUrl)
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: 'spin_reroll',
     spin_mode: mode,
@@ -611,7 +613,7 @@ export async function chooseGameWithRawg(rawgGame: {
 
   const wonId = await addWonGameToLibrary(supabase, user.id, rawgGame, platform, artworkUrl)
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: 'choose',
     result_name: rawgGame.name,
@@ -638,7 +640,7 @@ export async function chooseGame(gameName: string) {
   if (!gameName.trim()) return { error: 'Game name cannot be empty' }
   if (!(await claimTurn(user.id, 'choose'))) return ALREADY_FINISHED
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: 'choose',
     result_name: gameName.trim(),
@@ -673,7 +675,7 @@ export async function skipChooseTurn() {
     return { error: `Could not award tickets: ${awardError.message}` }
   }
 
-  await (supabase.from('wheel_spins') as any).insert({
+  await (privileged().from('wheel_spins') as any).insert({
     user_id: user.id,
     spin_type: 'choose_skip',
     finalized_via: 'skip',

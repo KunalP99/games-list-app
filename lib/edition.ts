@@ -67,6 +67,13 @@ export function featuresFor(edition: Edition) {
      * simple name/email/password login.
      */
     secureAuth: edition === 'public',
+    /**
+     * Completion tickets and XP only from what the site can check
+     * (lib/completion-rewards.ts): IGDB-linked games, completed since joining,
+     * tiers from tracked hours, untracked completions +1 up to 5 a day, no 100%
+     * or sequel bonus. The friends edition keeps its honour system.
+     */
+    verifiedRewards: edition === 'public',
   }
 }
 
