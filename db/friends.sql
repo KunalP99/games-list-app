@@ -2,10 +2,12 @@
 -- blocks, and per-person privacy (Everyone / Friends / Only me) enforced by
 -- the database's read rules.
 --
--- Run on BOTH Supabase projects (and locally), BEFORE deploying the code that
--- uses it. Safe to re-run. On the friends edition's database nothing changes
--- for anyone: can_view() keeps that edition's rule (every signed-in user reads
--- everything), the new tables stay empty and its pages never touch them.
+-- The public project needs it before its code runs. On the friends project
+-- nothing changes for anyone (can_view() keeps that edition's rule, every
+-- signed-in user reads everything; the new tables stay empty and its pages
+-- never touch them), so there it's housekeeping: run it any time, at the
+-- latest before the next `npm run db:dump`, so production stays the schema
+-- source. Safe to re-run.
 
 -- ── Privacy settings, per person ────────────────────────────────────────────
 -- What other people may see of you. You always see all of your own.
