@@ -25,7 +25,8 @@
     "supabase:stop": "npx supabase stop",
     "env:local": "node scripts/local-env.mjs",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:both": "node scripts/test-both-editions.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

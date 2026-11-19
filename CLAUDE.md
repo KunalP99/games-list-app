@@ -40,7 +40,7 @@ npm run dev      # Start development server (http://localhost:3000)
 npm run build    # Production build
 npm run lint     # ESLint (flat config in eslint.config.mjs; 0 errors expected, warnings to review)
 npm test         # Run the Vitest suite (~600 unit tests, lib/__tests__/)
-npm run test:e2e # Playwright: smoke test of every page + wheel tests (see below)
+npm run test:e2e:both  # Playwright in both editions (see below)
 ```
 
 **Run `npm test` after every change.** Test files live in `lib/__tests__/`.
@@ -83,8 +83,7 @@ test data are in `e2e/db.ts` (local database only).
   must show the not-found page (a page with a `loading.tsx`, like the wheel's,
   shows it with HTTP 200 — a Next.js streaming quirk). Read-only. **Run it in
   both editions after any change that could affect pages** (library upgrades
-  especially): `env:dev` → restart dev → `test:e2e`, then `env:dev-public` →
-  restart dev → `test:e2e`. Add new pages to its list.
+  especially): `npm run test:e2e:both`. Add new pages to its list.
 
 Pure rules stay in Vitest; add a flow here when its correctness depends on the
 real site or database (permissions, "only once" races, page loads). `EDITION`
@@ -92,12 +91,24 @@ and `localEnv()` in `e2e/helpers.ts` tell a spec which edition it's running
 against; edition-specific tests `test.skip` themselves in the other edition, so
 **run the suite in both editions** after changes. Wait for
 `networkidle` before typing into a freshly loaded form, or React's hydration can
-put the field's original value back on top of what was typed.
+put the field's original value back on top of what was typed; and wait for what
+you're checking (`expect.poll`), not for something written before it in the
+same request.
 
 ```bash
-npm run test:e2e       # run the suite (headless)
+npm run test:e2e:both  # both editions, one after the other (~5 min), then restores yours
+npm run test:e2e       # the edition you're on (headless)
 npm run test:e2e:ui    # Playwright's interactive UI mode, for debugging
 ```
+
+`test:e2e:both` (`scripts/test-both-editions.mjs`) only ever switches between
+the two **local** environments (`dev` and `dev-public`): if `.env.local` points
+anywhere else it refuses and changes nothing. It runs your current edition
+first, switches and restarts the dev server for the other, then switches back
+and restarts yours in the background (or stops it, if none was running).
+Extra args go to Playwright: `npm run test:e2e:both -- e2e/games.spec.ts`.
+Dev-server logs during the run go to the OS temp folder
+(`gameslist-dev-<env>.log`).
 
 Requires the local stack running and active (`npm run supabase:start && npm run
 env:dev`), and `npm run dev` up at `localhost:3000` — same prerequisites as

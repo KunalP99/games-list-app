@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { login, TEST_USER_2, EDITION } from './helpers'
-import { admin, anonymous, userId, BASE, PASSWORD } from './db'
+import { admin, anonymous, userId, fillRateLimit, BASE, PASSWORD } from './db'
 
 // Security basics through the real site: headers, signed-out redirects, the
 // IGDB rate limits, and changing your password needing the current one.
@@ -41,10 +41,9 @@ test.describe('signed in', () => {
     await page?.context().close()
   })
 
-  // The counter is pre-filled, so no burst of real IGDB calls.
-  const fill = (bucket: string, hits: number) => admin().from('rate_limits').upsert(
-    { user_id: uid, bucket, window_start: new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString(), hits },
-    { onConflict: 'user_id,bucket,window_start' })
+  // The counter is pre-filled, so no burst of real IGDB calls. This minute and
+  // the next: a slow first request can cross into a new minute's window.
+  const fill = (bucket: string, hits: number) => fillRateLimit(uid, bucket, hits)
 
   test('game search and lookups are rate limited per account', async () => {
     expect((await page.request.get('/api/rawg/search?q=Portal')).status(), 'under the limit').toBe(200)

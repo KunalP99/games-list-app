@@ -103,3 +103,16 @@ export async function tempDevice(ownerId: string) {
 }
 
 export const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
+
+/**
+ * Puts a user's rate-limit counter at `hits` for a bucket, so the next request
+ * is over the limit without making real IGDB calls. Fills this minute's window
+ * and the next one: a slow request (a cold page compile) can cross into a new
+ * minute before it's counted.
+ */
+export async function fillRateLimit(id: string, bucket: string, hits: number) {
+  const minute = Math.floor(Date.now() / 60_000) * 60_000
+  const rows = [minute, minute + 60_000].map(ms => ({ user_id: id, bucket, window_start: new Date(ms).toISOString(), hits }))
+  const { error } = await admin().from('rate_limits').upsert(rows, { onConflict: 'user_id,bucket,window_start' })
+  if (error) throw new Error(`fill rate limit failed: ${error.message}`)
+}

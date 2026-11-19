@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { randomUUID } from 'crypto'
 import { TEST_USER_2 } from './helpers'
-import { admin, userId, tempGames, tempDevice, minutesAgo } from './db'
+import { admin, userId, tempGames, tempDevice, fillRateLimit, minutesAgo } from './db'
 
 // The desktop tracker's API, called the way the app calls it (a device token,
 // no browser). Hours are counted once, completed games are never written to,
@@ -74,8 +74,7 @@ test('a device token can no longer create more tokens; listing devices still wor
 })
 
 test('identify is limited to 30 a minute per account', async () => {
-  const window = new Date(Math.floor(Date.now() / 60_000) * 60_000).toISOString()
-  await admin().from('rate_limits').upsert({ user_id: uid, bucket: 'agent_identify', window_start: window, hits: 30 }, { onConflict: 'user_id,bucket,window_start' })
+  await fillRateLimit(uid, 'agent_identify', 30)
   const res = await device.post('/api/agent/identify', { titleGuess: 'Portal 2', exeName: 'portal2.exe' })
   expect(res.status).toBe(429)
 })

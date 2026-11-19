@@ -90,7 +90,8 @@ test(`completing from the game page (${EDITION} rules)`, async () => {
   await expect.poll(async () => (await admin().from('games').select('status').eq('id', gameId).single()).data!.status).toBe('completed')
   const { data: game } = await admin().from('games').select('hours_played').eq('id', gameId).single()
   expect(Number(game!.hours_played), 'a blank hours box keeps the hours').toBe(12.5)
-  const { data: reward } = await admin().from('completion_rewards').select('tickets, why').eq('game_id', gameId).single()
+  // The reward is recorded just after the status changes (same request), so wait for it.
   // Friends: typed hours, 12.5h → +1. Public: this game isn't linked to IGDB → nothing.
-  expect(reward).toEqual(EDITION === 'public' ? { tickets: 0, why: 'not_linked' } : { tickets: 1, why: 'full' })
+  await expect.poll(async () => (await admin().from('completion_rewards').select('tickets, why').eq('game_id', gameId).maybeSingle()).data)
+    .toEqual(EDITION === 'public' ? { tickets: 0, why: 'not_linked' } : { tickets: 1, why: 'full' })
 })
