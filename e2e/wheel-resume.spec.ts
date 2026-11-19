@@ -133,12 +133,13 @@ test('a finalized turn does not resurrect on the next visit', async ({ page }) =
   await expect(page.getByText('You got')).toBeVisible({ timeout: 8_000 })
 
   await page.getByRole('button', { name: '✅ Accept this game' }).click()
-  // A won game with no RAWG identity (free-text add) skips the review modal
-  // and finalizes immediately; a linked game opens it first.
-  const platformModal = page.getByRole('heading', { name: /platform/i })
-  if (await platformModal.isVisible({ timeout: 2_000 }).catch(() => false)) {
+  // A won game with no IGDB identity (free-text add) skips the review modal
+  // and finalizes immediately; a linked game (the seeded games are, see
+  // scripts/seed-dev.mjs) opens it first, and needs a platform picked.
+  const reviewModal = page.getByText('Add to your list')
+  if (await reviewModal.waitFor({ state: 'visible', timeout: 3_000 }).then(() => true, () => false)) {
     await page.getByRole('combobox').selectOption({ index: 1 })
-    await page.getByRole('button', { name: /confirm/i }).click()
+    await page.getByRole('button', { name: 'Add to my list' }).click()
   }
   await expect(page.getByText('Good luck!')).toBeVisible({ timeout: 8_000 }) // 'done' phase settled
 

@@ -62,6 +62,27 @@ const USERS = [
   { email: 'test-sam@example.com', password: 'test-password-123', display_name: 'Sam (test)' },
 ]
 
+// Real IGDB data for the seeded titles, so they behave like games added through
+// search: covers and art on cards, wheel wins that move into Playing, game pages
+// with IGDB details, the desktop tracker's Steam matching, and the public
+// edition's "picked from search" reward rule. Looked up once on IGDB and kept
+// here, so seeding needs no network or IGDB keys. "Silksong 2" is made up and
+// stays unlinked on purpose: the "typed in by hand" case.
+const IGDB = {
+  "Hollow Knight": {"igdb_id":14593,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/p3svrq6ewzxnn7p1a3v9.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/cobfzp.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar6bjh.jpg","genres":["Platform","Adventure","Indie"],"steam_appid":367520},
+  "Chrono Trigger": {"igdb_id":1802,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/tve2cd2nclmri1x34wl7.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co3plw.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar5p9z.jpg","genres":["Role-playing (RPG)"],"steam_appid":null},
+  "Persona 5 Royal": {"igdb_id":114283,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/sc6vq2.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/coclf1.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar3u1t.jpg","genres":["Role-playing (RPG)","Adventure"],"steam_appid":1687950},
+  "Baldur’s Gate 3": {"igdb_id":119171,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/sc81fj.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co670h.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar3tfx.jpg","genres":["Role-playing (RPG)","Strategy","Turn-based strategy (TBS)","Adventure"],"steam_appid":1086940},
+  "Metroid Prime Remastered": {"igdb_id":236663,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/scl69z.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/cobbn9.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar2605.jpg","genres":["Shooter","Platform","Adventure"],"steam_appid":null},
+  "Disco Elysium": {"igdb_id":26472,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/vqxtn7qqv5qns9pneqzm.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1sfj.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar4pd7.jpg","genres":["Role-playing (RPG)","Adventure","Indie"],"steam_appid":632470},
+  "Portal 2": {"igdb_id":72,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/i9ys3zdhph1mh3futdit.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co1rs4.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/arsj0.jpg","genres":["Platform","Puzzle","Adventure"],"steam_appid":620},
+  "Baba Is You": {"igdb_id":76638,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/sc6kyl.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co2hqt.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar9ra.jpg","genres":["Puzzle","Strategy","Indie"],"steam_appid":736260},
+  "Into the Breach": {"igdb_id":27117,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/zlw2k9ehpqpxs5dafguo.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co2gjp.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar6fxo.jpg","genres":["Puzzle","Role-playing (RPG)","Simulator","Strategy","Turn-based strategy (TBS)","Indie"],"steam_appid":590380},
+  "Kentucky Route Zero": {"igdb_id":5614,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/uhxyirwdettrdkvhnyts.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co9dwn.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar6z6.jpg","genres":["Point-and-click","Adventure","Indie"],"steam_appid":231200},
+  "Starfield": {"igdb_id":96437,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/ygiajg3ypevvmhoo0cea.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/co39vv.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar91m.jpg","genres":["Shooter","Role-playing (RPG)","Adventure"],"steam_appid":1716740},
+  "Celeste": {"igdb_id":26226,"image_url":"https://images.igdb.com/igdb/image/upload/t_720p/loakfrjghok9fxnh59lt.jpg","cover_image_url":"https://images.igdb.com/igdb/image/upload/t_cover_big_2x/cob9dh.jpg","artwork_url":"https://images.igdb.com/igdb/image/upload/t_1080p/ar6ga3.jpg","genres":["Platform","Adventure","Indie"],"steam_appid":504230},
+}
+
 // A spread across every status, with the flags and edge cases worth exercising:
 // year-only dates, 100% achievements, >100h (bonus tickets), DNF, unreleased
 // backlog ("Coming Soon"), Steam Deck and Emulated flags.
@@ -149,7 +170,7 @@ function gamesFor(userId, variant) {
     },
   ])
 
-  return slice.map(g => ({ user_id: userId, ...g }))
+  return slice.map(g => ({ user_id: userId, ...(IGDB[g.title] ?? {}), ...g }))
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────────

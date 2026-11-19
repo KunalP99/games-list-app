@@ -44,4 +44,21 @@ export async function resetTestWheelState() {
     .in('username', ['test-alex', 'test-sam'])
 
   if (error) throw new Error(`Failed to reset test wheel state: ${error.message}`)
+
+  // The seeded games are linked to IGDB (scripts/seed-dev.mjs), so accepting a
+  // wheel win really moves that backlog game into Playing. Put any game the
+  // wheel moved back, or each run would use up a backlog game and the accounts
+  // would soon drop below the wheel's 5-game minimum. Only wheel wins carry
+  // assigned_by; the seeded games don't.
+  const { data: testUsers } = await supabase.from('profiles').select('id').in('username', ['test-alex', 'test-sam'])
+  const ids = ((testUsers ?? []) as { id: string }[]).map(u => u.id)
+  if (ids.length > 0) {
+    const { error: gamesError } = await supabase
+      .from('games')
+      .update({ status: 'backlog', start_date: null, assigned_by: null } as never)
+      .in('user_id', ids)
+      .eq('status', 'playing')
+      .not('assigned_by', 'is', null)
+    if (gamesError) throw new Error(`Failed to reset wheel-won games: ${gamesError.message}`)
+  }
 }
