@@ -19,17 +19,39 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import type { Game, GameStatus } from '@/lib/types'
 import { menuMoves, moveWarning, deleteWarning, type MenuMove } from '@/lib/game-quick-actions'
-import { setGameStatus, setFavourite, markAsCompleted, markAsDnf, deleteGame } from '@/app/(app)/games/actions'
+import { setGameStatus, setFavourite, markAsCompleted, markAsDnf, deleteGame, deleteImpact } from '@/app/(app)/games/actions'
 import { CompleteGameModal, type CompletionDetails } from './MarkCompletedButton'
 
 type ActionResult = { error?: string } | { success?: boolean } | undefined | void
 
-type Confirm = {
+export type Confirm = {
   title: string
   body: string
   confirmLabel: string
   danger: boolean
+  /** Still working out what to say: the confirm button waits. */
+  loading?: boolean
   run: () => Promise<ActionResult>
+}
+
+/**
+ * Opens the delete confirmation for a game, then fills in exactly what it
+ * does to the owner's tickets once `deleteImpact` answers (the confirm button
+ * waits for that; if it fails, the general wording stays and it can go ahead).
+ * Shared by the quick-actions menu and the game page's Delete button.
+ */
+export function openDeleteConfirm(
+  game: Pick<Game, 'id' | 'title' | 'status'>,
+  setConfirm: React.Dispatch<React.SetStateAction<Confirm | null>>,
+  run: () => Promise<ActionResult>,
+) {
+  const title = `Delete ${game.title}?`
+  setConfirm({ title, body: deleteWarning(game.status), confirmLabel: 'Delete', danger: true, loading: true, run })
+  const settle = (body: string) =>
+    setConfirm(c => (c && c.title === title ? { ...c, body, loading: false } : c))
+  deleteImpact(game.id)
+    .then(impact => settle(deleteWarning(game.status, impact)))
+    .catch(() => settle(deleteWarning(game.status)))
 }
 
 const STATUS_DOT: Record<GameStatus, string> = {
@@ -152,13 +174,7 @@ export function useGameActions(game: Game) {
             icon={<TrashIcon />}
             onSelect={() => {
               close()
-              setConfirm({
-                title: `Delete ${game.title}?`,
-                body: deleteWarning(game.status),
-                confirmLabel: 'Delete',
-                danger: true,
-                run: () => deleteGame(game.id, { stay: true }),
-              })
+              openDeleteConfirm(game, setConfirm, () => deleteGame(game.id, { stay: true }))
             }}
           >
             Delete…
@@ -360,8 +376,8 @@ function Divider() {
 
 // ── Dialogs ─────────────────────────────────────────────────────────────
 
-function ConfirmDialog({
-  title, body, confirmLabel, danger, onCancel, onConfirm,
+export function ConfirmDialog({
+  title, body, confirmLabel, danger, loading, onCancel, onConfirm,
 }: Confirm & { onCancel: () => void; onConfirm: () => void }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
@@ -379,7 +395,7 @@ function ConfirmDialog({
       <div role="alertdialog" aria-modal className="relative w-full max-w-sm bg-surface-base border border-edge-base rounded-2xl shadow-2xl p-6 space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-fg-base break-words">{title}</h2>
-          <p className="text-sm text-fg-muted mt-1">{body}</p>
+          <p className="text-sm text-fg-muted mt-1" aria-live="polite">{body}</p>
         </div>
         <div className="flex justify-end gap-3 pt-1">
           <button
@@ -393,7 +409,8 @@ function ConfirmDialog({
             type="button"
             autoFocus
             onClick={onConfirm}
-            className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+            disabled={loading}
+            className={`px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-wait ${
               danger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
             }`}
           >

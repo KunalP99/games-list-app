@@ -63,6 +63,8 @@ test data are in `e2e/db.ts` (local database only).
 - `e2e/rewards.spec.ts` — completion XP taken back and given once, two tabs
   completing at once pay once; public edition's verified rewards (tracked
   hours, IGDB-linked only, 5 untracked a day).
+- `e2e/delete-warning.spec.ts` — the delete confirmation names the exact
+  tickets and balance (game page and list menu), below zero too.
 - `e2e/private-notes.spec.ts` — private notes visible to their owner only.
 - `e2e/permissions.spec.ts` — what a user can do directly with the browser's
   key (achievements, ledger, wheel history, notes, server-only functions,
@@ -471,7 +473,7 @@ The full implementation plan (including all database SQL per phase) is at:
 | `createGame` | Grants completion rewards if `status === 'completed'` on creation |
 | `updateGame` | Refuses a game that isn't the caller's. Reads the status first and writes only if it's unchanged (`STATUS_CHANGED` otherwise). `not_completed → completed`: grant. `completed → completed`: reverse + re-grant when something the reward depends on changed (hours, achievements, completion date, sequel flag, linked game). `completed → other`: reverse tickets **and** completion XP. |
 | `markAsCompleted` | Grants (refuses an already-completed game; from DNF, refunds the penalty first). Same compare-and-set on status as `updateGame`. |
-| `deleteGame` | Reverses a completed game's completion tickets and XP, or a DNF game's penalty, then deletes |
+| `deleteGame` | Reverses a completed game's completion tickets and XP, or a DNF game's penalty, then deletes. The balance can go below zero (on purpose: otherwise complete → spend → delete → re-add would mint tickets). Both delete buttons confirm through `openDeleteConfirm` (`GameActionsMenu.tsx`), which asks `deleteImpact` for the exact tickets and balance before/after (`COMPLETION_TICKET_REASONS`/`DNF_TICKET_REASONS` in `lib/game-quick-actions.ts` must match the reversing SQL functions). |
 
 "Grant" = `grantCompletionRewards` (tickets + completion XP, recorded in `completion_rewards`); "reverse" = `reverseCompletionRewards`. Rules per edition in `lib/completion-rewards.ts`.
 

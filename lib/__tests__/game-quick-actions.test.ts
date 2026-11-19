@@ -73,8 +73,34 @@ describe('isQuickStatus', () => {
 })
 
 describe('deleteWarning', () => {
-  it('mentions tickets only for a completed game', () => {
+  it('mentions tickets only for a completed game while the amount is unknown', () => {
     expect(deleteWarning('completed')).toMatch(/tickets/)
     expect(deleteWarning('backlog')).not.toMatch(/tickets/)
+    expect(deleteWarning('dnf')).not.toMatch(/tickets/)
+  })
+
+  it('names the exact tickets lost and the balance after', () => {
+    expect(deleteWarning('completed', { change: -3, balance: 10 }))
+      .toMatch(/You lose the 3 tickets you earned for completing it\. Your balance goes from 10 to 7\.$/)
+    expect(deleteWarning('completed', { change: -1, balance: 4 })).toMatch(/the 1 ticket you earned/)
+  })
+
+  it('shows a balance going below zero with a real minus sign', () => {
+    expect(deleteWarning('completed', { change: -3, balance: 0 })).toMatch(/from 0 to −3\.$/)
+    expect(deleteWarning('completed', { change: -2, balance: -4 })).toMatch(/from −4 to −6\.$/)
+  })
+
+  it('says so when a completed game earned nothing', () => {
+    expect(deleteWarning('completed', { change: 0, balance: 5 })).toMatch(/didn't earn any tickets, so your balance stays the same/)
+  })
+
+  it('tells a DNF game\'s owner the penalty comes back', () => {
+    expect(deleteWarning('dnf', { change: 5, balance: -2 }))
+      .toMatch(/The 5 tickets you lost for dropping it are given back\. Your balance goes from −2 to 3\.$/)
+    expect(deleteWarning('dnf', { change: 0, balance: 3 })).not.toMatch(/tickets/) // public: no penalty
+  })
+
+  it('leaves other statuses alone even with an answer', () => {
+    expect(deleteWarning('playing', { change: 0, balance: 3 })).not.toMatch(/tickets/)
   })
 })

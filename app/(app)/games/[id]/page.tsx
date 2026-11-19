@@ -286,7 +286,7 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
             >
               Edit
             </Link>
-            <DeleteGameButton id={game.id} variant="overlay" />
+            <DeleteGameButton game={game} variant="overlay" />
           </>
         ) : (
           <AddToBacklogButton
@@ -306,7 +306,7 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
             >
               Edit
             </Link>
-            <DeleteGameButton id={game.id} />
+            <DeleteGameButton game={game} />
           </>
         ) : (
           <AddToBacklogButton

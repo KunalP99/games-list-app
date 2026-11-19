@@ -12,7 +12,10 @@ import { saveGameNotes } from '@/lib/data/private-notes'
 import { parseYouTubeUrl, youtubeCanonicalUrl } from '@/lib/youtube'
 import { PROVIDER_ID_COLUMN, METADATA_PROVIDER } from '@/lib/rawg'
 import { isFutureDate } from '@/lib/dates'
-import { isQuickStatus, statusChangeEffects } from '@/lib/game-quick-actions'
+import {
+  isQuickStatus, statusChangeEffects,
+  COMPLETION_TICKET_REASONS, DNF_TICKET_REASONS, type DeleteImpact,
+} from '@/lib/game-quick-actions'
 import { editionStatus, FEATURES } from '@/lib/edition'
 import {
   parseHours, parseAchievementProgress, parseDlc, parseYoutubeVideos, parseStringList, type GameVideo,
@@ -621,6 +624,47 @@ export async function markAsDnf(id: string) {
   revalidatePath('/tickets')
   revalidatePath('/achievements')
   return { success: true }
+}
+
+/**
+ * What deleting this game would do to the caller's tickets, for the delete
+ * confirmation: `change` is what the delete adds to the balance (negative for
+ * a completed game's earned tickets, positive for a DNF penalty given back),
+ * read from the same ledger rows `deleteGame` reverses. Null if the game isn't
+ * the caller's.
+ */
+export async function deleteImpact(id: string): Promise<DeleteImpact | null> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data: game } = await (supabase.from('games') as any)
+    .select('status')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle() as { data: { status: string } | null }
+  if (!game) return null
+
+  const reasons: readonly string[] =
+    game.status === 'completed' ? COMPLETION_TICKET_REASONS
+    : game.status === 'dnf' ? DNF_TICKET_REASONS
+    : []
+  let reversed = 0
+  if (reasons.length) {
+    const { data: rows } = await (supabase.from('ticket_transactions') as any)
+      .select('amount')
+      .eq('user_id', user.id)
+      .eq('game_id', id)
+      .in('reason', reasons) as { data: { amount: number }[] | null }
+    reversed = (rows ?? []).reduce((sum, r) => sum + r.amount, 0)
+  }
+
+  const { data: profile } = await (supabase.from('profiles') as any)
+    .select('ticket_balance')
+    .eq('id', user.id)
+    .single() as { data: { ticket_balance: number } | null }
+
+  return { change: -reversed, balance: profile?.ticket_balance ?? 0 }
 }
 
 // `stay`: the quick-actions menu deletes from the list itself, so it skips
