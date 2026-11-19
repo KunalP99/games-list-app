@@ -291,7 +291,7 @@ async function addWonGameToLibrary(
 // Just picks a winner — does NOT write a record or advance the turn.
 // Finalization happens via acceptSpinResult / finalizeSpinReroll / paid options.
 
-export async function performSpin(games: string[], mode: 'elimination' | 'first_land') {
+export async function performSpin(games: string[], _mode: 'elimination' | 'first_land') {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')

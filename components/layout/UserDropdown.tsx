@@ -33,7 +33,6 @@ export default function UserDropdown({ profile }: { profile: Profile }) {
 
   const name = profile.display_name ?? profile.username
   const initial = name.charAt(0).toUpperCase()
-  const accent = (profile as any).accent_colour ?? '#ff5722'
 
   return (
     <div ref={ref} className="relative">

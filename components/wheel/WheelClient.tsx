@@ -278,6 +278,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
   // Held in a ref so the debounce timer doesn't need re-arming on every change
   // and always sees the latest values when it fires.
   const sessionRef = useRef<WheelSession | null>(null)
+  // eslint-disable-next-line react-hooks/refs -- a latest-values ref, written each render and read only by the save timer
   sessionRef.current = {
     v: SESSION_VERSION,
     // Never persist a transient animation phase: resuming into one would
@@ -878,19 +879,6 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
       </div>
     </div>
   )
-
-  function elimBadges() {
-    if (eliminated.length === 0) return null
-    return (
-      <div className="flex flex-wrap gap-1.5">
-        {eliminated.map(g => (
-          <span key={g} className="text-xs line-through text-fg-subtle bg-surface-active px-2 py-0.5 rounded-full">
-            {g}
-          </span>
-        ))}
-      </div>
-    )
-  }
 
   function handleShuffle() {
     const winner = elimQueue[elimQueue.length - 1]

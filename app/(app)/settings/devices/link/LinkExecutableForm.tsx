@@ -157,7 +157,6 @@ export default function LinkExecutableForm({
                 }`}
               >
                 {game.cover_image_url
-                  // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={game.cover_image_url} alt="" className="w-8 h-11 rounded object-cover shrink-0 bg-surface-sunken" />
                   : <div className="w-8 h-11 rounded shrink-0 bg-surface-sunken" />}
                 <div className="min-w-0 flex-1">

@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { FEATURES } from '@/lib/edition'
+import { useUrlSearch } from '@/lib/use-url-search'
 
 // Playing games have no tab in the friends edition: the Now Playing section
 // above the list shows them all. The public edition has no Now Playing (only
@@ -48,7 +49,8 @@ export default function GameFilters() {
   const [activeView, setActiveView] = useState<'grid' | 'table' | 'cover'>(
     (searchParams.get('view') as 'grid' | 'table' | 'cover') ?? 'cover'
   )
-  const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  // The search box ↔ ?q= (lib/use-url-search.ts).
+  const { search, setSearch, applyTo } = useUrlSearch()
 
   // On mount: if no ?view= in URL, read cookie and update both the icon and
   // the URL so subsequent filter changes continue to preserve the view param.
@@ -63,32 +65,18 @@ export default function GameFilters() {
         router.replace(`${pathname}?${params.toString()}`)
       }
     }
+    // On mount only, by design: it restores the saved view once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Sync search input if URL param changes externally (e.g. tab switch clears q)
-  useEffect(() => {
-    setSearch(searchParams.get('q') ?? '')
-  }, [searchParams])
-
-  // Debounced search → URL update
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (search.trim()) {
-        params.set('q', search.trim())
-      } else {
-        params.delete('q')
-      }
-      router.push(`${pathname}?${params.toString()}`)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [search])
-
   function update(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString())
+    // Carries whatever is in the search box, and cancels its pending update.
+    const params = applyTo(new URLSearchParams(searchParams.toString()))
     params.set(key, value)
     if (key === 'view') {
       setActiveView(value as 'grid' | 'table' | 'cover')
+      // Remembering the view in a cookie is the point here.
+      // eslint-disable-next-line react-hooks/immutability
       document.cookie = `gameView=${value}; path=/; max-age=31536000; SameSite=Lax`
     }
     // Reset sort when switching to Backlog if current sort is completion_date

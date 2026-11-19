@@ -131,6 +131,7 @@ export default async function UserProfilePage(
 
   // A session the tracker never closed ended at its last checkpoint
   // (settleSession), or it would show "– now" forever.
+  // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
   const nowMs = Date.now()
   const rawSessions = ((recentSessionsRes.data ?? []) as RawPlaySession[])
     .map(s => settleSession({ ...s, last_checkpoint_at: s.last_checkpoint_at ?? null }, nowMs))

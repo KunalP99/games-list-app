@@ -15,7 +15,6 @@ function lastPlayedLabel(iso: string): string {
 function Cover({ game }: { game: Game }) {
   const cover = (game as { cover_image_url?: string | null }).cover_image_url ?? null
   if (cover) {
-    // eslint-disable-next-line @next/next/no-img-element
     return <img src={cover} alt={game.title} draggable={false} className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
   }
   return (

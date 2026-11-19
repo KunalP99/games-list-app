@@ -732,7 +732,6 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
                 : 'border-edge-base text-fg-muted hover:border-edge-input hover:text-fg-secondary'
             }`}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/steam-deck.png" alt="" className="h-4 w-auto" /> Steam Deck
           </button>
           <button
@@ -987,7 +986,6 @@ export default function GameForm({ game, defaultStatus, defaultTitle }: { game?:
               {youtubeVideos.map((v, i) => (
                 <li key={`${v.youtube_id}-${i}`} className="flex items-center gap-3 py-2">
                   {v.thumbnail_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={v.thumbnail_url} alt="" className="w-14 h-8 rounded object-cover shrink-0" />
                   ) : (
                     <div className="w-14 h-8 rounded bg-surface-sunken shrink-0" />

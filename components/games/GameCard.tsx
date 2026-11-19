@@ -20,7 +20,6 @@ export default function GameCard(props: Parameters<typeof GameCardBody>[0]) {
 
 function GameCardBody({
   game,
-  isOwner = true,
   showReleaseDate = false,
   liveSince = null,
 }: {
@@ -71,7 +70,6 @@ function GameCardBody({
               {game.steam_deck && (
                 <>
                   {(game.developer || game.platform) && <span className="shrink-0">·</span>}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
                 </>
               )}
@@ -134,7 +132,6 @@ function GameCardBody({
               {game.steam_deck && (
                 <>
                   {game.platform && <span className="shrink-0">·</span>}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
                 </>
               )}

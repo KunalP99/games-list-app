@@ -21,7 +21,6 @@ export default function CoverCard(props: Parameters<typeof CoverCardBody>[0]) {
 
 function CoverCardBody({
   game,
-  isOwner = true,
   showReleaseDate = false,
   liveSince = null,
 }: {
@@ -41,7 +40,6 @@ function CoverCardBody({
       {/* Cover (portrait) or placeholder */}
       <div className="relative w-full aspect-[3/4] bg-surface-sunken overflow-hidden">
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={cover}
             alt={game.title}
@@ -94,7 +92,6 @@ function CoverCardBody({
                 : <span>{Math.round(game.achievement_progress)}%</span>
             )}
             {game.steam_deck && (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-3.5 w-auto shrink-0" />
             )}
           </div>

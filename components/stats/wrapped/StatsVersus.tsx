@@ -3,7 +3,7 @@ import {
   formatDayRange, formatHoursRough, formatMinutes, scoreRounds, splitShare,
   type Round, type WrappedExtras,
 } from '@/lib/stats-wrapped'
-import { Big, Kicker, PALETTE, PartsBar, hoursLabel, readableOnDark, type SectionColours } from './shared'
+import { Big, Kicker, PALETTE, PartsBar, readableOnDark, type SectionColours } from './shared'
 
 type Side = { stats: UserStats; extras: WrappedExtras; accent: string; name: string }
 

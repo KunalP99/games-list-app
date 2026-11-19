@@ -50,6 +50,38 @@ test('search treats % and _ as plain characters, and really filters', async () =
   await expect(card()).toHaveCount(0)
 })
 
+// The search box itself (lib/use-url-search.ts). Its delayed update used to
+// undo a tab clicked straight after typing or straight after the page opened.
+const backlogTab = () => page.getByRole('link', { name: 'Backlog' }).or(page.getByRole('button', { name: 'Backlog' })).first()
+
+test('typing in the search box filters the list', async () => {
+  await page.goto('/games?status=all')
+  await page.waitForLoadState('networkidle')
+  await page.getByPlaceholder(/search/i).first().fill('40,000')
+  await expect(page).toHaveURL(/[?&]q=40%2C000/)
+  await expect(card()).toBeVisible()
+})
+
+test('a tab clicked straight after typing keeps both the tab and the search', async () => {
+  await page.goto('/games?status=all')
+  await page.waitForLoadState('networkidle')
+  await page.getByPlaceholder(/search/i).first().fill('Warhammer')
+  await backlogTab().click()
+  await expect(page).toHaveURL(/status=backlog/)
+  await expect(page).toHaveURL(/[?&]q=Warhammer/)
+  await page.waitForTimeout(1_500) // past the search box's delay: nothing undoes it
+  expect(page.url()).toMatch(/status=backlog/)
+  await expect(card()).toBeVisible()
+})
+
+test('a tab clicked as soon as the page opens sticks', async () => {
+  await page.goto('/games?status=all')
+  await backlogTab().click()
+  await expect(page).toHaveURL(/status=backlog/)
+  await page.waitForTimeout(1_500)
+  expect(page.url()).toMatch(/status=backlog/)
+})
+
 test('search on a profile copes with a comma too', async () => {
   await page.goto(`/users/test-sam?status=all&q=${encodeURIComponent('40,000')}`)
   await expect(card()).toBeVisible()

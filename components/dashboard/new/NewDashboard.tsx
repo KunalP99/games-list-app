@@ -36,6 +36,7 @@ type GameRow = HeroGame & { completion_date: string | null }
  */
 export default async function NewDashboard({ userId }: { userId: string }) {
   const supabase = await createClient()
+  // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
   const sessionsFrom = new Date(Date.now() - SESSION_WINDOW_DAYS * 86_400_000).toISOString()
 
   const [profile, gamesRes, sessions, live, playingNow, weekTicketsRes, friendProfilesRes] = await Promise.all([
@@ -62,6 +63,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
       .gt('amount', 0)
       // 8 days back covers the 7 UK days whatever the time zone offset;
       // ticketsEarnedThisWeek trims to the exact days.
+      // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
       .gte('created_at', new Date(Date.now() - 8 * 86_400_000).toISOString()) as unknown as Promise<{ data: { amount: number; created_at: string }[] | null }>,
     supabase
       .from('profiles')
@@ -127,6 +129,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   }))
 
   const wheelEnabled = wheelOn(profile)
+  // eslint-disable-next-line react-hooks/purity -- server component: a fresh greeting per page load is the point
   const greeting = GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
   const name = profile?.display_name ?? profile?.username ?? ''
 

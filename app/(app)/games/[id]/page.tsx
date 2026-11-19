@@ -87,6 +87,7 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
     .eq('game_id', game.id)
     .order('started_at', { ascending: false })
     .limit(1000) as { data: PlaySessionRow[] | null }
+  // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
   const trackedSessions = toTrackedSessions(sessionRows ?? [], Date.now())
 
   const totalPlaythroughs = sameGames?.length ?? 1
@@ -201,7 +202,6 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
                     {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
                       <span aria-hidden>·</span>
                     )}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-4 w-auto" />
                   </>
                 )}
@@ -253,7 +253,6 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
                     {[game.developer, formatDate(game.release_date, game.release_date_precision), game.platform].filter(Boolean).length > 0 && (
                       <span aria-hidden>·</span>
                     )}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/steam-deck.png" alt="Steam Deck" title="Playing on Steam Deck" className="h-4 w-auto drop-shadow" />
                   </>
                 )}

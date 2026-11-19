@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useUrlSearch } from '@/lib/use-url-search'
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
@@ -14,26 +14,11 @@ export default function VideosFilters() {
   const searchParams = useSearchParams()
 
   const activeSort = searchParams.get('sort') ?? 'newest'
-  const [search, setSearch] = useState(searchParams.get('q') ?? '')
-
-  // Keep the input in sync if the URL changes externally.
-  useEffect(() => {
-    setSearch(searchParams.get('q') ?? '')
-  }, [searchParams])
-
-  // Debounced search → URL.
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (search.trim()) params.set('q', search.trim())
-      else params.delete('q')
-      router.push(`${pathname}?${params.toString()}`)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The search box ↔ ?q= (lib/use-url-search.ts), shared with the games filters.
+  const { search, setSearch, applyTo } = useUrlSearch()
 
   function setSort(value: string) {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = applyTo(new URLSearchParams(searchParams.toString()))
     params.set('sort', value)
     router.push(`${pathname}?${params.toString()}`)
   }

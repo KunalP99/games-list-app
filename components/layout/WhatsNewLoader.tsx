@@ -10,6 +10,7 @@ import WhatsNewModal from '@/components/layout/WhatsNewModal'
  */
 export default async function WhatsNewLoader() {
   const supabase = await createClient()
+  // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const { data: latestChangelog } = await supabase

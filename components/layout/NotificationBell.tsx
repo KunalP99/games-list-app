@@ -101,7 +101,6 @@ export default function NotificationBell({
                     {/* Game portrait cover — events show text only, no tile */}
                     {n.type !== 'event_live' && (
                       cover ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img src={cover} alt="" className="w-12 h-16 rounded-md object-cover flex-shrink-0 bg-surface-active" />
                       ) : (
                         <div className="w-12 h-16 rounded-md bg-surface-active flex items-center justify-center text-xl flex-shrink-0">🎮</div>

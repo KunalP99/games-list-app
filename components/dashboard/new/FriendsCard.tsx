@@ -99,7 +99,6 @@ export default function FriendsCard({ friends, initialLive }: { friends: FriendS
             <LiveIndicator startedAt={p.startedAt} prefix="Live" />
           </span>
           {p.gameImage && (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={p.gameImage} alt="" className="h-12 w-9 shrink-0 rounded-md object-cover" />
           )}
         </Link>

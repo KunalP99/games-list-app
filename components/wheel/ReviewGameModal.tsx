@@ -94,7 +94,6 @@ export default function ReviewGameModal({
         {/* Read-only preview + platform */}
         <div className="flex gap-4">
           {cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={cover} alt="" className="w-24 h-32 rounded-lg object-cover shrink-0 bg-surface-active" />
           ) : (
             <div className="w-24 h-32 rounded-lg bg-surface-active shrink-0 flex items-center justify-center text-2xl">🎮</div>

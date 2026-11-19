@@ -31,6 +31,7 @@ All notable changes to **GamesList** are documented here, newest first.
   - A small 🔥 streak pill beside the date counts the days in a row you've played. It's orange once you've played today, and grey with a "play today to keep it" nudge if your last session was yesterday.
 
 ### Fixed
+- **Clicking a tab straight after searching (or as the page opens) now sticks.** On your games list and the Videos page, a tab or sort clicked within a moment of typing in the search box, or of the page appearing, was quietly undone and you were put back where you were. The tab now sticks and keeps your search.
 - **Every backlog game moves to Playing when it wins the wheel.** A backlog game that wasn't linked to a game from search (added by hand or imported without a match) could win and quietly stay in your backlog. It now moves to Playing like any other win.
 - **Changing your password asks for your current one**, so a session left open on someone else's screen can't be used to take over your account. Accounts made with Google or Discord, which have no password yet, can still set one without it.
 - **Safer by default:** the site can no longer be shown inside other websites (a trick used to make people click things without knowing), and browsers are told to use only secure connections and not to share more than needed about where you came from.

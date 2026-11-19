@@ -105,7 +105,6 @@ export default function ProfileHero({
           flat accent gradient when there's nothing to show at all. */}
       {bannerImage ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={bannerImage}
             alt=""

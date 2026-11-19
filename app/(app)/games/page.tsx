@@ -32,7 +32,6 @@ export default async function GamesPage(
   const selectedStatus = searchParams.status ?? 'completed'
   const status = selectedStatus === 'all' ? undefined : selectedStatus
   const sort = searchParams.sort ?? (status === 'backlog' ? 'created_at' : 'completion_date')
-  const sortAsc = sort === 'title'
   const sortDesc = sort === 'completion_date' || sort === 'created_at' || sort === 'rating' || sort === 'hours_played'
   const q = searchParams.q?.trim()
 

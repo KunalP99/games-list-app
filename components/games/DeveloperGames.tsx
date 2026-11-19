@@ -16,7 +16,6 @@ export default function DeveloperGames({ data }: { data: NonNullable<DeveloperGa
         {data.games.map(g => (
           <div key={g.id} className="group/card relative w-24 flex-shrink-0 aspect-[3/4] rounded-lg overflow-hidden bg-surface-active">
             {g.coverUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={g.coverUrl} alt={g.name} draggable={false} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-2xl">🎮</div>

@@ -39,7 +39,6 @@ export default function VideoCard({ video, isAdmin }: { video: VideoCardData; is
           aria-label={`Play ${video.title}`}
         >
           {video.thumbnail_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={video.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-5xl">🎬</div>
