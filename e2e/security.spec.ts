@@ -52,6 +52,19 @@ test('injected markup cannot run code', async ({ page }) => {
   expect(result).toEqual({ ran: false, blocked: true })
 })
 
+// Turnstile loads Cloudflare's script, which opens Cloudflare's frame: both
+// must get past the CSP. Locally it uses Cloudflare's always-passes test key,
+// so a token appearing proves the whole widget ran. Needs internet access.
+test('the Turnstile bot check loads and passes under the CSP (public edition)', async ({ page }) => {
+  test.skip(EDITION !== 'public', 'Turnstile is the public edition only')
+  const blocked: string[] = []
+  page.on('console', m => { if (/Content Security Policy/i.test(m.text())) blocked.push(m.text()) })
+  await page.goto('/login')
+  const token = page.locator('input[name="cf-turnstile-response"]').first()
+  await expect.poll(() => token.inputValue().catch(() => ''), { timeout: 20_000 }).not.toBe('')
+  expect(blocked).toEqual([])
+})
+
 test('signed-out visitors are sent to /login before any page runs', async () => {
   for (const path of ['/dashboard', '/stats', '/settings', '/achievements', '/activity', '/import', '/admin/exe-links']) {
     const res = await fetch(BASE + path, { redirect: 'manual' })

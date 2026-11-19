@@ -71,7 +71,9 @@ test data are in `e2e/db.ts` (local database only).
 - `e2e/tracker-api.spec.ts` — the desktop app's API: hours counted once,
   completed games untouched, orphaned sessions closed, no token minting,
   identify rate limit.
-- `e2e/security.spec.ts` — headers, signed-out redirects, IGDB rate limits,
+- `e2e/security.spec.ts` — headers, the CSP (nonce on every script, injected
+  markup refused, Turnstile loads in the public edition; needs internet),
+  signed-out redirects, IGDB rate limits,
   changing your password needs the current one (restores test-sam's password).
 - `e2e/activity.spec.ts` — a session the app never closed shows its real end.
 - `e2e/smoke.spec.ts` — opens **every main page** signed in (dashboard, each
