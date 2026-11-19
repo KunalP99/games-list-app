@@ -155,7 +155,13 @@ export type RawPlaySession = {
   user_id: string
   game_id: string | null
   started_at: string
+  /**
+   * null means still running. Rows straight from the database must go through
+   * settleSession (lib/presence.ts) first: a session the tracker never closed
+   * also has no end, and would otherwise show "– now" forever.
+   */
   ended_at: string | null
+  last_checkpoint_at?: string | null
   minutes: number
 }
 

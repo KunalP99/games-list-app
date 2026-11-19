@@ -33,6 +33,18 @@ export function isSessionLive(session: SessionRecency, nowMs: number): boolean {
   return nowMs - lastMs < LIVE_STALE_AFTER_MS
 }
 
+/**
+ * A session as it really stands: one with no end that isn't live any more
+ * (the tracker crashed or was restarted, or the PC slept, before a final
+ * write) ended at its last checkpoint. Anything that reads `ended_at == null`
+ * as "still running" should read rows through this first; the game page's
+ * session list (lib/play-sessions.ts) applies the same rule.
+ */
+export function settleSession<S extends SessionRecency>(session: S, nowMs: number): S {
+  if (session.ended_at || isSessionLive(session, nowMs)) return session
+  return { ...session, ended_at: session.last_checkpoint_at ?? session.started_at }
+}
+
 export type LiveSessionRow = SessionRecency & { game_id: string | null }
 
 /**

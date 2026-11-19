@@ -31,6 +31,7 @@ All notable changes to **GamesList** are documented here, newest first.
   - A small 🔥 streak pill beside the date counts the days in a row you've played. It's orange once you've played today, and grey with a "play today to keep it" nudge if your last session was yesterday.
 
 ### Fixed
+- **A play session the desktop app never closed no longer shows as "– now" forever.** If the app was restarted, crashed or the PC slept mid-game, the activity feed (dashboard, Activity page and profiles) kept that session running indefinitely and added "playing now" to the day's row. It now ends at the last time the app checked in, matching the game's own Play Sessions list, and a new session of the same game on the same PC closes the old one properly.
 - **Searching for a title with a comma or brackets works.** Searching your games (or a friend's) for "Warhammer 40,000" or "Ratchet (2016)" used to fail and show nothing. Search now always looks for exactly what you typed, including `%` and `_`.
 - **Tickets can only be earned from your own games.** Saving an edit with a game that wasn't yours could still hand out completion tickets and XP. It now just says the game wasn't found.
 - **Clear messages for impossible hours and achievement figures.** Negative hours, or achievement progress outside 0–100%, are refused with a message instead of being saved (and counted towards tickets). There's no practical cap on hours: anything up to 99,999.9 (the most the database can store) is fine, so a game with 10,000+ hours saves as normal.

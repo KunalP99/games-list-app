@@ -13,7 +13,7 @@ import ProfileStatCards from '@/components/profile/ProfileStatCards'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
-import { getLiveSessions } from '@/lib/presence'
+import { getLiveSessions, settleSession } from '@/lib/presence'
 import { Suspense } from 'react'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { escapeLike, ilikeAnyFilter } from '@/lib/query-escape'
@@ -112,7 +112,7 @@ export default async function UserProfilePage({
       .limit(10),
     supabase
       .from('play_sessions')
-      .select('user_id, game_id, started_at, ended_at, minutes')
+      .select('user_id, game_id, started_at, ended_at, last_checkpoint_at, minutes')
       .eq('user_id', profile.id)
       .order('started_at', { ascending: false })
       .limit(25),
@@ -128,7 +128,11 @@ export default async function UserProfilePage({
   const recentGames = (recentGamesRes.data ?? []) as RecentGameRow[]
   const completedIds = recentGames.filter(g => g.status === 'completed').map(g => g.id)
 
-  const rawSessions = (recentSessionsRes.data ?? []) as RawPlaySession[]
+  // A session the tracker never closed ended at its last checkpoint
+  // (settleSession), or it would show "– now" forever.
+  const nowMs = Date.now()
+  const rawSessions = ((recentSessionsRes.data ?? []) as RawPlaySession[])
+    .map(s => settleSession({ ...s, last_checkpoint_at: s.last_checkpoint_at ?? null }, nowMs))
   // "Started playing" is only worth saying the first time — see the
   // same check in app/(app)/activity/page.tsx.
   const ongoingGameIds = Array.from(new Set(rawSessions.filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))

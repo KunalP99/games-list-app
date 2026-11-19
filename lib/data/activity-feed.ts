@@ -2,6 +2,7 @@ import type { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { FEATURES } from '@/lib/edition'
+import { settleSession } from '@/lib/presence'
 import { buildActivityItems, groupActivityItems, suppressRepeatedStarts, type ActivityItem, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 
 type Supabase = ReturnType<typeof createClient>
@@ -50,7 +51,7 @@ export async function getActivityFeed(supabase: Supabase, userId: string, limit 
       : Promise.resolve({ data: [] as { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }[] }),
     supabase
       .from('play_sessions')
-      .select('user_id, game_id, started_at, ended_at, minutes')
+      .select('user_id, game_id, started_at, ended_at, last_checkpoint_at, minutes')
       .in('user_id', allUserIds)
       .order('started_at', { ascending: false })
       .limit(60) as unknown as Promise<{ data: RawPlaySession[] | null }>,
@@ -65,7 +66,11 @@ export async function getActivityFeed(supabase: Supabase, userId: string, limit 
   // session's own row in `rawSessions` can't tell that on its own, since it's
   // only a recent window; this checks every session those specific games
   // have ever had, not just the ones that made the recent-60 cut.
-  const ongoingGameIds = Array.from(new Set((rawSessions ?? []).filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))
+  // A session the tracker never closed (crash, restart, PC asleep) has no end
+  // either; it ended at its last checkpoint, as the game page shows it.
+  const nowMs = Date.now()
+  const settledSessions = (rawSessions ?? []).map(s => settleSession({ ...s, last_checkpoint_at: s.last_checkpoint_at ?? null }, nowMs))
+  const ongoingGameIds = Array.from(new Set(settledSessions.filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))
   const completedGameIds = (allGames ?? []).filter(g => g.status === 'completed').map(g => g.id)
 
   const [{ data: sessionHistory }, { data: ticketRows }] = await Promise.all([
@@ -83,7 +88,7 @@ export async function getActivityFeed(supabase: Supabase, userId: string, limit 
           .gt('amount', 0) as unknown as Promise<{ data: { game_id: string; amount: number }[] | null }>
       : Promise.resolve({ data: [] as { game_id: string; amount: number }[] }),
   ])
-  const sessions = suppressRepeatedStarts(rawSessions ?? [], sessionHistory ?? [])
+  const sessions = suppressRepeatedStarts(settledSessions, sessionHistory ?? [])
 
   const ticketsByGame = (ticketRows ?? []).reduce<Record<string, number>>((acc, r) => {
     acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount

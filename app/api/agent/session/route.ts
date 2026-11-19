@@ -151,6 +151,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // 23505: the same session's first checkpoint, inserted by the other copy.
     if (insertError?.code === '23505') return raced()
     if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+
+    // A new session of this game on this PC means any earlier one still open
+    // there was never closed: the tracker was restarted, crashed, or the PC
+    // slept before its final write. Close it at its last checkpoint, so it
+    // stops counting as running anywhere. Best effort: never fails the
+    // checkpoint it rides on.
+    try {
+      await closeOrphanedSessions(sb, identity.userId, identity.deviceId, game.id, clientSessionId, startedAt)
+    } catch {
+      // The display rule (settleSession) covers anything left open.
+    }
   }
 
   let totalHours = game.hours_played ?? 0
@@ -195,4 +206,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     addedHours: delta,
     totalHours,
   })
+}
+
+/**
+ * Ends this PC's earlier sessions of the same game that were never closed,
+ * each at its own last checkpoint (or its start, if it never had one).
+ * Only sessions that started before the new one; another game running at the
+ * same time, or another PC, is left alone.
+ */
+async function closeOrphanedSessions(
+  sb: { from: (table: string) => any },
+  userId: string,
+  deviceId: string,
+  gameId: string,
+  currentClientSessionId: string,
+  currentStartedAt: string,
+) {
+  const { data: open } = await sb.from('play_sessions')
+    .select('id, started_at, last_checkpoint_at')
+    .eq('user_id', userId)
+    .eq('device_id', deviceId)
+    .eq('game_id', gameId)
+    .is('ended_at', null)
+    .neq('client_session_id', currentClientSessionId)
+    .lt('started_at', currentStartedAt)
+  for (const row of (open ?? []) as { id: string; started_at: string; last_checkpoint_at: string | null }[]) {
+    await sb.from('play_sessions')
+      .update({ ended_at: row.last_checkpoint_at ?? row.started_at })
+      .eq('id', row.id)
+      .is('ended_at', null)
+  }
 }
