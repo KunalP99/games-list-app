@@ -29,7 +29,7 @@ function StatusMessage({ msg }: { msg: { ok: boolean; text: string } | null }) {
 
 export type DeviceRow = { id: string; label: string; last_seen_at: string | null; created_at: string }
 
-export default function SettingsForms({ profile, email, hasPassword = true, devices = [], ignoredExecutables = [] }: { profile: Profile; email: string; hasPassword?: boolean; devices?: DeviceRow[]; ignoredExecutables?: string[] }) {
+export default function SettingsForms({ profile, email, hasPassword = true, devices = [], ignoredExecutables = [], privacy }: { profile: Profile; email: string; hasPassword?: boolean; devices?: DeviceRow[]; ignoredExecutables?: string[]; privacy?: React.ReactNode }) {
   // Turnstile tokens are single-use: remount the widget after each attempt.
   const [turnstileKey, setTurnstileKey] = useState(0)
   const [profileMsg, setProfileMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -281,6 +281,9 @@ export default function SettingsForms({ profile, email, hasPassword = true, devi
           </div>
         </form>
       </section>
+
+      {/* Privacy — the public edition's friends system (rendered by the page) */}
+      {privacy}
 
       {/* Appearance */}
       <section className="bg-surface-base border border-edge-base rounded-xl p-6 space-y-5">

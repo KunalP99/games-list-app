@@ -9,6 +9,9 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+/** A privacy choice for one part of a profile (db/friends.sql). */
+export type PrivacySetting = 'everyone' | 'friends' | 'only_me'
+
 export type Database = {
   public: {
     Tables: {
@@ -34,6 +37,12 @@ export type Database = {
           username_chosen: boolean
           /** Last username change, for the 30-day cooldown (lib/username.ts). */
           username_changed_at: string | null
+          /** Who may see each part of you (lib/friends.ts PRIVACY_ITEMS). db/friends.sql */
+          privacy_profile: PrivacySetting
+          privacy_games: PrivacySetting
+          privacy_achievements: PrivacySetting
+          privacy_activity: PrivacySetting
+          privacy_tickets: PrivacySetting
           created_at: string
           updated_at: string
         }
@@ -53,6 +62,11 @@ export type Database = {
           is_admin?: boolean
           username_chosen?: boolean
           username_changed_at?: string | null
+          privacy_profile?: PrivacySetting
+          privacy_games?: PrivacySetting
+          privacy_achievements?: PrivacySetting
+          privacy_activity?: PrivacySetting
+          privacy_tickets?: PrivacySetting
           created_at?: string
           updated_at?: string
         }
@@ -72,9 +86,35 @@ export type Database = {
           is_admin?: boolean
           username_chosen?: boolean
           username_changed_at?: string | null
+          privacy_profile?: PrivacySetting
+          privacy_games?: PrivacySetting
+          privacy_achievements?: PrivacySetting
+          privacy_activity?: PrivacySetting
+          privacy_tickets?: PrivacySetting
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
+      }
+      /** Pending friend requests (public edition). db/friends.sql */
+      friend_requests: {
+        Row: { id: string; from_user: string; to_user: string; created_at: string }
+        Insert: { id?: string; from_user: string; to_user: string; created_at?: string }
+        Update: { id?: string; from_user?: string; to_user?: string; created_at?: string }
+        Relationships: []
+      }
+      /** One row per pair of friends, the smaller id in user_a. db/friends.sql */
+      friendships: {
+        Row: { user_a: string; user_b: string; created_at: string }
+        Insert: { user_a: string; user_b: string; created_at?: string }
+        Update: { user_a?: string; user_b?: string; created_at?: string }
+        Relationships: []
+      }
+      /** Who blocked whom; only the blocker can read it. db/friends.sql */
+      blocks: {
+        Row: { blocker: string; blocked: string; created_at: string }
+        Insert: { blocker: string; blocked: string; created_at?: string }
+        Update: { blocker?: string; blocked?: string; created_at?: string }
         Relationships: []
       }
       /** Old usernames after a rename, so old profile links still lead somewhere. db/public-auth.sql */
@@ -580,6 +620,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      /** Friends system (db/friends.sql). The writes are server-only. */
+      send_friend_request: {
+        Args: { p_user: string; p_to: string }
+        Returns: 'sent' | 'friends' | 'already_friends' | 'already_sent' | 'blocked' | 'self' | 'not_found'
+      }
+      respond_friend_request: { Args: { p_user: string; p_from: string; p_accept: boolean }; Returns: boolean }
+      cancel_friend_request: { Args: { p_user: string; p_to: string }; Returns: boolean }
+      remove_friend: { Args: { p_user: string; p_other: string }; Returns: boolean }
+      block_user: { Args: { p_user: string; p_other: string }; Returns: boolean }
+      unblock_user: { Args: { p_user: string; p_other: string }; Returns: boolean }
+      can_view: { Args: { p_owner: string; p_item: string }; Returns: boolean }
       award_tickets: {
         Args: {
           p_user_id: string

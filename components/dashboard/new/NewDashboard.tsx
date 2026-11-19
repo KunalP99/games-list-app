@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/data/profile'
-import { getPlayingNow, getLiveSessions } from '@/lib/presence'
+import { getLiveSessions } from '@/lib/presence'
 import { lastPlayedByGame, type SessionRow } from '@/lib/recently-played'
 import { londonDay } from '@/lib/activity'
 import { pickHero, streakStatus, playSummary, ticketsEarnedThisWeek, MAX_PLAY_PERIOD_DAYS, type PlayPeriod, type PlaySummary } from '@/lib/dashboard'
@@ -17,6 +17,7 @@ import PlayCard from './PlayCard'
 import ComingUpCard, { ComingUpSkeleton } from './ComingUpCard'
 import ActivityCard, { ActivityCardSkeleton } from './ActivityCard'
 import { FEATURES, wheelOn } from '@/lib/edition'
+import { getFriendsOverview, getPlayingNowFor, type FriendsOverview } from '@/lib/data/friends'
 
 // How far back sessions are loaded: a year (plus a day's slack for the time
 // zone), for the "Your year" chart. The streak counts within the same window,
@@ -39,7 +40,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
   const sessionsFrom = new Date(Date.now() - SESSION_WINDOW_DAYS * 86_400_000).toISOString()
 
-  const [profile, gamesRes, sessions, live, playingNow, weekTicketsRes, friendProfilesRes] = await Promise.all([
+  const [profile, gamesRes, sessions, live, playingNow, weekTicketsRes, friendProfilesRes, overview] = await Promise.all([
     getProfile(userId),
     supabase
       .from('games')
@@ -55,7 +56,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
       .order('started_at', { ascending: false })
       .order('id')),
     getLiveSessions(supabase, [userId]),
-    getPlayingNow(supabase, userId),
+    getPlayingNowFor(supabase, userId),
     supabase
       .from('ticket_transactions')
       .select('amount, created_at')
@@ -65,15 +66,22 @@ export default async function NewDashboard({ userId }: { userId: string }) {
       // ticketsEarnedThisWeek trims to the exact days.
       // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
       .gte('created_at', new Date(Date.now() - 8 * 86_400_000).toISOString()) as unknown as Promise<{ data: { amount: number; created_at: string }[] | null }>,
-    supabase
-      .from('profiles')
-      .select('id, display_name, username, accent_colour')
-      .neq('id', userId)
-      .order('display_name', { ascending: true, nullsFirst: false }) as unknown as Promise<{ data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null }>,
+    // Friends edition: everyone signed up is a friend. Public edition: your
+    // friends (lib/data/friends.ts), plus requests waiting for you.
+    FEATURES.friendSystem
+      ? Promise.resolve({ data: null })
+      : supabase
+        .from('profiles')
+        .select('id, display_name, username, accent_colour')
+        .neq('id', userId)
+        .order('display_name', { ascending: true, nullsFirst: false }) as unknown as Promise<{ data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null }>,
+    FEATURES.friendSystem ? getFriendsOverview(supabase, userId) : Promise.resolve<FriendsOverview | null>(null),
   ])
 
   const games = gamesRes.data ?? []
-  const friendProfiles = friendProfilesRes.data ?? []
+  const friendProfiles = overview
+    ? overview.friends.map(f => ({ id: f.id, display_name: f.displayName, username: f.username, accent_colour: f.accentColour }))
+    : friendProfilesRes.data ?? []
 
   // Hero: the most recently played Playing or Ambient game (a year of
   // sessions is plenty to tell which).
@@ -187,7 +195,12 @@ export default async function NewDashboard({ userId }: { userId: string }) {
               <LevelCard userId={userId} xp={profile?.xp ?? 0} />
             </Suspense>
           )}
-          <FriendsCard friends={friends} initialLive={playingNow} />
+          <FriendsCard
+            friends={friends}
+            initialLive={playingNow}
+            friendSystem={FEATURES.friendSystem}
+            incoming={overview?.incoming ?? []}
+          />
           {playSummaries.year.totalMinutes > 0 && <PlayCard summaries={playSummaries} titles={playTitles} />}
           <Suspense fallback={<ComingUpSkeleton />}>
             <ComingUpCard userId={userId} />

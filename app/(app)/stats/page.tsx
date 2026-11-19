@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
+import { FEATURES } from '@/lib/edition'
+import { getFriendIds } from '@/lib/data/friends'
 import { computeUserStats } from '@/lib/user-stats'
 import { computeWrappedExtras } from '@/lib/stats-wrapped'
 import FriendPicker from '@/components/stats/FriendPicker'
@@ -21,11 +23,17 @@ export default async function StatsPage(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  const { data: allProfiles } = await supabase
+  // Who you can compare with: everyone in the friends edition, your friends in
+  // the public edition (lib/data/friends.ts).
+  const onlyFriends = FEATURES.friendSystem ? await getFriendIds(supabase, user!.id) : null
+  let profilesQuery = supabase
     .from('profiles')
     .select('id, display_name, username, accent_colour')
     .neq('id', user!.id)
-    .order('display_name', { ascending: true, nullsFirst: false }) as {
+  if (onlyFriends) profilesQuery = profilesQuery.in('id', onlyFriends)
+  const { data: allProfiles } = await (onlyFriends && onlyFriends.length === 0
+    ? Promise.resolve({ data: [] })
+    : profilesQuery.order('display_name', { ascending: true, nullsFirst: false })) as {
       data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null
     }
   const friends = allProfiles ?? []

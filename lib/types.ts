@@ -6,6 +6,7 @@ export type TicketTransaction = Database['public']['Tables']['ticket_transaction
 export type WheelSpin = Database['public']['Tables']['wheel_spins']['Row']
 export type ChangelogEntry = Database['public']['Tables']['changelog_entries']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
+export type { PrivacySetting } from './database.types'
 
 export type WheelTurn = Profile['wheel_turn']
 export type GameStatus = Game['status']

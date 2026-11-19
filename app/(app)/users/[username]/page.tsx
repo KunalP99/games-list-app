@@ -17,6 +17,10 @@ import { getLiveSessions, settleSession } from '@/lib/presence'
 import { Suspense } from 'react'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { escapeLike, ilikeAnyFilter } from '@/lib/query-escape'
+import { privacyAllows, type PrivacyKey, type Relation } from '@/lib/friends'
+import { getRelation } from '@/lib/data/friends'
+import FriendButton from '@/components/friends/FriendButton'
+import PrivateProfile from '@/components/friends/PrivateProfile'
 
 export default async function UserProfilePage(
   props: {
@@ -36,7 +40,9 @@ export default async function UserProfilePage(
   // rename, kept in username_redirects) forwards to the current profile.
   let profileQuery = supabase
     .from('profiles')
-    .select('id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
+    .select(FEATURES.friendSystem
+      ? 'id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled, privacy_profile, privacy_games, privacy_achievements, privacy_activity, privacy_tickets'
+      : 'id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
   const requested = decodeURIComponent(params.username)
   profileQuery = FEATURES.secureAuth
     ? profileQuery.ilike('username', escapeLike(requested))
@@ -53,6 +59,22 @@ export default async function UserProfilePage(
   if (!profile) notFound()
 
   const isOwner = user?.id === profile.id
+
+  // Public edition: what this viewer may see of them (lib/friends.ts). The
+  // database applies the same rule to the rows themselves (db/friends.sql);
+  // this just keeps sections it would leave empty off the page.
+  const relation: Relation = !FEATURES.friendSystem || isOwner
+    ? 'self'
+    : user ? await getRelation(supabase, user.id, profile.id) : 'none'
+  const allows = (key: PrivacyKey) => privacyAllows(profile[key] ?? 'everyone', relation)
+  const name = profile.display_name ?? profile.username
+  const friendButton = FEATURES.friendSystem && user && !isOwner
+    ? <FriendButton personId={profile.id} username={profile.username} name={name} relation={relation} />
+    : null
+
+  if (!allows('privacy_profile')) {
+    return <PrivateProfile name={name} username={profile.username} accentColour={profile.accent_colour} friendButton={friendButton} />
+  }
 
   // Defaults to Completed in place rather than redirecting — see the same
   // change on app/(app)/games/page.tsx for why.
@@ -203,12 +225,14 @@ export default async function UserProfilePage(
 
   return (
     <div className="space-y-6">
+      {friendButton && <div className="flex justify-end -mb-3">{friendButton}</div>}
       <ProfileHero
         stats={stats}
         bannerImage={bannerImage}
         initials={initials}
         accent={accent}
         wheelTurn={wheelTurnBadge}
+        showTickets={allows('privacy_tickets')}
       />
 
       {/* Everything runs full width in a single column. An earlier version put
@@ -218,10 +242,18 @@ export default async function UserProfilePage(
       {/* No Now Playing in the public edition: Recently played covers it (lib/edition.ts). */}
       {FEATURES.ambient && <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />}
 
-      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner={isOwner} />
+      {allows('privacy_activity') && <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner={isOwner} />}
 
       <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 
+      {!allows('privacy_games') ? (
+        <div className="rounded-2xl border border-edge-base bg-surface-base px-6 py-10 text-center">
+          <p className="font-medium text-fg-secondary">{name}’s games list is private</p>
+          <p className="mt-1 text-sm text-fg-muted">
+            {profile.privacy_games === 'friends' ? 'Only their friends can see it.' : 'Only they can see it.'}
+          </p>
+        </div>
+      ) : (
       <div>
         <Suspense>
           <GameFilters />
@@ -243,6 +275,7 @@ export default async function UserProfilePage(
           )}
         </div>
       </div>
+      )}
     </div>
   )
 }

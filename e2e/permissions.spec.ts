@@ -82,6 +82,9 @@ test.describe('things users cannot do by hand', () => {
       ['add_game_hours', { p_user_id: sam.id, p_game_id: alexGame, p_delta: 100 }],
       ['record_completion_reward', { p_user_id: sam.id, p_game_id: alexGame, p_tickets: 99, p_xp: 9999, p_untracked: false, p_why: 'full' }],
       ['take_rate_limit', { p_user_id: sam.id, p_bucket: 'x', p_limit: 1, p_window_seconds: 60 }],
+      // The friends system (db/friends.sql): exists in both databases, used by the public edition.
+      ['send_friend_request', { p_user: sam.id, p_to: alex.id }],
+      ['block_user', { p_user: sam.id, p_other: alex.id }],
     ]
     for (const [fn, args] of calls) {
       expect((await sam.client.rpc(fn, args)).error, fn).toBeTruthy()

@@ -71,6 +71,7 @@ export default function ProfileHero({
   initials,
   accent,
   wheelTurn,
+  showTickets = true,
 }: {
   stats: UserStats
   /** Resolved by the page (lib/hero-banner.ts) — a live screenshot of this
@@ -79,6 +80,8 @@ export default function ProfileHero({
   initials: string
   accent: string
   wheelTurn: string | null
+  /** False when the viewer may not see their tickets (public edition, Settings → Privacy). */
+  showTickets?: boolean
 }) {
   const { profile } = stats
   const { level, percent } = levelProgress(profile.xp ?? 0)
@@ -144,7 +147,7 @@ export default function ProfileHero({
           {figures.map(([value, label]) => (
             <StatFigure key={label} value={value} label={label} />
           ))}
-          <TicketFigure total={stats.ticketsEarned} current={profile.ticket_balance} />
+          {showTickets && <TicketFigure total={stats.ticketsEarned} current={profile.ticket_balance} />}
         </div>
 
         {stats.heroGame && bannerImage && (

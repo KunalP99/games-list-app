@@ -95,24 +95,30 @@ export type PlayingNowEntry = {
 }
 
 /**
- * Everyone currently in a game — the signed-in user and every friend (the
- * app treats every other member as a friend, like the dashboard's Friends
- * list). Runs through the normal RLS-scoped client: play_sessions, games and
- * profiles are all readable by any signed-in user.
+ * Everyone currently in a game — the signed-in user and every friend. Runs
+ * through the normal RLS-scoped client.
+ *
+ * `friendIds`: the public edition's friends (lib/data/friends.ts). Without it
+ * (the friends edition) every other member counts as a friend, like the
+ * dashboard's Friends list. With it, only you and those friends: a stranger
+ * whose play activity is set to Everyone is readable, but isn't your friend.
  */
 export async function getPlayingNow(
   supabase: { from: (t: string) => any },
   selfId: string,
   nowMs: number = Date.now(),
+  friendIds?: string[],
 ): Promise<PlayingNowEntry[]> {
   // Only open sessions checkpointed recently enough to still count as live —
   // filtered in the query so a long-dead, never-closed row costs nothing.
   const cutoff = new Date(nowMs - LIVE_STALE_AFTER_MS).toISOString()
-  const { data: sessionRows } = await supabase
+  let query = supabase
     .from('play_sessions')
     .select('user_id, game_id, started_at, last_checkpoint_at, ended_at')
     .is('ended_at', null)
     .or(`last_checkpoint_at.gte.${cutoff},started_at.gte.${cutoff}`)
+  if (friendIds) query = query.in('user_id', [selfId, ...friendIds])
+  const { data: sessionRows } = await query
 
   const live = livePlayers((sessionRows ?? []) as PresenceRow[], nowMs, selfId)
   if (live.length === 0) return []

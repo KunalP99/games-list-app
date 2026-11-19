@@ -9,6 +9,7 @@ import { normaliseExeName } from '@/lib/agent-session'
 import { writeExeLink } from '@/lib/exe-links'
 import { FEATURES } from '@/lib/edition'
 import { validatePassword } from '@/lib/username'
+import { isPrivacyKey, isPrivacySetting } from '@/lib/friends'
 
 export async function updateProfile(formData: FormData): Promise<ActionResult> {
   const supabase = await createClient()
@@ -299,5 +300,26 @@ export async function unignoreExecutable(exeName: string): Promise<ActionResult>
   if (error) return { success: false, error: error.message }
 
   revalidatePath('/settings')
+  return { success: true, data: undefined }
+}
+
+/**
+ * One Settings → Privacy choice (public edition). Written with the user's own
+ * session: db/friends.sql grants them update on just these columns.
+ */
+export async function updatePrivacy(key: string, value: string): Promise<ActionResult> {
+  if (!FEATURES.friendSystem) return { success: false, error: 'Privacy settings aren’t part of this site.' }
+  if (!isPrivacyKey(key) || !isPrivacySetting(value)) return { success: false, error: 'That isn’t a privacy setting.' }
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ [key]: value } as never)
+    .eq('id', user.id)
+  if (error) return { success: false, error: 'Couldn’t save that. Please try again.' }
+  revalidatePath('/settings')
+  revalidatePath('/users', 'layout')
   return { success: true, data: undefined }
 }

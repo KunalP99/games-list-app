@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getFriendIds } from '@/lib/data/friends'
 import Link from 'next/link'
 import { FEATURES } from '@/lib/edition'
 
@@ -150,13 +151,17 @@ export default async function TicketsPage(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Everyone's tickets in the friends edition; only the viewer's own in the
-  // public edition, where other users are strangers (lib/edition.ts).
+  // Everyone's tickets in the friends edition; the viewer's own and their
+  // friends' in the public edition (each friend's privacy setting still
+  // applies: the read rules leave out anyone whose tickets are Only me).
   let transactionsQuery = supabase
     .from('ticket_transactions')
     .select('*, games(id, title), profiles(id, username, display_name, accent_colour)')
     .order('created_at', { ascending: false })
-  if (!FEATURES.sharedTicketLedger) transactionsQuery = transactionsQuery.eq('user_id', user!.id)
+  if (!FEATURES.sharedTicketLedger) {
+    const friendIds = FEATURES.friendSystem ? await getFriendIds(supabase, user!.id) : []
+    transactionsQuery = transactionsQuery.in('user_id', [user!.id, ...friendIds])
+  }
 
   const [allTransactionsRes, profileRes] = await Promise.all([
     transactionsQuery,

@@ -1,6 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import SettingsForms from './SettingsForms'
+import { FEATURES } from '@/lib/edition'
+import { getFriendsOverview } from '@/lib/data/friends'
+import { PRIVACY_ITEMS, type PrivacyKey } from '@/lib/friends'
+import type { PrivacySetting } from '@/lib/types'
+import PrivacySettings from '@/components/friends/PrivacySettings'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -31,6 +36,10 @@ export default async function SettingsPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: true }) as { data: { exe_name: string }[] | null }
 
+  // Settings → Privacy, in the public edition only (lib/edition.ts).
+  const blocked = FEATURES.friendSystem ? (await getFriendsOverview(supabase, user.id)).blocked : []
+  const privacyValues = Object.fromEntries(PRIVACY_ITEMS.map(i => [i.key, (profile as Record<string, unknown>)[i.key] ?? i.default])) as Record<PrivacyKey, PrivacySetting>
+
   return (
     <div className="max-w-2xl space-y-6">
       <div>
@@ -44,6 +53,7 @@ export default async function SettingsPage() {
         hasPassword={!user.identities?.length || user.identities.some(i => i.provider === 'email')}
         devices={devices ?? []}
         ignoredExecutables={(ignored ?? []).map(i => i.exe_name)}
+        privacy={FEATURES.friendSystem ? <PrivacySettings values={privacyValues} blocked={blocked} /> : undefined}
       />
     </div>
   )

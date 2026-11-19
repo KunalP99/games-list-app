@@ -35,6 +35,11 @@ describe('featuresFor', () => {
     expect(featuresFor('public').verifiedRewards).toBe(true)
   })
 
+  it('has the friends system in the public edition only', () => {
+    expect(featuresFor('friends').friendSystem).toBe(false)
+    expect(featuresFor('public').friendSystem).toBe(true)
+  })
+
   it('shares the ticket ledger in the friends edition only', () => {
     expect(featuresFor('friends').sharedTicketLedger).toBe(true)
     expect(featuresFor('public').sharedTicketLedger).toBe(false)

@@ -116,3 +116,35 @@ export async function fillRateLimit(id: string, bucket: string, hits: number) {
   const { error } = await admin().from('rate_limits').upsert(rows, { onConflict: 'user_id,bucket,window_start' })
   if (error) throw new Error(`fill rate limit failed: ${error.message}`)
 }
+
+// ── Friends system (public edition; db/friends.sql) ─────────────────────────
+
+/** Makes two users friends directly (no request). */
+export async function befriend(a: string, b: string) {
+  const [user_a, user_b] = a < b ? [a, b] : [b, a]
+  const { error } = await admin().from('friendships').upsert({ user_a, user_b })
+  if (error) throw new Error(`befriend failed: ${error.message}`)
+}
+
+/** Removes every friendship, request and block involving any of these users. */
+export async function clearFriends(...ids: string[]) {
+  const db = admin()
+  const list = `(${ids.join(',')})`
+  await db.from('friendships').delete().or(`user_a.in.${list},user_b.in.${list}`)
+  await db.from('friend_requests').delete().or(`from_user.in.${list},to_user.in.${list}`)
+  await db.from('blocks').delete().or(`blocker.in.${list},blocked.in.${list}`)
+}
+
+export type Privacy = Partial<Record<'privacy_profile' | 'privacy_games' | 'privacy_achievements' | 'privacy_activity' | 'privacy_tickets', 'everyone' | 'friends' | 'only_me'>>
+export const DEFAULT_PRIVACY: Required<Privacy> = {
+  privacy_profile: 'everyone',
+  privacy_games: 'everyone',
+  privacy_achievements: 'everyone',
+  privacy_activity: 'friends',
+  privacy_tickets: 'friends',
+}
+
+export async function setPrivacy(id: string, privacy: Privacy) {
+  const { error } = await admin().from('profiles').update(privacy).eq('id', id)
+  if (error) throw new Error(`setPrivacy failed: ${error.message}`)
+}

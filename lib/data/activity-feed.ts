@@ -3,6 +3,7 @@ import type { Profile } from '@/lib/types'
 import { ACHIEVEMENTS } from '@/lib/achievements'
 import { FEATURES } from '@/lib/edition'
 import { settleSession } from '@/lib/presence'
+import { getFriendIds } from '@/lib/data/friends'
 import { buildActivityItems, groupActivityItems, suppressRepeatedStarts, type ActivityItem, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -17,17 +18,23 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
  * a single row rather than crowding everything else out.
  */
 export async function getActivityFeed(supabase: Supabase, userId: string, limit = 40): Promise<ActivityItem[]> {
+  // Friends edition: everyone signed up is a friend. Public edition: your
+  // friends only (and the read rules still apply each one's privacy).
+  const onlyFriends = FEATURES.friendSystem ? await getFriendIds(supabase, userId) : null
+  let friendsQuery = supabase
+    .from('profiles')
+    .select('id, display_name, username, accent_colour')
+    .neq('id', userId)
+  if (onlyFriends) friendsQuery = friendsQuery.in('id', onlyFriends)
   const [{ data: myProfile }, { data: friendProfiles }] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, display_name, username, accent_colour')
       .eq('id', userId)
       .single() as unknown as Promise<{ data: Profile | null }>,
-    supabase
-      .from('profiles')
-      .select('id, display_name, username, accent_colour')
-      .neq('id', userId)
-      .order('display_name', { ascending: true, nullsFirst: false }) as unknown as Promise<{ data: Profile[] | null }>,
+    (onlyFriends && onlyFriends.length === 0
+      ? Promise.resolve({ data: [] })
+      : friendsQuery.order('display_name', { ascending: true, nullsFirst: false })) as unknown as Promise<{ data: Profile[] | null }>,
   ])
 
   const friendIds = (friendProfiles ?? []).map(f => f.id)

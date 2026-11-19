@@ -50,8 +50,8 @@ export function featuresFor(edition: Edition) {
     ticketHistoryNav: edition === 'friends',
     /**
      * Everyone's tickets on /tickets. Fine in the friends edition, where
-     * everyone signed up is a friend; the public edition shows only the
-     * viewer's own (later: theirs and their friends').
+     * everyone signed up is a friend; the public edition shows the viewer's
+     * own and their friends' (each friend's privacy setting still applies).
      */
     sharedTicketLedger: edition === 'friends',
     /**
@@ -74,6 +74,14 @@ export function featuresFor(edition: Edition) {
      * or sequel bonus. The friends edition keeps its honour system.
      */
     verifiedRewards: edition === 'public',
+    /**
+     * Mutual friends (request → accept), blocking and per-person privacy
+     * (Everyone / Friends / Only me per item, Settings → Privacy). The
+     * database enforces it (db/friends.sql, can_view); pages that list other
+     * people show only friends. The friends edition has no such thing:
+     * everyone signed up is a friend and sees everything, as before.
+     */
+    friendSystem: edition === 'public',
   }
 }
 

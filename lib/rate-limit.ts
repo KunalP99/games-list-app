@@ -13,6 +13,10 @@ export type RateLimit = { bucket: string; limit: number; windowSeconds: number }
 export const IGDB_SEARCH: RateLimit = { bucket: 'igdb_search', limit: 60, windowSeconds: 60 }
 /** Opening a game's details or its image chooser. */
 export const IGDB_LOOKUP: RateLimit = { bucket: 'igdb_lookup', limit: 120, windowSeconds: 60 }
+/** Searching for people to add (typed, debounced): same as game search. */
+export const USER_SEARCH: RateLimit = { bucket: 'user_search', limit: 60, windowSeconds: 60 }
+/** Sending friend requests: plenty for a person, too few to spam strangers. */
+export const FRIEND_REQUESTS: RateLimit = { bucket: 'friend_requests', limit: 20, windowSeconds: 3600 }
 /** The desktop app identifying running programs: a handful a minute at most. */
 export const AGENT_IDENTIFY: RateLimit = { bucket: 'agent_identify', limit: 30, windowSeconds: 60 }
 
