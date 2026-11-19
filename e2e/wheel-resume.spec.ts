@@ -1,6 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { login, closeAndReopen, addAllBacklogGames, readTicketBalance, TEST_USER_2 } from './helpers'
+import { login, closeAndReopen, addAllBacklogGames, readTicketBalance, TEST_USER_2, EDITION } from './helpers'
 import { resetTestWheelState } from './reset-state'
+
+// The public edition has no wheel (lib/edition.ts), so these only run against
+// the friends edition. The smoke test (smoke.spec.ts) runs in both.
+test.skip(EDITION === 'public', 'The public edition has no wheel.')
 
 // These prove what lib/__tests__/wheel-session.test.ts structurally cannot:
 // that the whole save → close tab → reopen → render loop actually works

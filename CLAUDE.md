@@ -48,10 +48,25 @@ npm test         # Run Vitest suite (45 tests across tickets, wheel, achievement
 
 A small **Playwright** suite covers what Vitest structurally cannot: a real
 browser, a real reload, state actually round-tripping through the database.
-It exists specifically for the wheel's resumable-turn feature (see below) —
-not a general e2e layer for the whole app. Most features stay covered by
-Vitest alone; only add here when a flow's correctness genuinely depends on a
-real page load/reload, not just the logic behind it.
+Two files:
+
+- `e2e/wheel-resume.spec.ts` — the wheel's resumable-turn feature (see below).
+  Friends edition only: it skips itself in the public edition (no wheel).
+- `e2e/smoke.spec.ts` — opens **every main page** signed in (dashboard, each
+  games tab and view, search, add/edit/view games, own and others' profiles,
+  stats + head-to-head, achievements, activity, tickets, settings, import,
+  videos, the desktop app's pages; the wheel in friends) and a few signed out,
+  and fails on an error status, an uncaught JavaScript error, Next.js's error
+  screen, or a page with no heading. Pages that shouldn't exist in an edition
+  must show the not-found page (a page with a `loading.tsx`, like the wheel's,
+  shows it with HTTP 200 — a Next.js streaming quirk). Read-only. **Run it in
+  both editions after any change that could affect pages** (library upgrades
+  especially): `env:dev` → restart dev → `test:e2e`, then `env:dev-public` →
+  restart dev → `test:e2e`. Add new pages to its list.
+
+Most features stay covered by Vitest alone; only add a flow here when its
+correctness genuinely depends on a real page load/reload. `EDITION` and
+`localEnv()` in `e2e/helpers.ts` tell a spec which edition it's running against.
 
 ```bash
 npm run test:e2e       # run the suite (headless)

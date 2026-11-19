@@ -1,4 +1,21 @@
+import fs from 'fs'
+import path from 'path'
 import type { Page, BrowserContext } from '@playwright/test'
+
+/** The keys in .env.local — what the running dev server was started with. */
+export function localEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const line of fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf8').split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq !== -1) env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim()
+  }
+  return env
+}
+
+/** Which edition the app under test is (lib/edition.ts: only "public" means public). */
+export const EDITION: 'friends' | 'public' = localEnv().NEXT_PUBLIC_EDITION === 'public' ? 'public' : 'friends'
 
 // Seeded by scripts/seed-dev.mjs. If the local stack has been wiped and
 // re-seeded, these still hold.
