@@ -73,6 +73,9 @@ export default async function WheelPage() {
           const pid = providerIdOf(g) // igdb_id in IGDB mode, else rawg_id
           return {
             name: g.title,
+            // Its own row, so it moves to Playing on a win even if it isn't
+            // linked to IGDB (see wonGameFor in WheelClient).
+            libraryId: g.id,
             rawg: pid
               ? { id: pid, name: g.title, released: g.release_date, background_image: g.image_url, cover_image: g.cover_image_url }
               : null,

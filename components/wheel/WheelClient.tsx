@@ -64,9 +64,12 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-// A wheel entry carries the display name plus its RAWG identity (null for
-// free-text games not found in RAWG — those win but don't auto-add to library).
-export type WheelEntry = { name: string; rawg: RawgSearchResult | null }
+// A wheel entry carries the display name plus its RAWG/IGDB identity (null for
+// free-text games not found by search — those win but don't auto-add to
+// library). Entries added from your backlog also carry `libraryId`, that
+// game's own row: a backlog game that isn't linked to IGDB still moves to
+// Playing when it wins.
+export type WheelEntry = { name: string; rawg: RawgSearchResult | null; libraryId?: string | null }
 
 interface Props {
   turn: WheelTurn
@@ -325,12 +328,22 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, entries, mode, elimIndex, eliminated, winner, rerollWinner, upgradeGames, spends])
 
-  // Resolve a winning name back to its RAWG object to auto-add it to the library.
-  const rawgByName = new Map(entries.filter(e => e.rawg).map(e => [e.name, e.rawg!]))
+  // Resolve a winning name back to what the server needs to put it in Playing:
+  // its RAWG/IGDB object (a linked game: reviewed first, then added or moved),
+  // or, for a backlog game that isn't linked, just its library row. null for
+  // a free-text winner, which is recorded but added nowhere.
+  const entryByName = new Map(entries.map(e => [e.name, e]))
   function wonGameFor(name: string) {
-    const r = rawgByName.get(name)
-    return r ? { id: r.id, name: r.name, released: r.released, background_image: r.background_image } : null
+    const entry = entryByName.get(name)
+    const r = entry?.rawg
+    if (r) return { id: r.id, name: r.name, released: r.released, background_image: r.background_image }
+    if (entry?.libraryId) return { libraryId: entry.libraryId, name: entry.name }
+    return null
   }
+  // Only a linked game has anything to review (platform, image); a library
+  // game already has them.
+  const needsReview = (g: ReturnType<typeof wonGameFor>): g is { id: number; name: string; released: string | null; background_image: string | null } =>
+    !!g && 'id' in g
 
   function addEntry(entry: WheelEntry) {
     setEntries(prev =>
@@ -444,7 +457,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
 
   function handleAccept() {
     const game = wonGameFor(winner)
-    if (!game) { runAccept(null, null); return } // free-text winner — nothing to review/add
+    if (!needsReview(game)) { runAccept(null, null); return } // free-text or unlinked library winner — nothing to review
     setReviewError('')
     setPendingAdd({ game: { id: game.id, name: game.name }, confirm: runAccept })
   }
@@ -657,7 +670,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
 
   function handleFinalUpgradeChoice(chosen: string) {
     const game = wonGameFor(chosen)
-    if (!game) { runFinalUpgradeChoice(chosen, null, null); return }
+    if (!needsReview(game)) { runFinalUpgradeChoice(chosen, null, null); return }
     setReviewError('')
     setPendingAdd({ game: { id: game.id, name: game.name }, confirm: (p, img) => runFinalUpgradeChoice(chosen, p, img) })
   }
@@ -710,7 +723,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
 
   function handleKeep() {
     const game = wonGameFor(winner)
-    if (!game) { runKeep(null, null); return }
+    if (!needsReview(game)) { runKeep(null, null); return }
     setReviewError('')
     setPendingAdd({ game: { id: game.id, name: game.name }, confirm: runKeep })
   }
@@ -739,7 +752,7 @@ export default function WheelClient({ turn, balance, accentColour, backlogGames,
 
   function handleFinalChoice(chosen: string) {
     const game = wonGameFor(chosen)
-    if (!game) { runFinalChoice(chosen, null, null); return }
+    if (!needsReview(game)) { runFinalChoice(chosen, null, null); return }
     setReviewError('')
     setPendingAdd({ game: { id: game.id, name: game.name }, confirm: (p, img) => runFinalChoice(chosen, p, img) })
   }

@@ -47,12 +47,33 @@ npm run test:e2e # Playwright: smoke test of every page + wheel tests (see below
 
 ## End-to-end tests (`e2e/`)
 
-A small **Playwright** suite covers what Vitest structurally cannot: a real
-browser, a real reload, state actually round-tripping through the database.
-Two files:
+A **Playwright** suite covers what Vitest structurally cannot: a real browser,
+real page loads, and state actually round-tripping through the database
+(~74 tests, about 2 minutes). Files run **one at a time** (`workers: 1`): they
+share the two seeded accounts. Each cleans up after itself; shared helpers for
+test data are in `e2e/db.ts` (local database only).
 
 - `e2e/wheel-resume.spec.ts` — the wheel's resumable-turn feature (see below).
   Friends edition only: it skips itself in the public edition (no wheel).
+- `e2e/wheel-library.spec.ts` — a wheel win moves the backlog game to Playing
+  (including one not linked to IGDB); two tabs skipping one turn pay once.
+  Friends only.
+- `e2e/games.spec.ts` — search with commas/brackets/wildcards, the hours rules,
+  editing, completing.
+- `e2e/rewards.spec.ts` — completion XP taken back and given once, two tabs
+  completing at once pay once; public edition's verified rewards (tracked
+  hours, IGDB-linked only, 5 untracked a day).
+- `e2e/private-notes.spec.ts` — private notes visible to their owner only.
+- `e2e/permissions.spec.ts` — what a user can do directly with the browser's
+  key (achievements, ledger, wheel history, notes, server-only functions,
+  reserved usernames), the database functions' "only once" rules, and the
+  per-edition read rules (flips `app_settings` temporarily, then restores it).
+- `e2e/tracker-api.spec.ts` — the desktop app's API: hours counted once,
+  completed games untouched, orphaned sessions closed, no token minting,
+  identify rate limit.
+- `e2e/security.spec.ts` — headers, signed-out redirects, IGDB rate limits,
+  changing your password needs the current one (restores test-sam's password).
+- `e2e/activity.spec.ts` — a session the app never closed shows its real end.
 - `e2e/smoke.spec.ts` — opens **every main page** signed in (dashboard, each
   games tab and view, search, add/edit/view games, own and others' profiles,
   stats + head-to-head, achievements, activity, tickets, settings, import,
@@ -65,9 +86,13 @@ Two files:
   especially): `env:dev` → restart dev → `test:e2e`, then `env:dev-public` →
   restart dev → `test:e2e`. Add new pages to its list.
 
-Most features stay covered by Vitest alone; only add a flow here when its
-correctness genuinely depends on a real page load/reload. `EDITION` and
-`localEnv()` in `e2e/helpers.ts` tell a spec which edition it's running against.
+Pure rules stay in Vitest; add a flow here when its correctness depends on the
+real site or database (permissions, "only once" races, page loads). `EDITION`
+and `localEnv()` in `e2e/helpers.ts` tell a spec which edition it's running
+against; edition-specific tests `test.skip` themselves in the other edition, so
+**run the suite in both editions** after changes. Wait for
+`networkidle` before typing into a freshly loaded form, or React's hydration can
+put the field's original value back on top of what was typed.
 
 ```bash
 npm run test:e2e       # run the suite (headless)

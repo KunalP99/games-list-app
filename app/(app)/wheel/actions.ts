@@ -181,7 +181,12 @@ async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, us
 //   • not owned at all                             → fresh Playing entry
 // A null rawgGame (free-text winner) is a no-op.
 
-type WonGame = { id: number; name: string; released: string | null; background_image: string | null }
+// A linked game (its RAWG/IGDB identity), or a backlog game that isn't linked,
+// named by its own library row. The second only ever moves that row to
+// Playing, and only if it's the caller's and still in Backlog (or Ambient).
+type LinkedWonGame = { id: number; name: string; released: string | null; background_image: string | null }
+type LibraryWonGame = { libraryId: string; name: string }
+type WonGame = LinkedWonGame | LibraryWonGame
 
 // Every paid action taken during the turn, in order (e.g. Spin Again then
 // Choose a Game), so history can show the full spend breakdown rather than a
@@ -203,6 +208,19 @@ async function addWonGameToLibrary(
   const today = new Date().toISOString().split('T')[0]
   const plat = platform?.trim() || null
   const art = artworkUrl?.trim() || null // user-picked / custom image for the card + hero
+
+  // A backlog game that isn't linked to IGDB: move that exact row to Playing.
+  // Before this, an unlinked backlog game could win and silently stay in
+  // Backlog, because only linked games could be found again.
+  if ('libraryId' in rawgGame) {
+    const { data: moved } = await (supabase.from('games') as any)
+      .update({ status: 'playing', start_date: today, assigned_by: userId })
+      .eq('id', rawgGame.libraryId)
+      .eq('user_id', userId)
+      .in('status', ['backlog', 'ambient'])
+      .select('id')
+    return moved?.[0]?.id ?? null
+  }
 
   const byId = await (supabase.from('games') as any)
     .select('id, status')

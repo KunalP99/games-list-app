@@ -12,6 +12,10 @@ export default defineConfig({
   testDir: './e2e',
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false, // tests share two seeded accounts; parallel runs would race each other's wheel_session
+  // One file at a time, too: fullyParallel only stops tests *within* a file
+  // running together. Several files change the same two test accounts
+  // (tickets, wheel turn, games), so files running side by side break each other.
+  workers: 1,
   retries: 0, // a flaky e2e test hiding a real bug is worse than a red run
   reporter: 'list',
   // The dev server compiles a page the first time it's opened after a change
