@@ -44,7 +44,7 @@ export async function proxy(request: NextRequest) {
   // created (public edition's secure sign-up; both 404 in the friends edition).
   const protectedPrefixes = [
     '/dashboard', '/games', '/users', '/tickets', '/wheel', '/changelog',
-    '/stats', '/achievements', '/activity', '/settings', '/import', '/videos', '/admin',
+    '/stats', '/achievements', '/activity', '/settings', '/import', '/admin',
     '/reset-password', '/welcome',
   ]
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p))

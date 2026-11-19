@@ -1,28 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import useEmblaCarousel from 'embla-carousel-react'
 import VideoCard, { type VideoCardData } from './VideoCard'
-import DeletePlaylistButton from './DeletePlaylistButton'
 
-// A titled horizontal carousel of videos. Used for the standalone "Videos" row
-// and for each playlist (title = playlist name, with optional YouTube link +
-// admin delete).
+// A titled horizontal carousel of a game's videos, with an optional
+// "Watch on YouTube" link to the playlist they came from.
 export default function VideoRow({
   title,
-  titleHref,
   videos,
-  isAdmin,
   youtubeUrl,
-  playlistId,
 }: {
   title: string
-  titleHref?: string
   videos: VideoCardData[]
-  isAdmin: boolean
   youtubeUrl?: string | null
-  playlistId?: string
 }) {
   const [emblaRef, emblaApi] = useEmblaCarousel({ align: 'start', containScroll: 'trimSnaps', dragFree: true })
   const [canPrev, setCanPrev] = useState(false)
@@ -49,13 +40,7 @@ export default function VideoRow({
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          {titleHref ? (
-            <Link href={titleHref} className="text-lg font-semibold text-fg-base truncate hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
-              {title}
-            </Link>
-          ) : (
-            <h2 className="text-lg font-semibold text-fg-base truncate">{title}</h2>
-          )}
+          <h2 className="text-lg font-semibold text-fg-base truncate">{title}</h2>
           {youtubeUrl && (
             <a
               href={youtubeUrl}
@@ -68,7 +53,6 @@ export default function VideoRow({
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {isAdmin && playlistId && <DeletePlaylistButton id={playlistId} />}
           <button type="button" onClick={() => emblaApi?.scrollPrev()} disabled={!canPrev} className={arrow} aria-label="Scroll left">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
           </button>
@@ -82,7 +66,7 @@ export default function VideoRow({
         <div className="flex gap-4">
           {videos.map(v => (
             <div key={v.id} className="shrink-0 w-72 max-w-[85vw]">
-              <VideoCard video={v} isAdmin={isAdmin} />
+              <VideoCard video={v} />
             </div>
           ))}
         </div>

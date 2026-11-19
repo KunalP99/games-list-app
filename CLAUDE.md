@@ -77,7 +77,7 @@ test data are in `e2e/db.ts` (local database only).
 - `e2e/smoke.spec.ts` — opens **every main page** signed in (dashboard, each
   games tab and view, search, add/edit/view games, own and others' profiles,
   stats + head-to-head, achievements, activity, tickets, settings, import,
-  videos, the desktop app's pages; the wheel in friends) and a few signed out,
+  the desktop app's pages; the wheel in friends) and a few signed out,
   and fails on an error status, an uncaught JavaScript error, Next.js's error
   screen, or a page with no heading. Pages that shouldn't exist in an edition
   must show the not-found page (a page with a `loading.tsx`, like the wheel's,
@@ -330,10 +330,10 @@ The full implementation plan (including all database SQL per phase) is at:
 - **Mobile sidebar nav** — `Nav.tsx` is a client component. On mobile, a hamburger button opens a slide-in sidebar with backdrop overlay. Desktop keeps the horizontal nav unchanged.
 - **Mark as Completed button** — `MarkCompletedButton` (client component) appears on the game detail page for `status === 'playing'` games (the dashboard banner has its own). It used to sit on every Playing `GameCard`/`CoverCard` too, but was removed from the cards on 2026-11-18 (both editions): it crowded out the stats and made cards uneven heights, and cards already offer "Mark as Completed…" in their ⋯/right-click menu. Uses `useTransition` and stops click propagation.
 - **Year grouping on Completed tab** — `GameListView` renders `CompletedByYear` when `status === 'completed'`, grouping cards by `completion_date` year, newest first.
-- **Search bar** — `GameFilters` (and `VideosFilters`) use `useUrlSearch` (`lib/use-url-search.ts`): a debounced (300ms) box ↔ `?q=`. The filters' own navigations (tabs, sort, view) go through its `applyTo`, which carries the box's text and cancels the pending update; the delayed update used to undo a tab clicked just after typing or just after the page opened. The games query filters with `.or('title.ilike.%q%,developer.ilike.%q%')`.
+- **Search bar** — `GameFilters` uses `useUrlSearch` (`lib/use-url-search.ts`): a debounced (300ms) box ↔ `?q=`. Its own navigations (tabs, sort, view) go through its `applyTo`, which carries the box's text and cancels the pending update; the delayed update used to undo a tab clicked just after typing or just after the page opened. The games query filters with `.or('title.ilike.%q%,developer.ilike.%q%')`.
 - **Ticket recalculation on edit** — When a completed game's hours/achievements are edited, the old completion transactions are deleted and new ones issued via the `reverse_game_completion_tickets` Postgres RPC, keeping the ledger clean.
 - **Game metadata provider (RAWG ↔ IGDB)** — `lib/rawg.ts` exposes the metadata API (`searchRawgGames`, `getRawgGameDetail`, `getRawgScreenshots`, `getRawgAdditions`, `getRawgAchievements`). It delegates to **IGDB** (`lib/igdb.ts`, Twitch OAuth + apicalypse; needs `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`) when `METADATA_PROVIDER=igdb`, else uses RAWG (`RAWG_API_KEY`). Provider results keep the same `Rawg*` shapes, so callers are unchanged. Each game stores its provider id in `rawg_id` **or** `igdb_id`; use `PROVIDER_ID_COLUMN` (write) and `providerIdOf(game)` (read) — never assume `rawg_id`. IGDB gaps: no achievements (`getRawgAchievements` returns `[]`) and no dominant colour (card tint absent for IGDB games). Flip `METADATA_PROVIDER` back to `rawg` if RAWG recovers — existing data is untouched. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS igdb_id INTEGER;`
-- **Game YouTube media** — The game form's Media section takes a single "video or playlist" URL (`fetchGameMedia` in `games/actions.ts`): a playlist pulls all its videos (`fetchYouTubePlaylistItems`, needs `YOUTUBE_API_KEY`), a single video uses keyless oEmbed. Videos are stored inline as `games.youtube_videos` JSONB (same hidden-field pattern as `dlc`); a playlist also sets `youtube_playlist_url` (watch-on-YouTube link). The reusable `components/games/GameVideos.tsx` renders them: 2+ → `VideoRow` carousel, 1 → a single `VideoCard`, 0 + legacy `youtube_playlist_url` → the classic `videoseries` embed. **The Videos page mirrors game media live** — it reads all games with `youtube_videos` and shows one `VideoRow` per game (titled + linked to the game, read-only); since games are world-readable, no duplication/sync. `mapGameVideos` (`lib/youtube.ts`) adapts stored items to the card shape. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_videos JSONB;`
+- **Game YouTube media** — The game form's Media section takes a single "video or playlist" URL (`fetchGameMedia` in `games/actions.ts`): a playlist pulls all its videos (`fetchYouTubePlaylistItems`, needs `YOUTUBE_API_KEY`), a single video uses keyless oEmbed. Videos are stored inline as `games.youtube_videos` JSONB (same hidden-field pattern as `dlc`); a playlist also sets `youtube_playlist_url` (watch-on-YouTube link). The reusable `components/games/GameVideos.tsx` renders them: 2+ → `VideoRow` carousel, 1 → a single `VideoCard`, 0 + legacy `youtube_playlist_url` → the classic `videoseries` embed. `mapGameVideos` (`lib/youtube.ts`) adapts stored items to the card shape. SQL: `ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_videos JSONB;`
 - **Release notifications** — a `game_released` in-app notification is created when a backlog game's `release_date` arrives. The nav's `components/layout/NotificationBell.tsx` (fed by `app/(app)/layout.tsx`) shows an unread badge + dropdown; opening it calls `markNotificationsRead` (`app/(app)/notifications/actions.ts`). Generation is a daily cron (`app/api/cron/check-releases/route.ts`) idempotent via `games.release_notified`. Unreleased backlog games are separately grouped as **"Coming Soon"** in `GameListView` and hidden from the wheel picker (`wheel/page.tsx`). SQL:
   ```sql
   CREATE TABLE IF NOT EXISTS public.notifications (
@@ -430,8 +430,7 @@ The full implementation plan (including all database SQL per phase) is at:
 | `/users/[username]` | `app/(app)/users/[username]/page.tsx` | Read-only profile. `isOwner` controls Mark Complete button visibility |
 | `/tickets` | `app/(app)/tickets/page.tsx` | Full ticket ledger for all users, grouped by game, paginated 20/page |
 | `/wheel` | `app/(app)/wheel/page.tsx` | Wheel spin — shows current turn, game input, spin animation, result flow |
-| `/videos` | `app/(app)/videos/page.tsx` | Curated YouTube library. Everyone views; only `profiles.is_admin` curators add/remove. Click-to-play thumbnails. |
-| `/api/cron/sync-playlists` | `app/api/cron/sync-playlists/route.ts` | Daily Vercel Cron. Mirrors YouTube-sourced playlists (in-site + game media) against their source. `CRON_SECRET`-guarded. |
+| `/api/cron/sync-playlists` | `app/api/cron/sync-playlists/route.ts` | Daily Vercel Cron. Mirrors each game's YouTube playlist into its stored videos. `CRON_SECRET`-guarded. |
 | `/api/cron/check-releases` | `app/api/cron/check-releases/route.ts` | Daily Vercel Cron. Creates a `game_released` notification for backlog games whose `release_date` has arrived (idempotent via `games.release_notified`). `CRON_SECRET`-guarded, service-role admin client. |
 | `/api/cron/check-events` | `app/api/cron/check-events/route.ts` | Daily Vercel Cron. Creates an `event_live` notification for every user when an IGDB event happens today (idempotent via the `notified_events` table). `CRON_SECRET`-guarded, service-role admin client. |
 | `/api/agent/state` | `app/api/agent/state/route.ts` | Desktop agent. Playing games + their `steam_appid`, the user's exe links, and theme/accent. Device-token auth, service-role admin client. |
@@ -619,73 +618,17 @@ and a result awaiting acceptance all come back.
 
 ---
 
-## Videos system (`app/(app)/videos/`)
+## Game videos (YouTube)
 
-**Not linked from the nav** — the Videos tab was removed from `Nav.tsx`. The
-route, its data and everything below still work; `/videos` is just reachable by
-URL only now. Re-add an entry to `navItemsAfter` to bring the tab back.
+The standalone Videos page (`/videos`, its curated library and in-site
+playlists) was removed on 2026-11-19: it wasn't being used. Its `videos` and
+`playlists` tables are still in the database, unused; nothing reads or writes
+them. What remains is each game's own media (see "Game YouTube media" above):
 
-A curated library of YouTube videos and **in-site playlists**. YouTube-only.
-Everyone signed in can view; only curators (`profiles.is_admin = true`) can
-add/remove — enforced in the UI, the server actions, and RLS. Video cards are
-click-to-play (thumbnail → inline autoplay iframe). A **playlist** is an in-site
-collection of individual videos (`playlists` row owning `videos` rows via
-`videos.playlist_id`), each video's title auto-fetched. Playlist cards expand
-inline to reveal their videos and can carry an optional `youtube_url` for a
-"watch on YouTube" link. A standalone YouTube-playlist link can **no longer** be
-added on its own — `createVideo` rejects playlist URLs and directs the user to
-the playlist builder. (Legacy standalone `kind='playlist'` video rows from before
-this change still render.)
-
-- `lib/youtube.ts` — pure helpers: `parseYouTubeUrl` (watch / youtu.be / shorts / embed / live / v / playlist; hosts youtube.com, m., music., youtu.be), `youtubeEmbedUrl`, `youtubeThumbnail`, `youtubeCanonicalUrl`. Tested in `lib/__tests__/youtube.test.ts`.
-- `app/(app)/videos/actions.ts` — `createVideo` (single video; rejects playlist URLs), `createPlaylist` (title + optional YouTube link + N video URLs; oEmbed per video with bounded concurrency + batch insert; rolls back if a video fails), `fetchPlaylistForImport` (pulls a YouTube playlist's videos for the preview), `deleteVideo`, `deletePlaylist` (child videos cascade). All admin-gated; per-video metadata via YouTube **oEmbed** (no key).
-- `lib/youtube-api.ts` — **server-only** YouTube Data API v3 access (`YOUTUBE_API_KEY`): `fetchYouTubePlaylistItems` (paginated `playlistItems.list`, filters deleted/private) enumerates a playlist's videos; `fetchPlaylistItemCounts` batches up to 50 playlist ids into one `playlists.list` call (1 quota unit) returning each playlist's `itemCount` for cheap change-detection. Otherwise everything stays keyless. Mirrors `lib/rawg.ts`.
-- **Playlist auto-sync** (`app/api/cron/sync-playlists/route.ts`) — a daily Vercel Cron (`vercel.json`) mirrors every YouTube-sourced playlist against its source: in-site playlists whose `playlists.youtube_url` is a YouTube playlist (child `videos` rows replaced to match) **and** games whose `games.youtube_playlist_url` is a playlist (`games.youtube_videos` JSONB overwritten). Full mirror (adds new, drops removed, keeps order). Uses the service-role admin client (`lib/supabase/admin.ts`, bypasses RLS). Quota-cheap: one batched count-check reads all playlists' counts; only those whose count differs from the stored `youtube_item_count` are re-fetched. Guarded by `CRON_SECRET` (Vercel Cron sends it as `Authorization: Bearer`). Needs `YOUTUBE_API_KEY` + `SUPABASE_SERVICE_ROLE_KEY` on Vercel. SQL: `ALTER TABLE public.playlists ADD COLUMN IF NOT EXISTS youtube_item_count INTEGER, ADD COLUMN IF NOT EXISTS synced_at TIMESTAMPTZ; ALTER TABLE public.games ADD COLUMN IF NOT EXISTS youtube_item_count INTEGER;`
-- Components: `VideoCard` (click-to-play + admin remove), `PlaylistCard` (expand-inline collection + admin delete), `AddVideoForm` (modal with a "Make a playlist" toggle → dynamic video-URL rows), `DeleteVideoButton`, `DeletePlaylistButton`.
-- Thumbnails use plain `<img>` with `i.ytimg.com` URLs — no `next.config.mjs` change needed. No CSP exists, so the embed iframes work.
-
-**SQL required** (run in Supabase):
-```sql
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
--- Grant the curator(s):
-UPDATE public.profiles SET is_admin = true WHERE id = '<curator-user-id>';
-
-CREATE TABLE IF NOT EXISTS public.videos (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  url TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('video','playlist')),
-  youtube_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  author_name TEXT,
-  thumbnail_url TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-ALTER TABLE public.videos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Signed-in users can view videos" ON public.videos
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Admins manage videos" ON public.videos
-  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin));
-
--- In-site playlists (added later):
-CREATE TABLE IF NOT EXISTS public.playlists (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  youtube_url TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-ALTER TABLE public.playlists ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Signed-in users can view playlists" ON public.playlists
-  FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Admins manage playlists" ON public.playlists
-  FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.is_admin));
-
-ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS playlist_id UUID REFERENCES public.playlists(id) ON DELETE CASCADE;
-ALTER TABLE public.videos ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0;
-```
+- `lib/youtube.ts` — pure helpers: `parseYouTubeUrl` (watch / youtu.be / shorts / embed / live / v / playlist; hosts youtube.com, m., music., youtu.be), `youtubeEmbedUrl`, `youtubeThumbnail`, `youtubeCanonicalUrl`, `mapGameVideos`. Tested in `lib/__tests__/youtube.test.ts`.
+- `lib/youtube-api.ts` — **server-only** YouTube Data API v3 access (`YOUTUBE_API_KEY`): `fetchYouTubePlaylistItems` (paginated `playlistItems.list`, filters deleted/private) and `fetchPlaylistItemCounts` (up to 50 playlist ids per `playlists.list` call, 1 quota unit, for cheap change-detection).
+- **Playlist auto-sync** (`app/api/cron/sync-playlists/route.ts`) — a daily Vercel Cron (`vercel.json`) mirrors each game whose `youtube_playlist_url` is a YouTube playlist into `games.youtube_videos` (adds new, drops removed, keeps order). Only playlists whose count differs from the stored `youtube_item_count` are re-fetched. Service-role admin client; guarded by `CRON_SECRET`; needs `YOUTUBE_API_KEY`.
+- Components: `components/games/GameVideos.tsx`, `VideoRow` (carousel) and `VideoCard` (click-to-play thumbnail → lightbox player), all in `components/games/`.
 
 ---
 

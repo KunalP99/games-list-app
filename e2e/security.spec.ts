@@ -18,7 +18,7 @@ test('every response carries the hardening headers', async () => {
 })
 
 test('signed-out visitors are sent to /login before any page runs', async () => {
-  for (const path of ['/dashboard', '/stats', '/settings', '/achievements', '/activity', '/import', '/videos', '/admin/exe-links']) {
+  for (const path of ['/dashboard', '/stats', '/settings', '/achievements', '/activity', '/import', '/admin/exe-links']) {
     const res = await fetch(BASE + path, { redirect: 'manual' })
     expect([302, 303, 307, 308], path).toContain(res.status)
     expect(res.headers.get('location'), path).toMatch(/\/login/)

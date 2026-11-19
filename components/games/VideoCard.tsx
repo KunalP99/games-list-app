@@ -3,10 +3,9 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { youtubeEmbedUrl } from '@/lib/youtube'
-import DeleteVideoButton from './DeleteVideoButton'
 
-// Minimal shape a card needs — the full `Video` row satisfies it structurally,
-// and game pages can pass lightweight objects built from `games.youtube_videos`.
+// Click-to-play video card for a game's media (built from `games.youtube_videos`
+// by `mapGameVideos`).
 export type VideoCardData = {
   id: string
   kind: 'video' | 'playlist'
@@ -16,7 +15,7 @@ export type VideoCardData = {
   thumbnail_url: string | null
 }
 
-export default function VideoCard({ video, isAdmin }: { video: VideoCardData; isAdmin: boolean }) {
+export default function VideoCard({ video }: { video: VideoCardData }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -60,12 +59,6 @@ export default function VideoCard({ video, isAdmin }: { video: VideoCardData; is
             </span>
           )}
         </button>
-
-        {isAdmin && (
-          <div className="absolute top-2 right-2 z-10" onClick={e => e.stopPropagation()}>
-            <DeleteVideoButton id={video.id} />
-          </div>
-        )}
       </div>
 
       {/* Meta — fixed height (2-line title + 1 author line) so every card is the

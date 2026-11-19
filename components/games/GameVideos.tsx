@@ -1,7 +1,7 @@
 import { parseYouTubeUrl } from '@/lib/youtube'
 import type { GameVideoCard } from '@/lib/youtube'
-import VideoRow from '@/components/videos/VideoRow'
-import VideoCard from '@/components/videos/VideoCard'
+import VideoRow from './VideoRow'
+import VideoCard from './VideoCard'
 
 // A game's media block, reused on the game detail page:
 //   2+ videos → carousel row; 1 video → a single large player card;
@@ -14,7 +14,7 @@ export default function GameVideos({
   playlistUrl: string | null
 }) {
   if (videos.length >= 2) {
-    return <VideoRow title="Playlist" videos={videos} isAdmin={false} youtubeUrl={playlistUrl} />
+    return <VideoRow title="Playlist" videos={videos} youtubeUrl={playlistUrl} />
   }
 
   if (videos.length === 1) {
@@ -22,7 +22,7 @@ export default function GameVideos({
       <div className="space-y-3">
         <p className="text-xs text-fg-muted font-medium uppercase tracking-wider">Video</p>
         <div className="max-w-2xl">
-          <VideoCard video={videos[0]} isAdmin={false} />
+          <VideoCard video={videos[0]} />
         </div>
       </div>
     )

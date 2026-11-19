@@ -106,7 +106,6 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
     ['ticket history', () => '/tickets'],
     ['settings', () => '/settings'],
     ['import', () => '/import'],
-    ['videos', () => '/videos'],
     ['link a program (desktop app page)', () => '/settings/devices/link?exe=game.exe'],
     ['pair a PC (desktop app page)', () => '/settings/devices/pair?callback=' + encodeURIComponent('http://127.0.0.1:5555/cb')],
   ]

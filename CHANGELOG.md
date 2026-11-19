@@ -67,6 +67,9 @@ All notable changes to **GamesList** are documented here, newest first.
 
   The same fixes the Classic versions, which all share `WowClassic.exe`. Check-ins now carry the matched game's id (checked against your own library), and an exe with two links no longer breaks the name-only lookup that older trackers rely on (`pickLegacyLink`, `lib/exe-links.ts`). Every link write goes through `writeExeLink`. Tested live with both games installed: Forever → Forever, Retail → added as World of Warcraft with its own link, then each relaunch went straight to its own game with no prompts. SQL: `db/exe-links-per-folder.sql`, in two steps: add the per-folder index, deploy, then drop the old per-name constraint.
 
+### Removed
+- **The Videos page is gone.** It had been hidden from the menu and wasn't being used. Videos on a game's own page are unaffected and still stay in step with their YouTube playlist each day. The old `videos` and `playlists` tables are left in the database, unused.
+
 ### Changed
 - **Updated to the latest Next.js (16) and React (19).** Behind the scenes only: it closes a set of security holes in the older version, including serious ones in how images are served. Nothing should look or work differently.
 - **The Stats page is redesigned, "Wrapped" style.** It's now a stack of bold, full-width colour bands, each built around one huge number, in a condensed display font (Anton). It opens on **your own stats**; a "Compare with a friend" dropdown switches to a **head-to-head**, and "Just me" switches back. Both views show the same sections in the same order:
