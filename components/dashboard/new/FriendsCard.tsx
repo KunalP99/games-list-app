@@ -9,6 +9,7 @@ import type { PersonSummary } from '@/lib/data/friends'
 import AddFriendModal from '@/components/friends/AddFriendModal'
 import RelationButton from '@/components/friends/RelationButton'
 import PersonAvatar, { initials } from '@/components/friends/PersonAvatar'
+import FriendActions from '@/components/friends/FriendActions'
 
 /** How often the live list is re-read, so friends starting or stopping show up. */
 const REFRESH_MS = 60_000
@@ -130,10 +131,10 @@ export default function FriendsCard({
       )}
 
       {live.map(p => (
+        <WithActions key={p.userId} on={friendSystem} person={{ id: p.userId, username: p.username, displayName: p.displayName }} className="-mx-2.5 mb-2">
         <Link
-          key={p.userId}
           href={`/games/${p.gameId}`}
-          className="-mx-2.5 mb-2 flex items-center gap-3 rounded-xl bg-emerald-50 p-2.5 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/15 transition-colors"
+          className={`flex items-center gap-3 rounded-xl bg-emerald-50 p-2.5 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/15 transition-colors ${friendSystem ? 'pr-10' : ''}`}
         >
           <span className="relative shrink-0">
             <span
@@ -153,12 +154,14 @@ export default function FriendsCard({
             <img src={p.gameImage} alt="" className="h-12 w-9 shrink-0 rounded-md object-cover" />
           )}
         </Link>
+        </WithActions>
       ))}
 
       <ul className="space-y-1">
         {rest.map(f => (
           <li key={f.id}>
-            <Link href={`/users/${encodeURIComponent(f.username)}`} className="-mx-2 flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface-hover transition-colors">
+            <WithActions on={friendSystem} person={{ id: f.id, username: f.username, displayName: f.displayName }} className="-mx-2">
+            <Link href={`/users/${encodeURIComponent(f.username)}`} className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface-hover transition-colors ${friendSystem ? 'pr-10' : ''}`}>
               <span
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                 style={{ backgroundColor: f.accentColour ?? '#7c3aed' }}
@@ -172,6 +175,7 @@ export default function FriendsCard({
                 </span>
               </span>
             </Link>
+            </WithActions>
           </li>
         ))}
       </ul>
@@ -179,4 +183,19 @@ export default function FriendsCard({
       {adding && <AddFriendModal onClose={() => setAdding(false)} onChanged={() => router.refresh()} />}
     </div>
   )
+}
+
+/**
+ * Public edition: a friend's row gets the right-click / "⋯" menu (View
+ * profile, Remove friend). The friends edition, where everyone is a friend
+ * and can't be removed, keeps the plain row.
+ */
+function WithActions({ on, person, className, children }: {
+  on: boolean
+  person: { id: string; username: string; displayName: string }
+  className: string
+  children: React.ReactNode
+}) {
+  if (!on) return <div className={className}>{children}</div>
+  return <FriendActions person={person} className={className}>{children}</FriendActions>
 }

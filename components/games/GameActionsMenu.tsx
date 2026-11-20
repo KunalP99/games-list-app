@@ -262,7 +262,7 @@ export function GameActionsTrigger({ tone = 'plain', className = '' }: { tone?: 
 
 // ── Menu ────────────────────────────────────────────────────────────────
 
-function Menu({
+export function Menu({
   x, y, alignRight, anchorRef, onClose, children,
 }: {
   x: number
@@ -355,7 +355,7 @@ function Menu({
   )
 }
 
-function MenuItem({ icon, danger = false, onSelect, children }: { icon: React.ReactNode; danger?: boolean; onSelect: () => void; children: React.ReactNode }) {
+export function MenuItem({ icon, danger = false, onSelect, children }: { icon: React.ReactNode; danger?: boolean; onSelect: () => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
@@ -373,7 +373,7 @@ function MenuItem({ icon, danger = false, onSelect, children }: { icon: React.Re
   )
 }
 
-function Divider() {
+export function Divider() {
   return <div className="my-1.5 h-px bg-edge-base" role="separator" />
 }
 

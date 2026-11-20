@@ -230,6 +230,26 @@ test.describe('on the site', () => {
     await expect(friendsCard(alex).getByText('No friends yet')).toHaveCount(0)
   })
 
+  test('right-click a friend on the card to remove them', async () => {
+    await befriend(alexId, samId)
+    await alex.goto('/dashboard')
+    const row = friendsCard(alex).getByText('Sam (test)')
+    await row.click({ button: 'right' })
+    await alex.getByRole('menuitem', { name: 'Remove friend…' }).click()
+    await alex.getByRole('alertdialog').getByRole('button', { name: 'Remove friend' }).click()
+    await expect.poll(async () => ((await admin().from('friendships').select('user_a').or(`user_a.eq.${alexId},user_b.eq.${alexId}`)).data ?? []).length).toBe(0)
+    await expect(friendsCard(alex).getByText('No friends yet')).toBeVisible()
+  })
+
+  test('the ⋯ on a friend\'s row opens the same menu (no right-click on touch screens)', async () => {
+    await befriend(alexId, samId)
+    await alex.goto('/dashboard')
+    await friendsCard(alex).getByText('Sam (test)').hover()
+    await friendsCard(alex).getByRole('button', { name: 'Options for Sam (test)' }).click()
+    await alex.getByRole('menuitem', { name: 'View profile' }).click()
+    await expect(alex).toHaveURL(/\/users\/test-sam$/)
+  })
+
   test('decline and take back', async () => {
     await admin().from('friend_requests').insert({ from_user: alexId, to_user: samId })
     await sam.goto('/dashboard')
