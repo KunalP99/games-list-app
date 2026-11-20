@@ -27,7 +27,9 @@
 
 /** Reduce a title to bare lowercase letters and digits, for exact comparison. */
 export function normaliseTitle(raw: string): string {
-  return raw.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  // Accents folded first, so "Ōkami" and "Pokémon" keep their letters
+  // ("okami", "pokemon") rather than losing them as non-ASCII.
+  return raw.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 /**
