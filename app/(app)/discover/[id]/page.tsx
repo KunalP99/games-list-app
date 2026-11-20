@@ -100,8 +100,8 @@ export default async function DiscoverGamePage(props: { params: Promise<{ id: st
               <p className="mt-1 text-sm text-fg-secondary">{game.releaseDate != null ? 'No exact date yet' : 'No release date yet'}</p>
             </section>
           )}
-          {!upcoming && game.banner && (
-            <img src={game.banner} alt="" className="aspect-[460/215] w-full rounded-xl object-cover" />
+          {!upcoming && game.capsule && (
+            <img src={game.capsule} alt="" className="aspect-[460/215] w-full rounded-xl object-cover" />
           )}
           {game.summary && <StoreSummary text={game.summary} />}
 

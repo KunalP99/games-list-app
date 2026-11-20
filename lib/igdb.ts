@@ -464,6 +464,22 @@ export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo>
 
 // ── Store page (lib/store-page.ts) ──────────────────────────────────────────
 
+/**
+ * The picture beside the store page's trailer, a fixed wide box (460×215).
+ * Artworks come in every shape, and many are logos (Days Gone's is a
+ * letterbox of its title), which cropping into that box cuts through. So
+ * only an artwork close to the box's shape is used; otherwise a screenshot
+ * (the right shape, and no logo to cut), else nothing.
+ */
+function capsuleImage(g: { artworks?: Array<{ image_id?: string; width?: number; height?: number }>; screenshots?: Array<{ image_id?: string }> }): string | null {
+  const fits = (g.artworks ?? [])
+    .filter(a => a.image_id && a.width && a.height && a.width / a.height >= 1.6 && a.width / a.height <= 2.4)
+    .sort((a, b) => (b.width! * b.height!) - (a.width! * a.height!))
+  if (fits[0]?.image_id) return landscapeUrl(fits[0].image_id)
+  const shot = g.screenshots?.find(s => s.image_id)?.image_id
+  return shot ? landscapeUrl(shot) : null
+}
+
 type IgdbRelated = { id: number; name: string; first_release_date?: number }
 const RELATED_FIELDS = (prefix: string) => ['name', 'first_release_date'].map(f => `${prefix}.${f}`).join(', ')
 
@@ -541,6 +557,7 @@ export async function getStoreGame(id: number): Promise<StoreGame | null> {
     players: playersLine(names(g.game_modes), g.multiplayer_modes),
     cover: coverUrl(g.cover?.image_id),
     banner: artworkImage(g) ?? (g.screenshots?.[0]?.image_id ? bannerUrl(g.screenshots[0].image_id) : null),
+    capsule: capsuleImage(g),
     screenshots: (g.screenshots ?? []).filter(s => s.image_id).slice(0, 10).map(s => screenshotUrl(s.image_id!)),
     videos: orderVideos((g.videos ?? []).filter(v => v.video_id).map(v => ({ name: v.name || 'Trailer', youtubeId: v.video_id! }))),
     storeLinks: storeLinks(g.websites),

@@ -25,7 +25,10 @@ export type StoreGame = {
   ageRating: string | null
   players: string | null
   cover: string | null
+  /** The best landscape picture (for the library add). */
   banner: string | null
+  /** The picture beside the trailer: an artwork that fits a 460×215 box, else a screenshot. */
+  capsule: string | null
   screenshots: string[]
   videos: { name: string; youtubeId: string }[]
   storeLinks: { label: string; url: string }[]

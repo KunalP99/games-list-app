@@ -7,7 +7,7 @@ import { getStoreGame, getDeveloperGames } from '@/lib/igdb'
 // changes, so stale cached payloads are dropped rather than served.
 export const getCachedStoreGame = unstable_cache(
   (id: number) => getStoreGame(id),
-  ['store-game-v3'],
+  ['store-game-v4'],
   { revalidate: 3600 },
 )
 
