@@ -131,6 +131,75 @@ test('identify: The Witcher 3, owning only a DLC adds the game rather than track
   }
 })
 
+// Emulator mode (lib/agent-emulator.ts): a PlayStation game shown in an
+// emulator's window title. Real IGDB, limited to that console.
+const emu = (emulator: Record<string, unknown>) => device.post('/api/agent/identify', { emulator }).then(r => r.json())
+const choose = (body: Record<string, unknown>) => device.post('/api/agent/emulator-choice', body).then(r => r.json())
+const forgetEmulated = async () => {
+  await admin().from('emulator_titles').delete().eq('user_id', uid)
+  await admin().from('games').delete().eq('user_id', uid).ilike('title', 'Shadow of the Colossus%')
+}
+const exeLinkCount = async () => ((await admin().from('game_executables').select('id').eq('user_id', uid)).data ?? []).length
+
+test('emulator: an exact name not in the library is offered, then added as Playing, Emulated, and remembered', async () => {
+  await forgetEmulated()
+  const links = await exeLinkCount()
+  const ps2 = { platform: 8, serial: 'SCUS-97472', title: 'Shadow of the Colossus' }
+  const offer = await emu(ps2)
+  expect(offer.result).toBe('add')
+  expect(offer.candidates).toHaveLength(1)
+  expect(offer.candidates[0].name).toBe('Shadow of the Colossus')
+
+  const added = await choose({ emulator: ps2, igdbId: offer.candidates[0].igdbId, title: offer.candidates[0].name })
+  try {
+    expect(added).toMatchObject({ result: 'added', status: 'playing' })
+    const row = (await admin().from('games').select('status, is_emulated, platform, igdb_id').eq('id', added.gameId).single()).data!
+    expect(row).toMatchObject({ status: 'playing', is_emulated: true, platform: 'PS2', igdb_id: offer.candidates[0].igdbId })
+
+    // Remembered by serial: the same disc under any name goes straight to it.
+    expect(await emu({ ...ps2, title: 'SHADOW OF THE COLOSSUS (USA)' })).toMatchObject({ result: 'tracked', gameId: added.gameId })
+    expect(await exeLinkCount(), 'an emulator never gets an exe link').toBe(links)
+  } finally {
+    await forgetEmulated()
+  }
+})
+
+test('emulator: a game already owned is tracked and marked Emulated; a completed one offers a replay', async () => {
+  await forgetEmulated()
+  const offer = await emu({ platform: 8, title: 'Shadow of the Colossus' })
+  const igdbId = offer.candidates[0].igdbId
+  const owned = await games.add({ title: 'Shadow of the Colossus', status: 'playing', igdb_id: igdbId })
+  try {
+    expect(await emu({ platform: 8, title: 'Shadow of the Colossus' })).toMatchObject({ result: 'tracked', gameId: owned })
+    expect((await admin().from('games').select('is_emulated').eq('id', owned).single()).data!.is_emulated).toBe(true)
+
+    await admin().from('games').update({ status: 'completed', completion_date: '2020-01-01' }).eq('id', owned)
+    expect(await emu({ platform: 8, title: 'Shadow of the Colossus' })).toMatchObject({ result: 'untracked', gameId: owned, resumable: 'completed' })
+  } finally {
+    await forgetEmulated()
+  }
+})
+
+test('emulator: no exact match offers up to 3 to pick from; "None of these" is never asked again', async () => {
+  await forgetEmulated()
+  const fuzzy = { platform: 8, title: 'Shadow Colossus' }
+  const pick = await emu(fuzzy)
+  expect(pick.result).toBe('pick')
+  expect(pick.candidates.length).toBeGreaterThan(0)
+  expect(pick.candidates.length).toBeLessThanOrEqual(3)
+  expect(pick.candidates.map((c: { name: string }) => c.name)).toContain('Shadow of the Colossus')
+
+  expect(await choose({ emulator: fuzzy, none: true })).toEqual({ result: 'ignored' })
+  expect(await emu(fuzzy)).toEqual({ result: 'ignored' })
+  await forgetEmulated()
+})
+
+test('emulator: an unsupported console or nothing to go on is refused', async () => {
+  expect((await device.post('/api/agent/identify', { emulator: { platform: 6, title: 'Doom' } })).status).toBe(400)
+  expect((await device.post('/api/agent/identify', { emulator: { platform: 8 } })).status).toBe(400)
+  expect((await device.post('/api/agent/emulator-choice', { emulator: { platform: 8, title: 'X' } })).status).toBe(400)
+})
+
 test('identify is limited to 30 a minute per account', async () => {
   await fillRateLimit(uid, 'agent_identify', 30)
   const res = await device.post('/api/agent/identify', { titleGuess: 'Portal 2', exeName: 'portal2.exe' })

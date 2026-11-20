@@ -81,3 +81,11 @@ end $$;
 
 -- ── Ticket ledger: no direct inserts ────────────────────────────────────────
 drop policy if exists tickets_insert_own on public.ticket_transactions;
+
+-- ── Emulator titles (db/emulator-tracking.sql): server-written only ─────────
+do $$
+begin
+  if to_regclass('public.emulator_titles') is not null then
+    revoke insert, update, delete on public.emulator_titles from anon, authenticated;
+  end if;
+end $$;

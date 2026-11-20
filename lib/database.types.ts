@@ -471,6 +471,36 @@ export type Database = {
         }
         Relationships: []
       }
+      emulator_titles: {
+        Row: {
+          id: string
+          user_id: string
+          /** IGDB platform id (7 PS1, 8 PS2, 9 PS3, 38 PSP, 46 Vita, 48 PS4). */
+          platform: number
+          /** 'serial:SLUS20946' or 'title:<letters and digits>' (lib/emulators.ts). */
+          title_key: string
+          /** Null: "None of these", never ask again. */
+          game_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          platform: number
+          title_key: string
+          game_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          platform?: number
+          title_key?: string
+          game_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       ticket_transactions: {
         Row: {
           id: string

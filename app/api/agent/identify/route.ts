@@ -6,8 +6,10 @@ import { resolveSteamApp } from '@/lib/steam-games'
 import { findGameByExactName } from '@/lib/name-games'
 import { cleanSubmittedSuffix, uniqueByBasename } from '@/lib/detectable'
 import { normaliseExeName } from '@/lib/agent-session'
-import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent, getEditionFamily } from '@/lib/igdb'
+import { fileTrackerGame } from '@/lib/agent-file-game'
+import { parseEmulatorRequest } from '@/lib/emulators'
+import { identifyEmulated } from '@/lib/agent-emulator'
 import { pickRow, resolveRow, rowsWithIgdbIds, isTrackable, type LibraryRow } from '@/lib/trackable-row'
 import { writeExeLink } from '@/lib/exe-links'
 import { editionStatus } from '@/lib/edition'
@@ -60,6 +62,9 @@ function escapeLike(s: string): string {
  *   igdbId     — a specific game a person picked themselves from the agent's
  *                own search panel. Nothing to resolve: they already chose it,
  *                so this skips straight to "already owned? else file it".
+ *   emulator   — { platform, serial?, title? }: a game shown in a PlayStation
+ *                emulator's window title. Handled apart (lib/agent-emulator.ts),
+ *                with its own answers (add / pick / ignored) and no exe link.
  *   lookupExe  — kept for trackers released before the master list: just
  *                the bare exe name. Checked against `detectable_games` by
  *                basename, and only trusted when every row with that name
@@ -123,6 +128,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 })
+  }
+
+  // Emulator mode: a game running inside an emulator (lib/agent-emulator.ts).
+  // Answers on its own terms and never writes an exe link, since the one
+  // emulator program runs every game.
+  if (body?.emulator != null) {
+    const req = parseEmulatorRequest(body.emulator)
+    if (typeof req === 'string') return NextResponse.json({ error: req }, { status: 400 })
+    return NextResponse.json(await identifyEmulated(sb, userId, req))
   }
 
   const appId = body?.steamAppId
@@ -314,33 +328,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // lib/edition.ts), with the same metadata any other add would get, so it
   // does not sit in the library as a bare title.
   const filedStatus = editionStatus('ambient')
-  const { getRawgGameDetail } = await import('@/lib/rawg')
-  const detail = await getRawgGameDetail(igdbId)
-
-  const { data: created, error } = await (sb.from('games') as any)
-    .insert({
-      user_id: userId,
-      title: detail?.name ?? resolvedName,
-      developer: detail?.developers?.[0]?.name ?? null,
-      status: filedStatus,
-      platform,
-      start_date: new Date().toISOString().slice(0, 10),
-      steam_appid: steamAppId,
-      [PROVIDER_ID_COLUMN]: igdbId,
-      image_url: detail?.background_image ?? null,
-      cover_image_url: detail?.cover_image ?? null,
-      artwork_url: detail?.artwork_image ?? null,
-      genres: detail?.genres?.map(g => g.name) ?? null,
-      description: detail?.description_raw ?? null,
-      release_date: detail?.released ?? null,
-      release_date_precision: detail?.released ? 'full' : 'year',
-      completion_date_precision: 'year',
-      dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
-    })
-    .select('id, title')
-    .single()
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const created = await fileTrackerGame(sb, {
+    userId, igdbId, fallbackTitle: resolvedName, status: filedStatus, platform, steamAppId,
+  })
+  if ('error' in created) return NextResponse.json({ error: created.error }, { status: 500 })
 
   await linkExe(created.id)
 

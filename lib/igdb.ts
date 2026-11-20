@@ -168,20 +168,24 @@ type IgdbRankedGame = IgdbGame & RankCandidate
  * prefix sets, and a failed multiquery still leaves the plain search — the
  * old behaviour — rather than nothing.
  */
-async function searchPool(query: string): Promise<IgdbRankedGame[]> {
+async function searchPool(query: string, platformId?: number): Promise<IgdbRankedGame[]> {
   const q = apicalypseString(query)
   const fields = `fields ${DETAIL_FIELDS}, ${RANK_FIELDS};`
   const fullGame = `game_type = (${FULL_GAME_TYPES.join(',')}) & version_parent = null`
+  // Only games released on one console (the emulator's), when asked.
+  const platform = platformId != null ? Math.trunc(platformId) : null
+  const onPlatform = platform != null ? ` & platforms = (${platform})` : ''
+  const searchWhere = platform != null ? ` where platforms = (${platform});` : ''
 
-  const search = await igdbQuery<IgdbRankedGame>('games', `search "${q}"; ${fields} limit ${SEARCH_POOL_SIZE};`)
+  const search = await igdbQuery<IgdbRankedGame>('games', `search "${q}"; ${fields}${searchWhere} limit ${SEARCH_POOL_SIZE};`)
   // Punctuation-blind starts-with match on the slug (see slugPrefix), so a
   // half-typed title without its ":" or "'" still finds the game.
   const slug = slugPrefix(query)
   const sets = await igdbQuery<{ name: string; result: IgdbRankedGame[] }>('multiquery', [
-    `query games "exact" { ${fields} where name ~ "${q}"; limit 10; };`,
-    `query games "prefix" { ${fields} where name ~ "${q}"* & ${fullGame}; sort total_rating_count desc; limit 20; };`,
+    `query games "exact" { ${fields} where name ~ "${q}"${onPlatform}; limit 10; };`,
+    `query games "prefix" { ${fields} where name ~ "${q}"* & ${fullGame}${onPlatform}; sort total_rating_count desc; limit 20; };`,
     ...(slug.length >= 2
-      ? [`query games "slug" { ${fields} where slug ~ "${slug}"* & ${fullGame}; sort total_rating_count desc; limit 20; };`]
+      ? [`query games "slug" { ${fields} where slug ~ "${slug}"* & ${fullGame}${onPlatform}; sort total_rating_count desc; limit 20; };`]
       : []),
   ].join('\n'))
   const set = (name: string) => sets.find(r => r.name === name)?.result ?? []
@@ -195,6 +199,23 @@ export async function searchGames(query: string, page = 1): Promise<RawgSearchRe
   const ranked = rankSearchResults(query, await searchPool(query))
   const games = ranked.slice((page - 1) * SEARCH_PAGE_SIZE, page * SEARCH_PAGE_SIZE)
   return games.map(g => ({
+    id: g.id,
+    name: g.name,
+    released: releasedFrom(g.first_release_date),
+    background_image: heroImage(g),
+    cover_image: coverUrl(g.cover?.image_id),
+    developers: developersFrom(g.involved_companies),
+  }))
+}
+
+/**
+ * The best matches for a name among games released on one console (an IGDB
+ * platform id), for the tracker's emulator mode: the same pool and ranking as
+ * the site's search box, limited to that platform.
+ */
+export async function searchGamesOnPlatform(query: string, platformId: number, limit = 5): Promise<RawgSearchResult[]> {
+  const ranked = rankSearchResults(query, await searchPool(query, platformId))
+  return ranked.slice(0, limit).map(g => ({
     id: g.id,
     name: g.name,
     released: releasedFrom(g.first_release_date),
