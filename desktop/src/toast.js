@@ -7,6 +7,7 @@
 
 import { applyTheme } from './theme.js'
 import { populatePlatformSelect } from './platforms.js'
+import { renderEmulatorPrompt } from './emulator-prompt.js'
 
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
@@ -22,6 +23,8 @@ let current = null
 let currentPlatform = null
 /** The resume/replay prompt being shown, if that's what this toast is for. */
 let currentResume = null
+/** The emulator question being shown, if that's what this toast is for. */
+let currentEmulator = null
 
 /**
  * True once answered.
@@ -76,6 +79,7 @@ function render(prompt) {
   el('said-no').hidden = true
   el('platform-ask').hidden = true
   el('resume-ask').hidden = true
+  el('emu-ask').hidden = true
 }
 
 /** Mirrors renderPlatformPrompt in main.js — see there for why the three
@@ -89,6 +93,7 @@ function renderPlatform(prompt) {
   el('said-no').hidden = true
   el('platform-ask').hidden = false
   el('resume-ask').hidden = true
+  el('emu-ask').hidden = true
 }
 
 /** Mirrors renderResumePrompt in main.js. */
@@ -117,6 +122,23 @@ function renderResume(prompt) {
   el('said-no').hidden = true
   el('platform-ask').hidden = true
   el('resume-ask').hidden = false
+  el('emu-ask').hidden = true
+}
+
+/** The emulator question (emulator-prompt.js, shared with the status screen). */
+function renderEmulator(prompt) {
+  currentEmulator = prompt
+  renderEmulatorPrompt(el('emu-ask'), prompt, {
+    onAnswering: () => { answered = true },
+    // The answer may raise a resume prompt (an owned, completed game); the
+    // watcher re-shows the toast for it, so just close.
+    onAnswered: close,
+  })
+  el('ask').hidden = true
+  el('said-no').hidden = true
+  el('platform-ask').hidden = true
+  el('resume-ask').hidden = true
+  el('emu-ask').hidden = false
 }
 
 async function load() {
@@ -129,6 +151,8 @@ async function load() {
     renderPlatform(status.pending_platform_prompt)
   } else if (status?.pending_resume_prompt) {
     renderResume(status.pending_resume_prompt)
+  } else if (status?.pending_emulator_prompt) {
+    renderEmulator(status.pending_emulator_prompt)
   } else {
     // Answered elsewhere between the window opening and this running.
     close()
@@ -275,6 +299,11 @@ listen('status-changed', async () => {
   if (status?.pending_resume_prompt) {
     applyTheme(status)
     if (status.pending_resume_prompt.game_id !== currentResume?.game_id) renderResume(status.pending_resume_prompt)
+    return
+  }
+  if (status?.pending_emulator_prompt) {
+    applyTheme(status)
+    if (status.pending_emulator_prompt.key !== currentEmulator?.key) renderEmulator(status.pending_emulator_prompt)
     return
   }
   close()

@@ -6,6 +6,7 @@
 
 import { applyTheme } from './theme.js'
 import { populatePlatformSelect } from './platforms.js'
+import { renderEmulatorPrompt } from './emulator-prompt.js'
 
 const { invoke } = window.__TAURI__.core
 const { listen } = window.__TAURI__.event
@@ -157,6 +158,21 @@ function renderPlatformPrompt(prompt) {
 
 /** The resume/replay prompt currently shown here, if any. */
 let currentResumePrompt = null
+/** The emulator question's key, so a status refresh doesn't redraw it under a click. */
+let currentEmulatorKey = null
+
+function renderEmulatorCard(prompt) {
+  const card = el('emulator-prompt-card')
+  if (!prompt) {
+    card.hidden = true
+    currentEmulatorKey = null
+    return
+  }
+  card.hidden = false
+  if (prompt.key === currentEmulatorKey) return
+  currentEmulatorKey = prompt.key
+  renderEmulatorPrompt(card, prompt, { onAnswered: refresh })
+}
 
 /** Mirrors toast.js's own rendering exactly — same reasoning as renderPrompt. */
 function renderResumePrompt(prompt) {
@@ -260,6 +276,7 @@ async function refresh() {
   renderPrompt(status.pending_prompt)
   renderPlatformPrompt(status.pending_platform_prompt)
   renderResumePrompt(status.pending_resume_prompt)
+  renderEmulatorCard(status.pending_emulator_prompt)
   renderUpdateModal(status.pending_update)
   el('sync-line').textContent = formatSync(status.last_sync, status.queued, status.last_error)
 }

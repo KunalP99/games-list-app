@@ -234,6 +234,20 @@ pub struct IdentifyResponse {
     /// otherwise.
     #[serde(default)]
     pub resumable: Option<String>,
+    /// Emulator mode only: the game to offer (`add`, one) or to pick from
+    /// (`pick`, up to three).
+    #[serde(default)]
+    pub candidates: Vec<EmulatorCandidate>,
+}
+
+/// A game the site offers for what an emulator is running.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmulatorCandidate {
+    #[serde(rename = "igdbId")]
+    pub igdb_id: u32,
+    pub name: String,
+    #[serde(default)]
+    pub released: Option<String>,
 }
 
 /// What to identify a running game by — however the agent came to recognise it.
@@ -292,6 +306,51 @@ pub async fn post_identify(
         return Err(format!("identify failed: {}", res.status()));
     }
     res.json::<IdentifyResponse>().await.map_err(|e| e.to_string())
+}
+
+fn emulator_body(game: &crate::emulators::EmulatedGame) -> serde_json::Value {
+    serde_json::json!({ "platform": game.platform, "serial": game.serial, "title": game.title })
+}
+
+async fn post_json(base: &str, token: &str, path: &str, body: &serde_json::Value) -> Result<IdentifyResponse, String> {
+    let res = client()
+        .map_err(|e| e.to_string())?
+        .post(format!("{base}{path}"))
+        .bearer_auth(token)
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("{path} failed: {}", res.status()));
+    }
+    res.json::<IdentifyResponse>().await.map_err(|e| e.to_string())
+}
+
+/// What a game shown in an emulator is (`/api/agent/identify`, emulator
+/// mode). Answers `tracked`, `untracked`, `add`, `pick`, `ignored` or
+/// `unknown`; never links the emulator's exe to anything.
+pub async fn post_identify_emulator(
+    base: &str,
+    token: &str,
+    game: &crate::emulators::EmulatedGame,
+) -> Result<IdentifyResponse, String> {
+    post_json(base, token, "/api/agent/identify", &serde_json::json!({ "emulator": emulator_body(game) })).await
+}
+
+/// The answer to the emulator pop-up: this game (`Some`), or "None of
+/// these" (`None`). The site remembers it either way.
+pub async fn post_emulator_choice(
+    base: &str,
+    token: &str,
+    game: &crate::emulators::EmulatedGame,
+    choice: Option<(u32, &str)>,
+) -> Result<IdentifyResponse, String> {
+    let body = match choice {
+        Some((id, title)) => serde_json::json!({ "emulator": emulator_body(game), "igdbId": id, "title": title }),
+        None => serde_json::json!({ "emulator": emulator_body(game), "none": true }),
+    };
+    post_json(base, token, "/api/agent/emulator-choice", &body).await
 }
 
 /// One result from `search_games` — the same shape the website's own add-game

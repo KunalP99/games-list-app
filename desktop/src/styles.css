@@ -480,3 +480,13 @@ button { font: inherit; cursor: pointer; border-radius: 8px; transition: backgro
 .modal-heading { margin: 0 0 7px; font-weight: 600; font-size: 14px; }
 .modal-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--fg-secondary); }
 .modal-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ── Emulator question (emulator-prompt.js) ──────────────────────────────── */
+.emu-help { color: var(--fg-muted); font-size: 12px; }
+.emu-options { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.emu-option {
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

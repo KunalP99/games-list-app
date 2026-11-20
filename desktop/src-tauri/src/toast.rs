@@ -25,10 +25,11 @@ pub const LABEL: &str = "toast";
 
 /// Logical size of the toast, and the gap it keeps from the screen edges.
 ///
-/// Tall enough for the longest state — a failed link, whose explanation runs to
+/// Tall enough for the longest state — the emulator question with three games
+/// to pick from (`emulator-prompt.js`); a failed link's explanation runs to
 /// two lines. The card is centred, so the shorter states simply sit in more
 /// space rather than looking padded out.
-const SIZE: (f64, f64) = (340.0, 166.0);
+const SIZE: (f64, f64) = (340.0, 226.0);
 const MARGIN: f64 = 16.0;
 
 /// Where to put a window of `size` in the top-right of a work area.

@@ -17,6 +17,7 @@ use crate::api::{self, AgentState, PlayingGame};
 use crate::config::{self, AppConfig};
 use crate::detect;
 use crate::ea;
+use crate::emulators;
 use crate::launchers;
 use crate::master_list;
 use crate::matching;
@@ -205,6 +206,39 @@ pub struct PendingResumePrompt {
     /// target status (`"playing"` or `"ambient"`) is the user's own choice,
     /// since unlike the other two there's no single obvious answer.
     pub kind: String,
+    /// Set when the game is running in an emulator (`emulators.rs`): then
+    /// no exe link is made on accepting, and "Not now" quiets this game in
+    /// this emulator launch, not the whole emulator.
+    #[serde(skip)]
+    pub emulator_key: Option<String>,
+}
+
+/// A game running in an emulator that the site couldn't simply track: an
+/// exact match not in the library (`kind` "add", one candidate) or a name
+/// with no exact match (`kind` "pick", up to three). Answered through
+/// `respond_to_emulator_prompt`, and remembered by the site.
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingEmulatorPrompt {
+    pub pid: u32,
+    /// "PCSX2", "DuckStation", ...
+    pub emulator: String,
+    /// What the emulator showed, for the question ("Playing ... in PCSX2?").
+    pub label: String,
+    pub kind: String,
+    pub candidates: Vec<api::EmulatorCandidate>,
+    pub game: emulators::EmulatedGame,
+    pub key: String,
+}
+
+/// What the site said about a game seen in an emulator, this run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EmulatorKnown {
+    /// This library game: track it while the emulator shows it.
+    Tracked(String),
+    /// "None of these" was said: leave it alone.
+    Ignored,
+    /// A question about it is out (or was, until the next state refresh).
+    Asked,
 }
 
 #[derive(Default)]
@@ -217,6 +251,13 @@ pub struct Shared {
     pub pending_prompt: Option<PendingPrompt>,
     pub pending_platform_prompt: Option<PendingPlatformPrompt>,
     pub pending_resume_prompt: Option<PendingResumePrompt>,
+    pub pending_emulator_prompt: Option<PendingEmulatorPrompt>,
+    /// Emulator game key (`EmulatedGame::key`) -> what the site said, this run.
+    /// `Asked` entries go on every state refresh, like `identified`.
+    pub emulator_games: HashMap<String, EmulatorKnown>,
+    /// Emulator game key -> the emulator process where "Not now" was said;
+    /// dropped once that process closes.
+    pub emulator_declined: HashMap<String, u32>,
     /// Executables not to ask about again *this run*.
     ///
     /// Separate from `asked.json`, which is forever and is written only when
@@ -462,6 +503,7 @@ fn maybe_prompt_resume(app: &AppHandle, response: &api::IdentifyResponse, candid
         game_id,
         title: title.clone(),
         kind: kind.to_string(),
+        emulator_key: None,
     });
     toast::show(app, &title);
     true
@@ -517,6 +559,8 @@ pub async fn run_loop(app: AppHandle) {
     // Roblox (and only Roblox) must have a visible window to count as being
     // played — it lives on in the tray after you stop. See detect.rs.
     let mut window_grace = detect::WindowGrace::default();
+    // Emulator pid -> its window titles when last logged.
+    let mut emulator_titles_seen: HashMap<u32, Vec<String>> = HashMap::new();
     let mut state_fetched: Option<Instant> = None;
     // At startup, then daily (hourly after a failure).
     let mut list_check_due = Instant::now();
@@ -561,6 +605,7 @@ pub async fn run_loop(app: AppHandle) {
                     // held for the rest of the process.
                     shared.identified.clear();
                     shared.identified_titles.clear();
+                    shared.emulator_games.retain(|_, known| *known != EmulatorKnown::Asked);
                     drop(shared);
                     ping_ui(&app);
                 }
@@ -592,6 +637,40 @@ pub async fn run_loop(app: AppHandle) {
                 if !state.ignored_executables.is_empty() {
                     candidates.retain(|c| !state.ignored_executables.contains(&c.exe_name));
                 }
+            }
+        }
+        // Emulators apart: one program runs every game, so what they're
+        // running comes from their window titles (emulators.rs), never from
+        // an exe link, the other identify paths or the generic toast.
+        let emulated: Vec<(detect::Candidate, &'static emulators::Emulator, Option<emulators::EmulatedGame>)> = candidates
+            .iter()
+            .filter_map(|c| {
+                let emulator = emulators::emulator_for(&c.exe_name)?;
+                Some((c.clone(), emulator, emulators::game_in(emulator, &c.window_titles)))
+            })
+            .collect();
+        candidates.retain(|c| emulators::emulator_for(&c.exe_name).is_none());
+        for (c, emulator, game) in &emulated {
+            // What each emulator's windows say, whenever it changes: the
+            // record of real titles the parsers are checked against.
+            if emulator_titles_seen.get(&c.pid) != Some(&c.window_titles) {
+                log::info!("{} windows: {:?} -> {:?}", emulator.name, c.window_titles, game);
+                emulator_titles_seen.insert(c.pid, c.window_titles.clone());
+            }
+        }
+        emulator_titles_seen.retain(|pid, _| emulated.iter().any(|(c, _, _)| c.pid == *pid));
+        {
+            let mut shared = tracker.shared.lock().unwrap();
+            shared.emulator_declined.retain(|_, pid| emulated.iter().any(|(c, _, _)| c.pid == *pid));
+            // The emulator closed, or moved on to another game, with its
+            // question still out: there's nothing left to ask about.
+            let stale = shared.pending_emulator_prompt.as_ref().is_some_and(|p| {
+                !emulated.iter().any(|(c, _, g)| c.pid == p.pid && g.as_ref().is_some_and(|g| g.key() == p.key))
+            });
+            if stale {
+                shared.pending_emulator_prompt = None;
+                drop(shared);
+                ping_ui(&app);
             }
         }
         judge.retain_running(&candidates.iter().map(|c| c.pid).collect());
@@ -633,6 +712,24 @@ pub async fn run_loop(app: AppHandle) {
                     }
                     if let Some(game) = playing.iter().find(|g| &g.id == game_id) {
                         matched = Some((game.clone(), None, Some(candidate.exe_name.clone())));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // A game in an emulator the site has already placed in the library.
+        if matched.is_none() {
+            let shared = tracker.shared.lock().unwrap();
+            for (c, _, game) in &emulated {
+                let Some(game) = game else { continue };
+                let key = game.key();
+                if shared.emulator_declined.get(&key) == Some(&c.pid) {
+                    continue;
+                }
+                if let Some(EmulatorKnown::Tracked(id)) = shared.emulator_games.get(&key) {
+                    if let Some(g) = playing.iter().find(|g| &g.id == id) {
+                        matched = Some((g.clone(), None, None));
                         break;
                     }
                 }
@@ -722,6 +819,13 @@ pub async fn run_loop(app: AppHandle) {
                     let shared = tracker.shared.lock().unwrap();
                     candidates.iter().filter(|c| !declined_this_launch(&shared.resume_declined, c)).cloned().collect()
                 };
+                // Emulators first: a game they show is settled by the site
+                // (tracked, or a question raised), never by the paths below.
+                if identify_emulators(&app, &base, &token, &emulated, &playing).await {
+                    tracker.shared.lock().unwrap().force_refresh = true;
+                    continue_sleep(&app).await;
+                    continue;
+                }
                 let m = identify_master_list(&app, &base, &token, &candidates).await;
                 let s = !m && identify_steam_games(&app, &base, &token, &candidates, &mut judge).await;
                 let e = !m && !s && identify_other_launchers(&app, &base, &token, &candidates, &mut judge).await;
@@ -1026,6 +1130,131 @@ async fn identify_steam_games(
 /// and the judge's graphics-module probe can be defeated by anti-cheat
 /// (confirmed live against Dead by Daylight, whose path and modules are both
 /// unreadable). Without a readable path only bare-name entries can match.
+/// Waits out one poll interval, as the end of `run_loop`'s tick does.
+async fn continue_sleep(app: &AppHandle) {
+    let poll_seconds = app.state::<Tracker>().shared.lock().unwrap().state.as_ref().map(|s| s.poll_seconds).unwrap_or(10);
+    tokio::time::sleep(Duration::from_secs(poll_seconds)).await;
+}
+
+/// Puts each game shown in an emulator that isn't settled yet to the site
+/// (emulator mode), and acts on the answer: track it, raise the resume
+/// prompt, or ask which game it is. True when something was decided or
+/// asked, so the caller doesn't also raise the ordinary toast.
+async fn identify_emulators(
+    app: &AppHandle,
+    base: &str,
+    token: &str,
+    emulated: &[(detect::Candidate, &'static emulators::Emulator, Option<emulators::EmulatedGame>)],
+    playing: &[PlayingGame],
+) -> bool {
+    for (candidate, emulator, game) in emulated {
+        let Some(game) = game else { continue };
+        let key = game.key();
+        {
+            let tracker = app.state::<Tracker>();
+            let shared = tracker.shared.lock().unwrap();
+            if shared.emulator_declined.get(&key) == Some(&candidate.pid) {
+                continue;
+            }
+            // Already asked, and the question is still out.
+            if shared.pending_emulator_prompt.as_ref().is_some_and(|p| p.key == key)
+                || shared.pending_resume_prompt.as_ref().is_some_and(|p| p.emulator_key.as_deref() == Some(key.as_str()))
+            {
+                continue;
+            }
+            match shared.emulator_games.get(&key) {
+                Some(EmulatorKnown::Ignored) | Some(EmulatorKnown::Asked) => continue,
+                // Tracked but no longer Playing (completed on the site, say):
+                // ask again what it is now.
+                Some(EmulatorKnown::Tracked(id)) if playing.iter().any(|g| &g.id == id) => continue,
+                _ => {}
+            }
+        }
+        if backing_off(app, &key) {
+            continue;
+        }
+
+        let response = match api::post_identify_emulator(base, token, game).await {
+            Ok(r) => r,
+            Err(err) => {
+                log::warn!("could not identify {} in {}: {err}", game.label(), emulator.name);
+                back_off(app, &key);
+                continue;
+            }
+        };
+        log::info!("{} in {} -> {}", game.label(), emulator.name, response.result);
+        let tracker = app.state::<Tracker>();
+        match response.result.as_str() {
+            "tracked" => {
+                if let Some(id) = response.game_id.clone() {
+                    tracker.shared.lock().unwrap().emulator_games.insert(key, EmulatorKnown::Tracked(id));
+                    return true;
+                }
+            }
+            "untracked" => {
+                tracker.shared.lock().unwrap().emulator_games.insert(key.clone(), EmulatorKnown::Asked);
+                if maybe_prompt_resume(app, &response, candidate) {
+                    if let Some(p) = tracker.shared.lock().unwrap().pending_resume_prompt.as_mut() {
+                        p.emulator_key = Some(key);
+                        // No exe link for an emulator when it's accepted.
+                        p.exe_name = String::new();
+                    }
+                    return true;
+                }
+            }
+            "add" | "pick" if !response.candidates.is_empty() => {
+                {
+                    let mut shared = tracker.shared.lock().unwrap();
+                    shared.emulator_games.insert(key.clone(), EmulatorKnown::Asked);
+                    shared.pending_emulator_prompt = Some(PendingEmulatorPrompt {
+                        pid: candidate.pid,
+                        emulator: emulator.name.to_string(),
+                        label: game.label(),
+                        kind: response.result.clone(),
+                        candidates: response.candidates.iter().take(3).cloned().collect(),
+                        game: game.clone(),
+                        key,
+                    });
+                }
+                toast::show(app, &game.label());
+                ping_ui(app);
+                return true;
+            }
+            "ignored" => {
+                tracker.shared.lock().unwrap().emulator_games.insert(key, EmulatorKnown::Ignored);
+            }
+            _ => back_off(app, &key),
+        }
+    }
+    false
+}
+
+/// What to do with the answer to the emulator pop-up, once the site has it.
+pub fn emulator_choice_answered(app: &AppHandle, prompt: &PendingEmulatorPrompt, response: &api::IdentifyResponse) {
+    let tracker = app.state::<Tracker>();
+    let mut shared = tracker.shared.lock().unwrap();
+    shared.pending_emulator_prompt = None;
+    match (response.result.as_str(), response.game_id.clone()) {
+        ("tracked" | "added", Some(id)) => {
+            shared.emulator_games.insert(prompt.key.clone(), EmulatorKnown::Tracked(id));
+        }
+        ("untracked", Some(game_id)) if response.resumable.is_some() => {
+            shared.pending_resume_prompt = Some(PendingResumePrompt {
+                exe_name: String::new(),
+                pid: prompt.pid,
+                game_id,
+                title: response.title.clone().unwrap_or_else(|| prompt.label.clone()),
+                kind: response.resumable.clone().unwrap_or_default(),
+                emulator_key: Some(prompt.key.clone()),
+            });
+        }
+        _ => {
+            shared.emulator_games.insert(prompt.key.clone(), EmulatorKnown::Ignored);
+        }
+    }
+    shared.force_refresh = true;
+}
+
 async fn identify_master_list(
     app: &AppHandle,
     base: &str,
@@ -1340,7 +1569,7 @@ mod tests {
     use super::*;
 
     fn running(exe: &str, pid: u32) -> detect::Candidate {
-        detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true }
+        detect::Candidate { pid, exe_name: exe.to_string(), path: None, run_time_secs: 600, has_window: true, window_titles: Vec::new() }
     }
 
     fn link(exe: &str, suffix: Option<&str>, game: &str) -> api::ExeLink {

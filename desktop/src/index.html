@@ -113,6 +113,11 @@
         <p class="toast-error" id="resume-prompt-error" hidden></p>
       </section>
 
+      <!-- A game running in an emulator that the site couldn't simply
+           track: "Track it?" or which one it is (emulator-prompt.js, shared
+           with the toast's #emu-ask). -->
+      <section class="card prompt" id="emulator-prompt-card" hidden></section>
+
       <!-- Linking happens here rather than in a website window: the app
            already knows what is running and which games are Playing, so a
            second window (and a webview session that can expire) buys nothing. -->

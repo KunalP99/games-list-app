@@ -6,6 +6,7 @@
 mod api;
 mod config;
 mod detect;
+mod emulators;
 mod matching;
 mod ea;
 mod launchers;
@@ -19,7 +20,7 @@ use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
-use tracker::{PendingPlatformPrompt, PendingPrompt, PendingResumePrompt, Tracker};
+use tracker::{PendingEmulatorPrompt, PendingPlatformPrompt, PendingPrompt, PendingResumePrompt, Tracker};
 
 /// A version seen once at launch, waiting on the main window's modal to ask
 /// about it. Holds the real `Update` handle, not just its version string —
@@ -58,6 +59,7 @@ pub struct StatusView {
     pending_prompt: Option<PendingPrompt>,
     pending_platform_prompt: Option<PendingPlatformPrompt>,
     pending_resume_prompt: Option<PendingResumePrompt>,
+    pending_emulator_prompt: Option<PendingEmulatorPrompt>,
     api_base: String,
     pending_update: Option<UpdateInfo>,
     /// True only in a debug build — never in the installed app, which is
@@ -105,6 +107,7 @@ fn get_status(app: AppHandle) -> StatusView {
         pending_prompt: shared.pending_prompt.clone(),
         pending_platform_prompt: shared.pending_platform_prompt.clone(),
         pending_resume_prompt: shared.pending_resume_prompt.clone(),
+        pending_emulator_prompt: shared.pending_emulator_prompt.clone(),
         api_base: config.base(),
         pending_update,
         is_dev: cfg!(debug_assertions),
@@ -175,6 +178,9 @@ fn running_programs() -> Vec<String> {
     let mut names: Vec<String> = detect::candidates(&mut system)
         .into_iter()
         .filter(detect::pickable)
+        // An emulator runs every game, so linking it to one would be wrong
+        // for all the others; its games are read from its window instead.
+        .filter(|c| emulators::emulator_for(&c.exe_name).is_none())
         .map(|c| c.exe_name)
         .collect();
     names.sort();
@@ -477,7 +483,16 @@ async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<S
     if !accept {
         let mut shared = tracker.shared.lock().unwrap();
         shared.pending_resume_prompt = None;
-        shared.resume_declined.insert(prompt.exe_name.clone(), prompt.pid);
+        match &prompt.emulator_key {
+            // In an emulator: this game in this emulator launch, not the
+            // whole emulator, which may move on to another game.
+            Some(key) => {
+                shared.emulator_declined.insert(key.clone(), prompt.pid);
+            }
+            None => {
+                shared.resume_declined.insert(prompt.exe_name.clone(), prompt.pid);
+            }
+        }
         drop(shared);
         let _ = app.emit("status-changed", ());
         return Ok(());
@@ -506,6 +521,52 @@ async fn respond_to_resume_prompt(app: AppHandle, accept: bool, status: Option<S
     shared.force_refresh = true;
     drop(shared);
     let _ = app.emit("status-changed", ());
+    Ok(())
+}
+
+/// Answer the emulator pop-up ("Playing ... in PCSX2?" / "Which game is
+/// this?"). `igdb_id` + `title`: this game, which the site tracks or adds as
+/// Playing and remembers. `none`: "None of these", remembered too. Neither:
+/// "Not now", which quiets this game until the emulator closes and tells the
+/// site nothing.
+///
+/// Reads the stored prompt rather than trusting the page for which emulator
+/// game it's about.
+#[tauri::command]
+async fn respond_to_emulator_prompt(
+    app: AppHandle,
+    igdb_id: Option<u32>,
+    title: Option<String>,
+    none: Option<bool>,
+) -> Result<(), String> {
+    let tracker = app.state::<Tracker>();
+    let prompt = tracker.shared.lock().unwrap().pending_emulator_prompt.clone();
+    let Some(prompt) = prompt else { return Ok(()) };
+
+    let choice = match (igdb_id, title.as_deref(), none.unwrap_or(false)) {
+        (Some(id), Some(t), _) => Some((id, t)),
+        (_, _, true) => None,
+        _ => {
+            let mut shared = tracker.shared.lock().unwrap();
+            shared.pending_emulator_prompt = None;
+            shared.emulator_declined.insert(prompt.key.clone(), prompt.pid);
+            drop(shared);
+            let _ = app.emit("status-changed", ());
+            return Ok(());
+        }
+    };
+
+    let (base, token) = {
+        let config = tracker.snapshot_config();
+        (config.base(), config.token.unwrap_or_default())
+    };
+    let response = api::post_emulator_choice(&base, &token, &prompt.game, choice).await?;
+    log::info!("{} in {}: answered {} -> {}", prompt.label, prompt.emulator, choice.map(|c| c.1).unwrap_or("none of these"), response.result);
+    tracker::emulator_choice_answered(&app, &prompt, &response);
+    let _ = app.emit("status-changed", ());
+    if app.state::<Tracker>().shared.lock().unwrap().pending_resume_prompt.is_some() {
+        toast::show(&app, &prompt.label);
+    }
     Ok(())
 }
 
@@ -620,6 +681,7 @@ pub fn run() {
             install_update,
             set_platform,
             respond_to_resume_prompt,
+            respond_to_emulator_prompt,
         ])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;

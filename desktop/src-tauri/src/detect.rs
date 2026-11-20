@@ -18,6 +18,10 @@ pub struct Candidate {
     pub path: Option<String>,
     pub run_time_secs: u64,
     pub has_window: bool,
+    /// Its visible windows' titles. Only emulators read these
+    /// (`emulators.rs`): what an emulator's window says is the one way to tell
+    /// which game it's running.
+    pub window_titles: Vec<String>,
 }
 
 /// Programs that are never games, so the prompt stays away from everyday
@@ -165,7 +169,7 @@ pub fn new_system() -> System {
 /// Every running program that has a visible window.
 pub fn candidates(sys: &mut System) -> Vec<Candidate> {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-    let windowed = visible_window_pids();
+    let mut windowed = visible_windows();
 
     sys.processes()
         .iter()
@@ -180,7 +184,8 @@ pub fn candidates(sys: &mut System) -> Vec<Candidate> {
                 exe_name,
                 path: proc_.exe().map(|p| p.to_string_lossy().to_lowercase()),
                 run_time_secs: proc_.run_time(),
-                has_window: windowed.contains(&pid_u32),
+                has_window: windowed.contains_key(&pid_u32),
+                window_titles: windowed.remove(&pid_u32).unwrap_or_default(),
             })
         })
         .collect()
@@ -393,39 +398,53 @@ fn looks_like_game_with(c: &Candidate, due_to_probe: bool, mut modules: impl FnM
 
 // ── Windows specifics ───────────────────────────────────────────────────────
 
+/// Every process with a visible, titled window, and those windows' titles.
 #[cfg(windows)]
-fn visible_window_pids() -> HashSet<u32> {
+fn visible_windows() -> HashMap<u32, Vec<String>> {
     use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
+        EnumWindows, GetWindow, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+        GW_OWNER,
     };
 
     unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
         unsafe {
             // A window with no title is usually a hidden message-only window,
             // not something the user is looking at.
-            if IsWindowVisible(hwnd).as_bool() && GetWindowTextLengthW(hwnd) > 0 {
+            let len = GetWindowTextLengthW(hwnd);
+            if IsWindowVisible(hwnd).as_bool() && len > 0 {
                 let mut pid: u32 = 0;
                 GetWindowThreadProcessId(hwnd, Some(&mut pid));
                 if pid != 0 {
-                    let set = &mut *(lparam.0 as *mut HashSet<u32>);
-                    set.insert(pid);
+                    let map = &mut *(lparam.0 as *mut HashMap<u32, Vec<String>>);
+                    let titles = map.entry(pid).or_default();
+                    // Titles only from windows with no owner: a program's
+                    // dialogs ("Automatic Updater", "Settings") belong to its
+                    // main window, and what an emulator is running shows in
+                    // the main window (or its own unowned game window).
+                    // Verified live with DuckStation and PCSX2's update dialogs.
+                    let owned = GetWindow(hwnd, GW_OWNER).is_ok_and(|o| !o.is_invalid());
+                    if !owned {
+                        let mut buf = vec![0u16; len as usize + 1];
+                        let n = GetWindowTextW(hwnd, &mut buf);
+                        titles.push(String::from_utf16_lossy(&buf[..n.max(0) as usize]));
+                    }
                 }
             }
         }
         BOOL(1)
     }
 
-    let mut pids: HashSet<u32> = HashSet::new();
+    let mut windows: HashMap<u32, Vec<String>> = HashMap::new();
     unsafe {
-        let _ = EnumWindows(Some(callback), LPARAM(&mut pids as *mut _ as isize));
+        let _ = EnumWindows(Some(callback), LPARAM(&mut windows as *mut _ as isize));
     }
-    pids
+    windows
 }
 
 #[cfg(not(windows))]
-fn visible_window_pids() -> HashSet<u32> {
-    HashSet::new()
+fn visible_windows() -> HashMap<u32, Vec<String>> {
+    HashMap::new()
 }
 
 #[cfg(windows)]
@@ -534,6 +553,7 @@ mod tests {
             path: path.map(|p| p.to_string()),
             run_time_secs: secs,
             has_window: window,
+            window_titles: Vec::new(),
         }
     }
 
