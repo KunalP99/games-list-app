@@ -10,6 +10,11 @@ describe('normaliseTitle', () => {
     expect(normaliseTitle('Hades II')).toBe('hadesii')
   })
 
+  it('folds accents rather than dropping the letter', () => {
+    expect(normaliseTitle('Ōkami')).toBe(normaliseTitle('Okami'))
+    expect(normaliseTitle('Pokémon Platinum')).toBe('pokemonplatinum')
+  })
+
   it('treats differing punctuation and spacing as equal', () => {
     // A launcher's display name and IGDB's own title rarely agree on an em
     // dash vs a colon vs nothing at all — this is what lets them still match.
