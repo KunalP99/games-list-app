@@ -168,7 +168,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
       <div className="flex flex-wrap items-start gap-5">
         {/* Main column */}
         <div className="flex-[999_1_640px] min-w-0 space-y-4">
-          <HeroCard hero={hero} wheelEnabled={wheelEnabled} />
+          <HeroCard hero={hero} />
 
           <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
             <Stat label="Games" value={String(curated.length)} href="/games" />

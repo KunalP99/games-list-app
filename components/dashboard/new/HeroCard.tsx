@@ -24,25 +24,12 @@ function lastPlayedLabel(iso: string): string {
 /**
  * The top of the new dashboard: the Playing or Ambient game you played most
  * recently (live while the tracker sees it). Only a Playing game offers "Mark
- * as completed". `pickHero` in lib/dashboard.ts decides which. With neither, an empty-state
- * card points at adding a game or the wheel.
+ * as completed". `pickHero` in lib/dashboard.ts decides which. With neither
+ * (nothing in Playing, and in the friends edition nothing in Ambient), there's
+ * no card at all: the dashboard just starts with your stats.
  */
-export default function HeroCard({ hero, wheelEnabled }: { hero: Hero<HeroGame> | null; wheelEnabled: boolean }) {
-  if (!hero) {
-    return (
-      <div className="rounded-2xl border border-dashed border-edge-input bg-surface-base p-8 flex flex-col items-start gap-3 min-h-[240px] justify-center">
-        <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Nothing on the go</p>
-        <h2 className="text-2xl font-bold text-fg-base">Pick something to play</h2>
-        <p className="text-sm text-fg-muted max-w-md">Games you set to Playing show up here, with your hours and a live timer while the tracker sees them.</p>
-        <div className="flex flex-wrap gap-2 mt-1">
-          <Link href="/games/new" className="inline-flex items-center h-11 px-4 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition-colors">Add a game</Link>
-          {wheelEnabled && (
-            <Link href="/wheel" className="inline-flex items-center h-11 px-4 rounded-lg border border-edge-base text-sm font-medium text-fg-base hover:bg-surface-hover transition-colors">Spin the wheel</Link>
-          )}
-        </div>
-      </div>
-    )
-  }
+export default function HeroCard({ hero }: { hero: Hero<HeroGame> | null }) {
+  if (!hero) return null
 
   const { game, kind, liveSince, lastPlayedAt } = hero
   const art = game.artwork_url ?? game.image_url
@@ -53,7 +40,7 @@ export default function HeroCard({ hero, wheelEnabled }: { hero: Hero<HeroGame> 
   ].filter(Boolean).join(' · ')
 
   return (
-    <div className="group relative min-h-[300px] rounded-2xl overflow-hidden bg-zinc-900 text-white flex flex-col justify-end">
+    <section aria-label="Your current game" className="group relative min-h-[300px] rounded-2xl overflow-hidden bg-zinc-900 text-white flex flex-col justify-end">
       {art ? (
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-[1.03]"
@@ -84,6 +71,6 @@ export default function HeroCard({ hero, wheelEnabled }: { hero: Hero<HeroGame> 
         </div>
         <HeroActions gameId={game.id} canComplete={kind === 'playing'} initialFavourite={!!game.is_favourite} />
       </div>
-    </div>
+    </section>
   )
 }

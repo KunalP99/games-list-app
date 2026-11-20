@@ -84,6 +84,9 @@ test data are in `e2e/db.ts` (local database only).
   signed-out redirects, IGDB rate limits,
   changing your password needs the current one (restores test-sam's password).
 - `e2e/activity.spec.ts` — a session the app never closed shows its real end.
+- `e2e/dashboard.spec.ts` — the current-game card shows for a Playing game
+  and is absent with nothing in Playing/Ambient (moves test-alex's games and
+  puts them back).
 - `e2e/smoke.spec.ts` — opens **every main page** signed in (dashboard, each
   games tab and view, search, add/edit/view games, own and others' profiles,
   stats + head-to-head, achievements, activity, tickets, settings, import,
