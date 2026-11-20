@@ -533,20 +533,41 @@ export async function gameFromSteamAppId(
  * particular route found no shortcut.
  */
 /**
- * The other editions of the same game: the base game this one is a version
- * of (if it is one), and every edition IGDB records as a version of that
- * base. "Grand Theft Auto IV" (731) ↔ "Grand Theft Auto IV: Complete
- * Edition" (27912, version_parent 731), either way round, and sibling
- * editions of one base too. Version links only (`version_parent`): never
- * DLC or expansions (`parent_game`), which are different games to play.
- * Empty when IGDB can't be reached, so a lookup failing only means no match.
+ * The other editions of the same game: everything joined to it by IGDB's
+ * version links (`version_parent`), however many steps away. "Grand Theft
+ * Auto IV" (731) ↔ "GTA IV: Complete Edition" (27912, a version of 731);
+ * "The Witcher 3" (1942) ↔ "Complete Edition" (119402, a version of 1942) ↔
+ * "Complete Edition: 10th Anniversary Edition" (372654, a version of the
+ * Complete Edition); sibling editions too. Walks up to the original game,
+ * then down through every edition of an edition. Version links only, never
+ * `parent_game` (DLC, expansions, quests), which are different things to
+ * play. Bounded (a few steps, 200 games), and empty when IGDB can't be
+ * reached, so a failed lookup only means no match.
  */
+const EDITION_STEPS = 4
 export async function getEditionFamily(id: number): Promise<number[]> {
   if (!Number.isInteger(id) || id <= 0) return []
-  const self = await igdbQuery<{ version_parent?: number }>('games', `fields version_parent; where id = ${id}; limit 1;`)
-  const root = self[0]?.version_parent ?? id
-  const editions = await igdbQuery<{ id: number }>('games', `fields id; where version_parent = ${root}; limit 50;`)
-  return [...new Set([root, ...editions.map(e => e.id)])].filter(x => x !== id)
+
+  // Up: follow version_parent to the original game.
+  let root = id
+  const seen = new Set<number>([id])
+  for (let i = 0; i < EDITION_STEPS; i++) {
+    const row = (await igdbQuery<{ version_parent?: number }>('games', `fields version_parent; where id = ${root}; limit 1;`))[0]
+    if (!row?.version_parent || seen.has(row.version_parent)) break
+    root = row.version_parent
+    seen.add(root)
+  }
+
+  // Down: every edition of the root, then editions of those, and so on.
+  const family = new Set<number>([root])
+  let frontier = [root]
+  for (let i = 0; i < EDITION_STEPS && frontier.length > 0 && family.size < 200; i++) {
+    const rows = await igdbQuery<{ id: number }>('games', `fields id; where version_parent = (${frontier.join(',')}); limit 200;`)
+    frontier = rows.map(r => r.id).filter(x => !family.has(x))
+    for (const x of frontier) family.add(x)
+  }
+  family.delete(id)
+  return [...family]
 }
 
 export async function getVersionParent(id: number): Promise<number | null> {

@@ -108,6 +108,29 @@ test('identify: with only the completed game, it still offers a replay (untracke
   expect(body).toMatchObject({ result: 'untracked', gameId: done, resumable: 'completed' })
 })
 
+// The Witcher 3 (Steam 292030 → base game 1942 on IGDB): an edition two
+// steps away (10th Anniversary Edition, a version of the Complete Edition,
+// itself a version of 1942) still counts; a DLC never takes the base game's
+// hours (it runs inside the base game, so owning only the DLC adds the game).
+test('identify: The Witcher 3, an edition of an edition counts as the same game', async () => {
+  await admin().from('games').delete().eq('user_id', uid).ilike('title', 'The Witcher 3%')
+  const anniversary = await games.add({ title: 'The Witcher 3: Wild Hunt - Complete Edition: 10th Anniversary Edition', status: 'playing', igdb_id: 372654 })
+  const body = await (await device.post('/api/agent/identify', { steamAppId: 292030, exeName: 'witcher3.exe', platform: 'Steam' })).json()
+  expect(body).toMatchObject({ result: 'tracked', gameId: anniversary })
+})
+
+test('identify: The Witcher 3, owning only a DLC adds the game rather than tracking the DLC', async () => {
+  await admin().from('games').delete().eq('user_id', uid).ilike('title', 'The Witcher 3%')
+  const dlc = await games.add({ title: 'The Witcher 3: Wild Hunt - Blood and Wine', status: 'playing', igdb_id: 13166 })
+  const body = await (await device.post('/api/agent/identify', { steamAppId: 292030, exeName: 'witcher3.exe', platform: 'Steam' })).json()
+  try {
+    expect(body.result).toBe('added')
+    expect(body.gameId).not.toBe(dlc)
+  } finally {
+    if (body.gameId && body.gameId !== dlc) await admin().from('games').delete().eq('id', body.gameId)
+  }
+})
+
 test('identify is limited to 30 a minute per account', async () => {
   await fillRateLimit(uid, 'agent_identify', 30)
   const res = await device.post('/api/agent/identify', { titleGuess: 'Portal 2', exeName: 'portal2.exe' })
