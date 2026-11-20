@@ -8,7 +8,7 @@ import { cleanSubmittedSuffix, uniqueByBasename } from '@/lib/detectable'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import { getVersionParent, getEditionFamily } from '@/lib/igdb'
-import { pickRow, resolveRow, rowsWithIgdbIds, type LibraryRow } from '@/lib/trackable-row'
+import { pickRow, resolveRow, rowsWithIgdbIds, isTrackable, type LibraryRow } from '@/lib/trackable-row'
 import { writeExeLink } from '@/lib/exe-links'
 import { editionStatus } from '@/lib/edition'
 
@@ -250,32 +250,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const firstMatch = pickRow(owned)
   let existing = firstMatch ? resolveRow(firstMatch, library) : undefined
   // Backfilled onto the matched row below, only when the match came from
-  // this fallback — an exact `existing` match already has the right id.
+  // the edition fallback — an exact `existing` match already has the right id.
   let editionSteamAppId: number | null = null
 
-  // No exact match: this might still be the same game as one already owned,
-  // just a different edition — "Dead Island: Game of the Year Edition" is
-  // its own IGDB id (and, on Steam, its own app id) for what is really Dead
-  // Island plus DLC. IGDB's own `version_parent` link catches that, when it
-  // has one, without ever renaming or replacing the owned row.
-  if (!existing) {
-    const parentId = await getVersionParent(igdbId)
-    if (parentId) {
-      const parentMatch = pickRow(library.filter(g => g.igdb_id === parentId))
-      existing = parentMatch ? resolveRow(parentMatch, library) : undefined
-      if (existing && steamAppId != null) editionSteamAppId = steamAppId
+  // Another edition of the same game they own. IGDB links editions with
+  // `version_parent`, either way round: "Dead Island: Game of the Year
+  // Edition" (running) is a version of the owned "Dead Island"; Steam's "Grand
+  // Theft Auto IV" app (running) resolves to the base game, of which the owned
+  // "GTA IV: Complete Edition" is a version. `getVersionParent` covers the
+  // first (and a running standalone expansion counting as its base game);
+  // `getEditionFamily` the second and sibling editions, by version links only,
+  // so a base game never lands on an owned DLC or expansion.
+  //
+  // Looked for when there's no exact match, AND when the exact match can't
+  // take hours: someone who completed "Grand Theft Auto IV" years ago and is
+  // now playing the Complete Edition must have the hours go to the Complete
+  // Edition, not be offered a replay of the completed one. An edition that
+  // can take hours wins; otherwise the exact match stands (untracked: the
+  // agent offers to resume or replay it, as before).
+  if (!existing || !isTrackable(existing)) {
+    const [parentId, family] = await Promise.all([getVersionParent(igdbId), getEditionFamily(igdbId)])
+    const editionIds = [...(parentId ? [parentId] : []), ...family]
+    const editionMatch = pickRow(rowsWithIgdbIds(library, editionIds))
+    const edition = editionMatch ? resolveRow(editionMatch, library) : undefined
+    if (edition && (isTrackable(edition) || !existing)) {
+      existing = edition
+      if (steamAppId != null) editionSteamAppId = steamAppId
     }
-  }
-
-  // The other way round: they own an edition, and what's running resolved to
-  // the base game (or a sibling edition). Steam's "Grand Theft Auto IV" app is
-  // the Complete Edition people now own, but maps to the base game on IGDB;
-  // owning the Complete Edition used to file a second, base-game row.
-  if (!existing) {
-    const family = await getEditionFamily(igdbId)
-    const editionMatch = pickRow(rowsWithIgdbIds(library, family))
-    existing = editionMatch ? resolveRow(editionMatch, library) : undefined
-    if (existing && steamAppId != null) editionSteamAppId = steamAppId
   }
 
   if (existing) {

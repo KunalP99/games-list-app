@@ -87,6 +87,27 @@ test('identify: running the base game counts as the owned edition (GTA IV → Co
   expect((await admin().from('games').select('steam_appid').eq('id', ce).single()).data!.steam_appid, 'so the next launch matches directly').toBe(12210)
 })
 
+// Kunal's case: GTA IV completed years ago (the exact match, 731), and now
+// the Complete Edition being played. The hours go to the Complete Edition,
+// rather than a replay of the completed game being offered.
+test('identify: an owned edition that can take hours beats a completed exact match', async () => {
+  await admin().from('games').delete().eq('user_id', uid).ilike('title', 'Grand Theft Auto IV%')
+  const done = await games.add({ title: 'Grand Theft Auto IV', status: 'completed', igdb_id: 731, completion_date: '2015-01-01' })
+  const ce = await games.add({ title: 'Grand Theft Auto IV: Complete Edition', status: 'playing', igdb_id: 27912 })
+  const body = await (await device.post('/api/agent/identify', { steamAppId: 12210, exeName: 'GTAIV.exe', platform: 'Steam' })).json()
+  expect(body).toMatchObject({ result: 'tracked', gameId: ce })
+  const { data } = await admin().from('games').select('id, status, steam_appid').in('id', [done, ce])
+  expect(data!.find(g => g.id === done)!.status, 'the completed game is left alone').toBe('completed')
+  expect(data!.find(g => g.id === ce)!.steam_appid).toBe(12210)
+})
+
+test('identify: with only the completed game, it still offers a replay (untracked)', async () => {
+  await admin().from('games').delete().eq('user_id', uid).ilike('title', 'Grand Theft Auto IV%')
+  const done = await games.add({ title: 'Grand Theft Auto IV', status: 'completed', igdb_id: 731, completion_date: '2015-01-01' })
+  const body = await (await device.post('/api/agent/identify', { steamAppId: 12210, exeName: 'GTAIV.exe', platform: 'Steam' })).json()
+  expect(body).toMatchObject({ result: 'untracked', gameId: done, resumable: 'completed' })
+})
+
 test('identify is limited to 30 a minute per account', async () => {
   await fillRateLimit(uid, 'agent_identify', 30)
   const res = await device.post('/api/agent/identify', { titleGuess: 'Portal 2', exeName: 'portal2.exe' })
