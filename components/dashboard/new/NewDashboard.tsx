@@ -195,13 +195,20 @@ export default async function NewDashboard({ userId }: { userId: string }) {
               <LevelCard userId={userId} xp={profile?.xp ?? 0} />
             </Suspense>
           )}
-          <FriendsCard
-            friends={friends}
-            initialLive={playingNow}
-            friendSystem={FEATURES.friendSystem}
-            incoming={overview?.incoming ?? []}
-          />
-          {playSummaries.year.totalMinutes > 0 && <PlayCard summaries={playSummaries} titles={playTitles} />}
+          {/* Friends and your week share a row once the rail has dropped below
+              the main column and has room for both (each at least 300px), so
+              the week's chart isn't stretched across the page; one above the
+              other beside the main column and on phones. auto-fit: if either
+              card is missing, the other takes the whole row. Equal heights. */}
+          <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]">
+            <FriendsCard
+              friends={friends}
+              initialLive={playingNow}
+              friendSystem={FEATURES.friendSystem}
+              incoming={overview?.incoming ?? []}
+            />
+            {playSummaries.year.totalMinutes > 0 && <PlayCard summaries={playSummaries} titles={playTitles} />}
+          </div>
           <Suspense fallback={<ComingUpSkeleton />}>
             <ComingUpCard userId={userId} />
           </Suspense>
