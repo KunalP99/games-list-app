@@ -236,6 +236,7 @@ test.describe('on the site', () => {
     const row = friendsCard(alex).getByText('Sam (test)')
     await row.click({ button: 'right' })
     await alex.getByRole('menuitem', { name: 'Remove friend…' }).click()
+    await expect(alex.getByRole('alertdialog')).toContainText('Are you sure you want to remove Sam (test) from your friends list?')
     await alex.getByRole('alertdialog').getByRole('button', { name: 'Remove friend' }).click()
     await expect.poll(async () => ((await admin().from('friendships').select('user_a').or(`user_a.eq.${alexId},user_b.eq.${alexId}`)).data ?? []).length).toBe(0)
     await expect(friendsCard(alex).getByText('No friends yet')).toBeVisible()

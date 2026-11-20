@@ -75,7 +75,7 @@ export default function FriendActions({ person, className = '', children }: { pe
             onSelect={() => {
               close()
               setConfirm({
-                title: `Remove ${person.displayName}?`,
+                title: `Are you sure you want to remove ${person.displayName} from your friends list?`,
                 body: 'You’ll stop seeing what they’ve set to friends only, and they’ll stop seeing yours. They aren’t told.',
                 confirmLabel: 'Remove friend',
                 danger: true,
