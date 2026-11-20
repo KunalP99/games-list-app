@@ -21,7 +21,7 @@ export default function AddOnsList({ rows, more }: { rows: AddOnRow[]; more: Add
   const all = showMore ? [...rows, ...more] : rows
 
   return (
-    <div className="max-w-3xl">
+    <div>
       <ul className="overflow-hidden rounded-2xl border border-edge-base bg-surface-base divide-y divide-edge-subtle">
         {all.map(r => (
           <li key={r.id}>
