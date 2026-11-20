@@ -82,7 +82,24 @@ test('friends who have it: a friend\'s copy shows, with status and hours', async
   await expect(page.getByRole('button', { name: /friend has this/ })).toHaveCount(0)
 })
 
+// The page has a loading skeleton (loading.tsx), so Next.js has already sent
+// a 200 when it finds the game doesn't exist: check what the visitor sees.
 test('an unknown game is not found', async () => {
-  const res = await page.goto('/discover/999999999')
-  expect(res?.status()).toBe(404)
+  await page.goto('/discover/999999999')
+  await expect(page.getByText('This page could not be found.')).toBeVisible({ timeout: 20_000 })
+})
+
+test('picking a game shows a skeleton while its page loads', async () => {
+  await page.goto('/dashboard')
+  await page.waitForLoadState('networkidle')
+  // Hold the page's own request back a moment, so the skeleton is there to see.
+  await page.route(/\/discover\/\d+/, async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue() })
+  await page.getByRole('combobox', { name: 'Search every game' }).fill('witcher 3 wild hunt')
+  const option = page.getByRole('option').filter({ hasText: 'The Witcher 3: Wild Hunt' }).first()
+  await expect(option).toBeVisible({ timeout: 20_000 })
+  await option.click()
+  await expect(page.getByLabel('Loading game')).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'The Witcher 3: Wild Hunt' })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByLabel('Loading game')).toHaveCount(0)
+  await page.unroute(/\/discover\/\d+/)
 })
