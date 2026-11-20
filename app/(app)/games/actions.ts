@@ -777,6 +777,9 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   const platform = (formData.get('platform') as string)?.trim() || null
   const chosenImage = (formData.get('chosen_image') as string)?.trim() || null
   const steamDeck = formData.get('steam_deck') === 'on'
+  // The store page's "I'm playing it" adds straight to Playing; everything
+  // else (recommendations, the store's Add to Backlog) goes to the backlog.
+  const status: 'backlog' | 'playing' = formData.get('status') === 'playing' ? 'playing' : 'backlog'
 
   // Enrich from RAWG when the recommended game carries a rawg_id — keeps the
   // backlog row consistent with games added via the form/wheel (description,
@@ -816,7 +819,8 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
     artwork_url: artworkUrl,
     steam_appid: steamAppId,
     genres: finalGenres,
-    status: 'backlog',
+    status,
+    ...(status === 'playing' ? { start_date: londonDay(new Date().toISOString()) } : {}),
     platform,
     steam_deck: steamDeck,
     // Store under the active provider's id column (rawg_id or igdb_id).

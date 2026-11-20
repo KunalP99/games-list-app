@@ -40,6 +40,11 @@ describe('featuresFor', () => {
     expect(featuresFor('public').friendSystem).toBe(true)
   })
 
+  it('has game search and store pages in the public edition only', () => {
+    expect(featuresFor('friends').gameStore).toBe(false)
+    expect(featuresFor('public').gameStore).toBe(true)
+  })
+
   it('shares the ticket ledger in the friends edition only', () => {
     expect(featuresFor('friends').sharedTicketLedger).toBe(true)
     expect(featuresFor('public').sharedTicketLedger).toBe(false)

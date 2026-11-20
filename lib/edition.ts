@@ -82,6 +82,13 @@ export function featuresFor(edition: Edition) {
      * everyone signed up is a friend and sees everything, as before.
      */
     friendSystem: edition === 'public',
+    /**
+     * Look up any game: the dashboard's search bar (all of IGDB) and a
+     * store-style page per game at /discover/<igdbId> (trailer, screenshots,
+     * IGDB and Steam ratings, DLC and editions, where to buy, friends who have
+     * it, add to your library). The friends edition has neither.
+     */
+    gameStore: edition === 'public',
   }
 }
 

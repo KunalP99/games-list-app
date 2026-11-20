@@ -16,6 +16,7 @@ import FriendsCard, { type FriendSummary } from './FriendsCard'
 import PlayCard from './PlayCard'
 import ComingUpCard, { ComingUpSkeleton } from './ComingUpCard'
 import ActivityCard, { ActivityCardSkeleton } from './ActivityCard'
+import GameSearchBar from '@/components/discover/GameSearchBar'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { levelProgress } from '@/lib/achievements'
 import { getFriendsOverview, getPlayingNowFor, type FriendsOverview } from '@/lib/data/friends'
@@ -27,7 +28,7 @@ const SESSION_WINDOW_DAYS = MAX_PLAY_PERIOD_DAYS + 1
 
 const dateFormat = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/London' })
 
-type GameRow = HeroGame & { completion_date: string | null }
+type GameRow = HeroGame & { completion_date: string | null; igdb_id: number | null }
 
 /**
  * The dashboard (app/(app)/dashboard/page.tsx renders it for everyone).
@@ -45,7 +46,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
     getProfile(userId),
     supabase
       .from('games')
-      .select('id, title, status, hours_played, platform, artwork_url, image_url, is_favourite, completion_date')
+      .select('id, title, status, hours_played, platform, artwork_url, image_url, is_favourite, completion_date, igdb_id')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false }) as unknown as Promise<{ data: GameRow[] | null }>,
     // Paged: a year of sessions can pass PostgREST's 1,000-row cap.
@@ -164,6 +165,11 @@ export default async function NewDashboard({ userId }: { userId: string }) {
           </Link>
         </div>
       </div>
+
+      {/* Search every game (public edition): opens its store page, /discover/<id>. */}
+      {FEATURES.gameStore && (
+        <GameSearchBar ownedIgdbIds={[...new Set(games.map(g => g.igdb_id).filter((x): x is number => x != null))]} />
+      )}
 
       <div className="flex flex-wrap items-start gap-5">
         {/* Main column */}

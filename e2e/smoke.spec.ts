@@ -116,6 +116,8 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
     pages.push(['wheel history', () => '/wheel/history'])
   } else {
     pages.push(['reset password', () => '/reset-password'])
+    // The store page of a game from IGDB (The Witcher 3); needs internet.
+    pages.push(['game store page (IGDB)', () => '/discover/1942'])
   }
 
   for (const [name, path] of pages) {
@@ -146,6 +148,13 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
       await expectNotFound(page, '/forgot-password')
       await expectNotFound(page, '/reset-password')
       await expectNotFound(page, '/welcome')
+      await expectNotFound(page, '/discover/1942')
+    })
+
+    test('the dashboard has no game search in the friends edition', async () => {
+      await page.goto('/dashboard')
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await expect(page.getByRole('combobox', { name: 'Search every game' })).toHaveCount(0)
     })
   }
 })

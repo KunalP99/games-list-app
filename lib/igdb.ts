@@ -7,6 +7,7 @@ import 'server-only'
 import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, GameCompany, GameExtras, DeveloperGamesInfo, RelatedGame } from './rawg'
 import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
+import { orderVideos, pickAgeRating, playersLine, storeLinks, isUpcoming, releaseLines, splitAddOns, platformNames, type StoreGame, type StoreRelated } from './store-page'
 import { rankSearchResults, mergeById, apicalypseString, slugPrefix, FULL_GAME_TYPES, type RankCandidate } from './search-ranking'
 
 const TIMEOUT_MS = 8000
@@ -459,6 +460,99 @@ export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo>
     })
   if (list.length === 0) return null
   return { developer: dev.name, games: list }
+}
+
+// ── Store page (lib/store-page.ts) ──────────────────────────────────────────
+
+type IgdbRelated = { id: number; name: string; first_release_date?: number; cover?: { image_id?: string }; artworks?: Array<{ image_id?: string }>; screenshots?: Array<{ image_id?: string }> }
+const RELATED_FIELDS = (prefix: string) => ['name', 'first_release_date', 'cover.image_id', 'artworks.image_id', 'screenshots.image_id'].map(f => `${prefix}.${f}`).join(', ')
+
+function toRelated(g: IgdbRelated, nowMs: number, shape: 'wide' | 'cover'): StoreRelated {
+  const wide = g.artworks?.find(a => a.image_id)?.image_id ?? g.screenshots?.find(a => a.image_id)?.image_id
+  const image = shape === 'wide' && wide ? landscapeUrl(wide) : coverUrl(g.cover?.image_id) ?? (wide ? landscapeUrl(wide) : null)
+  return {
+    id: g.id,
+    name: g.name,
+    year: g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null,
+    upcoming: !g.first_release_date || g.first_release_date * 1000 > nowMs,
+    image,
+  }
+}
+
+/**
+ * Everything the store page shows about one game, in two IGDB queries (the
+ * game itself, then its editions). Null if IGDB has no such game. Cached by
+ * lib/data/store-game.ts; never call it per request without that.
+ */
+export async function getStoreGame(id: number): Promise<StoreGame | null> {
+  if (!Number.isInteger(id) || id <= 0) return null
+  const fields = [
+    'name', 'summary', 'first_release_date', 'aggregated_rating', 'aggregated_rating_count', 'rating', 'rating_count',
+    'genres.name', 'themes.name', 'player_perspectives.name', 'game_modes.name',
+    'multiplayer_modes.onlinemax', 'multiplayer_modes.offlinemax', 'multiplayer_modes.onlinecoopmax', 'multiplayer_modes.offlinecoopmax',
+    'multiplayer_modes.onlinecoop', 'multiplayer_modes.offlinecoop', 'multiplayer_modes.lancoop', 'multiplayer_modes.splitscreen',
+    'involved_companies.developer', 'involved_companies.company.name',
+    'platforms.name', 'platforms.abbreviation',
+    'age_ratings.organization.name', 'age_ratings.rating_category.rating',
+    'cover.image_id', 'artworks.image_id', 'artworks.width', 'artworks.height', 'screenshots.image_id',
+    'videos.name', 'videos.video_id', 'websites.url', 'websites.type.type',
+    'external_games.uid', 'external_games.external_game_source',
+    'release_dates.date', 'release_dates.platform.abbreviation', 'release_dates.platform.name',
+    RELATED_FIELDS('expansions'), RELATED_FIELDS('standalone_expansions'), RELATED_FIELDS('dlcs'),
+  ].join(', ')
+  type Raw = {
+    id: number; name: string; summary?: string; first_release_date?: number
+    aggregated_rating?: number; aggregated_rating_count?: number; rating?: number; rating_count?: number
+    genres?: Array<{ name: string }>; themes?: Array<{ name: string }>; player_perspectives?: Array<{ name: string }>; game_modes?: Array<{ name: string }>
+    multiplayer_modes?: Parameters<typeof playersLine>[1]
+    involved_companies?: Array<{ developer?: boolean; company?: { name?: string } }>
+    platforms?: Array<{ name?: string; abbreviation?: string }>
+    age_ratings?: Parameters<typeof pickAgeRating>[0]
+    cover?: { image_id?: string }; artworks?: Array<{ image_id?: string; width?: number; height?: number }>; screenshots?: Array<{ image_id?: string }>
+    videos?: Array<{ name?: string; video_id?: string }>
+    websites?: Parameters<typeof storeLinks>[0]
+    external_games?: Array<{ uid?: string; external_game_source?: number }>
+    release_dates?: Parameters<typeof releaseLines>[0]
+    expansions?: IgdbRelated[]; standalone_expansions?: IgdbRelated[]; dlcs?: IgdbRelated[]
+  }
+  const [g] = await igdbQuery<Raw>('games', `fields ${fields}; where id = ${id}; limit 1;`)
+  if (!g) return null
+  const editions = await igdbQuery<IgdbRelated>('games', `fields name, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id; where version_parent = ${id}; sort first_release_date asc; limit 20;`)
+
+  const now = Date.now()
+  const upcoming = isUpcoming(g.first_release_date ?? null, now)
+  const { cards, small } = splitAddOns(
+    [...(g.expansions ?? []), ...(g.standalone_expansions ?? [])].map(x => toRelated(x, now, 'wide')),
+    (g.dlcs ?? []).map(x => toRelated(x, now, 'wide')),
+  )
+  const names = (list?: Array<{ name: string }>) => (list ?? []).map(x => x.name)
+
+  return {
+    id: g.id,
+    name: g.name,
+    summary: g.summary?.trim() || null,
+    releaseDate: g.first_release_date ?? null,
+    criticScore: g.aggregated_rating != null ? Math.round(g.aggregated_rating) : null,
+    criticCount: g.aggregated_rating_count ?? 0,
+    playerScore: g.rating != null && (g.rating_count ?? 0) > 0 ? Math.round(g.rating) : null,
+    playerCount: g.rating_count ?? 0,
+    developer: (g.involved_companies ?? []).find(c => c.developer && c.company?.name)?.company?.name ?? null,
+    genres: names(g.genres),
+    tags: [...names(g.themes), ...names(g.player_perspectives)].filter(t => t !== 'Action' || !names(g.genres).includes('Action')).slice(0, 4),
+    platforms: platformNames(g.platforms),
+    ageRating: pickAgeRating(g.age_ratings),
+    players: playersLine(names(g.game_modes), g.multiplayer_modes),
+    cover: coverUrl(g.cover?.image_id),
+    banner: artworkImage(g) ?? (g.screenshots?.[0]?.image_id ? bannerUrl(g.screenshots[0].image_id) : null),
+    screenshots: (g.screenshots ?? []).filter(s => s.image_id).slice(0, 10).map(s => screenshotUrl(s.image_id!)),
+    videos: orderVideos((g.videos ?? []).filter(v => v.video_id).map(v => ({ name: v.name || 'Trailer', youtubeId: v.video_id! }))),
+    storeLinks: storeLinks(g.websites),
+    releaseLines: upcoming ? releaseLines(g.release_dates) : [],
+    steamAppId: steamAppIdFrom(g.external_games),
+    dlc: cards,
+    smallDlc: small,
+    editions: editions.map(e => toRelated(e, now, 'cover')),
+  }
 }
 
 export async function getGameScreenshots(id: number): Promise<RawgScreenshot[]> {
