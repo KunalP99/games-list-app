@@ -75,6 +75,7 @@ All notable changes to **GamesList** are documented here, newest first.
 - **The Videos page is gone.** It had been hidden from the menu and wasn't being used. Videos on a game's own page are unaffected and still stay in step with their YouTube playlist each day. Its old `videos` and `playlists` tables are removed by `db/drop-videos.sql`.
 
 ### Changed
+- **Your week's bars widen with the card.** They were fixed at 28px, so a wider card just spread them further apart; now each fills most of its day (up to 48px).
 - **Dashboard on medium screens: Friends and Your week sit side by side.** Once the right-hand cards drop below the main column, those two share a row (at matching heights) instead of each stretching across the page, which spread the week's chart out too far. They stack again on phones; on wide screens nothing changes.
 - **The site's secret keys can't end up in the browser by mistake.** The code holding the master database key (and the IGDB, RAWG and YouTube keys) is now marked server-only, so accidentally using it from a page's browser code stops the build instead of quietly shipping. Nothing changes for anyone using the site.
 - **Pages now refuse code that isn't the site's own.** Every page carries a Content-Security-Policy with a fresh one-time code (nonce), so a script only runs if the site itself put it there; code smuggled into a page (say, through a game title) can't run. YouTube videos, Turnstile and game art from other sites are allowed as before. Nothing should look or work differently. (`lib/csp.ts`, set in `proxy.ts`.)

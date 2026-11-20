@@ -182,7 +182,9 @@ function Chart({ summary, active, onActive }: { summary: PlaySummary; active: nu
     const isLast = i === last
     return (
       <div
-        className={`animate-week-bar w-full ${period === 'week' ? 'max-w-[28px] rounded-md' : 'rounded-md'} ${
+        // Week: the bar widens with its day's column (80%, up to 48px), so a
+        // wider card gets wider bars rather than wider gaps between them.
+        className={`animate-week-bar ${period === 'week' ? 'w-[80%] max-w-[48px] rounded-md' : 'w-full rounded-md'} ${
           b.minutes > 0
             ? isLast || active === i ? 'bg-brand-600 dark:bg-brand-500' : 'bg-brand-600/70 dark:bg-brand-500/70'
             : 'bg-surface-active'
