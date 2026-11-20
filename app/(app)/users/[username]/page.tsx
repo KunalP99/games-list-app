@@ -41,7 +41,7 @@ export default async function UserProfilePage(
   let profileQuery = supabase
     .from('profiles')
     .select(FEATURES.friendSystem
-      ? 'id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled, privacy_profile, privacy_games, privacy_achievements, privacy_activity, privacy_tickets'
+      ? 'id, display_name, username, ticket_balance, xp, accent_colour, wheel_turn, wheel_enabled, privacy_profile, privacy_games, privacy_achievements, privacy_activity, privacy_tickets'
       : 'id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
   const requested = decodeURIComponent(params.username)
   profileQuery = FEATURES.secureAuth
@@ -72,8 +72,32 @@ export default async function UserProfilePage(
     ? <FriendButton personId={profile.id} username={profile.username} name={name} relation={relation} />
     : null
 
+  // Only letters/digits start an initial — a display name like "Alex (test)"
+  // would otherwise render as "A(".
+  const initials = (profile.display_name ?? profile.username)
+    .split(/[\s_-]+/)
+    // Strip leading punctuation so a word like "(test)" contributes "t", not "(".
+    // No \p{…} escapes here — the TS target predates the `u` flag.
+    .map((w: string) => w.replace(/^[^0-9A-Za-zÀ-ɏ]+/, '').charAt(0))
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || '?'
+  // Their accent, never the viewer's — `brand-*` classes resolve to whoever is
+  // logged in, so the friend's colour is always passed down as a value.
+  const accent = profile.accent_colour ?? '#7c3aed'
+
   if (!allows('privacy_profile')) {
-    return <PrivateProfile name={name} username={profile.username} accentColour={profile.accent_colour} friendButton={friendButton} />
+    return (
+      <PrivateProfile
+        name={name}
+        username={profile.username}
+        initials={initials}
+        accent={accent}
+        xp={profile.xp ?? 0}
+        friendButton={friendButton}
+      />
+    )
   }
 
   // Defaults to Completed in place rather than redirecting — see the same
@@ -203,21 +227,7 @@ export default async function UserProfilePage(
   // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
   const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 
-  // Only letters/digits start an initial — a display name like "Alex (test)"
-  // would otherwise render as "A(".
-  const initials = (profile.display_name ?? profile.username)
-    .split(/[\s_-]+/)
-    // Strip leading punctuation so a word like "(test)" contributes "t", not "(".
-    // No \p{…} escapes here — the TS target predates the `u` flag.
-    .map((w: string) => w.replace(/^[^0-9A-Za-zÀ-ɏ]+/, '').charAt(0))
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase() || '?'
 
-  // Their accent, never the viewer's — `brand-*` classes resolve to whoever is
-  // logged in, so the friend's colour is always passed down as a value.
-  const accent = profile.accent_colour ?? '#7c3aed'
 
   // Someone who's opted out of wheel turns in Settings doesn't advertise one.
   // Accounts predating the column read as opted in.
