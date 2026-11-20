@@ -69,7 +69,7 @@ export default function GameSearchBar({ ownedIgdbIds }: { ownedIgdbIds: number[]
 
   return (
     <div ref={box} className="relative">
-      <label htmlFor={`${listId}-input`} className="sr-only">Search every game</label>
+      <label htmlFor={`${listId}-input`} className="sr-only">Search for a game</label>
       <div className="flex h-12 items-center gap-3 rounded-xl border border-edge-input bg-surface-base px-4 shadow-sm focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/15">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" className="shrink-0 text-fg-muted" aria-hidden><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
         <input
@@ -85,7 +85,7 @@ export default function GameSearchBar({ ownedIgdbIds }: { ownedIgdbIds: number[]
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="Search every game"
+          placeholder="Search for a game"
           className="min-w-0 flex-1 bg-transparent text-base text-fg-base placeholder:text-fg-subtle focus:outline-none"
         />
         {loading && <span className="text-xs text-fg-muted">Searching…</span>}

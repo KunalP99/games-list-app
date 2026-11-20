@@ -37,7 +37,7 @@ test.afterAll(async () => {
 test('search on the dashboard opens the game\'s page', async () => {
   await page.goto('/dashboard')
   await page.waitForLoadState('networkidle')
-  await page.getByRole('combobox', { name: 'Search every game' }).fill('witcher 3 wild hunt')
+  await page.getByRole('combobox', { name: 'Search for a game' }).fill('witcher 3 wild hunt')
   const option = page.getByRole('option').filter({ hasText: 'The Witcher 3: Wild Hunt' }).first()
   await expect(option).toBeVisible({ timeout: 20_000 })
   await option.click()
@@ -94,7 +94,7 @@ test('picking a game shows a skeleton while its page loads', async () => {
   await page.waitForLoadState('networkidle')
   // Hold the page's own request back a moment, so the skeleton is there to see.
   await page.route(/\/discover\/\d+/, async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue() })
-  await page.getByRole('combobox', { name: 'Search every game' }).fill('witcher 3 wild hunt')
+  await page.getByRole('combobox', { name: 'Search for a game' }).fill('witcher 3 wild hunt')
   const option = page.getByRole('option').filter({ hasText: 'The Witcher 3: Wild Hunt' }).first()
   await expect(option).toBeVisible({ timeout: 20_000 })
   await option.click()

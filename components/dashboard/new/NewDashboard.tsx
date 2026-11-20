@@ -166,7 +166,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
         </div>
       </div>
 
-      {/* Search every game (public edition): opens its store page, /discover/<id>. */}
+      {/* Search for a game (public edition): opens its store page, /discover/<id>. */}
       {FEATURES.gameStore && (
         <GameSearchBar ownedIgdbIds={[...new Set(games.map(g => g.igdb_id).filter((x): x is number => x != null))]} />
       )}

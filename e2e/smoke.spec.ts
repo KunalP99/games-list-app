@@ -154,7 +154,7 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
     test('the dashboard has no game search in the friends edition', async () => {
       await page.goto('/dashboard')
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-      await expect(page.getByRole('combobox', { name: 'Search every game' })).toHaveCount(0)
+      await expect(page.getByRole('combobox', { name: 'Search for a game' })).toHaveCount(0)
     })
   }
 })
