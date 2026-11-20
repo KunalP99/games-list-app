@@ -14,6 +14,7 @@ import StoreSummary from '@/components/discover/StoreSummary'
 import StoreAddBar from '@/components/discover/StoreAddBar'
 import ReleaseCountdown from '@/components/discover/ReleaseCountdown'
 import FriendsWhoHaveIt, { type FriendCopy } from '@/components/discover/FriendsWhoHaveIt'
+import AddOnsList, { type AddOnRow } from '@/components/discover/AddOnsList'
 
 const fullDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 const STEAM_TONE = { positive: 'text-blue-700 dark:text-blue-400', mixed: 'text-amber-700 dark:text-amber-400', negative: 'text-red-700 dark:text-red-400' } as const
@@ -157,25 +158,11 @@ export default async function DiscoverGamePage(props: { params: Promise<{ id: st
 
       {(game.dlc.length > 0 || game.editions.length > 0 || game.smallDlc.length > 0) && (
         <section>
-          <h2 className="text-lg font-semibold text-fg-base">DLC and editions</h2>
-          <p className="mb-3 mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-fg-muted">
-            <span><Tag kind="dlc" /> adds to the game: new story, areas or extras. Needs the game.</span>
-            <span><Tag kind="edition" /> the whole game, often with add-ons included.</span>
-          </p>
-          {(game.dlc.length > 0 || game.editions.length > 0) && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3.5">
-              {game.dlc.map(r => <RelatedCard key={r.id} item={r} kind="dlc" parent={game.name} />)}
-              {game.editions.map(r => <RelatedCard key={r.id} item={r} kind="edition" parent={game.name} />)}
-            </div>
-          )}
-          {game.smallDlc.length > 0 && (
-            <p className="mt-2.5 text-sm text-fg-muted">
-              Also: <Tag kind="dlc" />{' '}
-              {game.smallDlc.map((r, i) => (
-                <span key={r.id}>{i > 0 && ', '}<Link href={`/discover/${r.id}`} className="font-medium text-brand-700 hover:underline dark:text-brand-400">{shortName(r.name, game.name)}</Link></span>
-              ))}
-            </p>
-          )}
+          <h2 className="mb-3 text-lg font-semibold text-fg-base">DLC and editions</h2>
+          <AddOnsList
+            rows={[...game.dlc.map(r => addOnRow(r, 'dlc', game.name)), ...game.editions.map(r => addOnRow(r, 'edition', game.name))]}
+            more={game.smallDlc.map(r => addOnRow(r, 'dlc', game.name))}
+          />
         </section>
       )}
 
@@ -198,29 +185,19 @@ export default async function DiscoverGamePage(props: { params: Promise<{ id: st
   )
 }
 
-function Tag({ kind }: { kind: 'dlc' | 'edition' }) {
-  return kind === 'dlc'
-    ? <span className="inline-block rounded-full bg-sky-100 px-2 py-px text-[11px] font-bold text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">DLC</span>
-    : <span className="inline-block rounded-full bg-green-100 px-2 py-px text-[11px] font-bold text-green-800 dark:bg-green-900/40 dark:text-green-300">Edition</span>
-}
-
 /** "The Witcher 3: Wild Hunt - Blood and Wine" under The Witcher 3 reads as "Blood and Wine". */
 function shortName(name: string, parent: string): string {
   const prefix = new RegExp(`^${parent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-–:]\\s*`, 'i')
   return name.replace(prefix, '') || name
 }
 
-function RelatedCard({ item, kind, parent }: { item: StoreRelated; kind: 'dlc' | 'edition'; parent: string }) {
-  return (
-    <Link href={`/discover/${item.id}`} className="group flex flex-col gap-1.5">
-      <span className="relative aspect-video overflow-hidden rounded-lg bg-surface-sunken">
-        {item.image && <img src={item.image} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform group-hover:scale-105" />}
-        <span className="absolute left-1.5 top-1.5"><Tag kind={kind} /></span>
-      </span>
-      <span className="text-sm font-medium leading-snug text-fg-base" title={item.name}>{shortName(item.name, parent)}</span>
-      <span className={`text-xs ${item.upcoming ? 'font-semibold text-blue-700 dark:text-blue-400' : 'text-fg-muted'}`}>
-        {item.upcoming ? `Coming${item.year ? ` ${item.year}` : ' soon'}` : item.year ?? ''}
-      </span>
-    </Link>
-  )
+/** A DLC or edition as a row of the list: short name, and its year or "Coming 2027". */
+function addOnRow(item: StoreRelated, kind: 'dlc' | 'edition', parent: string): AddOnRow {
+  return {
+    id: item.id,
+    kind,
+    name: shortName(item.name, parent),
+    when: item.upcoming ? `Coming${item.year ? ` ${item.year}` : ' soon'}` : item.year != null ? String(item.year) : '',
+    upcoming: item.upcoming,
+  }
 }

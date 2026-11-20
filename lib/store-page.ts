@@ -5,7 +5,7 @@
  * lib/data/store-game.ts. Pure, so it's unit tested; safe to import anywhere.
  */
 
-export type StoreRelated = { id: number; name: string; year: number | null; upcoming: boolean; image: string | null }
+export type StoreRelated = { id: number; name: string; year: number | null; upcoming: boolean }
 
 export type StoreGame = {
   id: number
@@ -32,9 +32,9 @@ export type StoreGame = {
   /** Per-platform release dates, for a game that isn't out yet. */
   releaseLines: string[]
   steamAppId: number | null
-  /** Expansions and the bigger DLC, as cards. */
+  /** Expansions and the bigger DLC, listed. */
   dlc: StoreRelated[]
-  /** Small DLC (free quests and the like), summed up in one line. */
+  /** Small DLC (free quests and the like), behind "N more DLC". */
   smallDlc: StoreRelated[]
   editions: StoreRelated[]
 }

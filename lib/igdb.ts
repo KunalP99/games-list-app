@@ -464,18 +464,15 @@ export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo>
 
 // ── Store page (lib/store-page.ts) ──────────────────────────────────────────
 
-type IgdbRelated = { id: number; name: string; first_release_date?: number; cover?: { image_id?: string }; artworks?: Array<{ image_id?: string }>; screenshots?: Array<{ image_id?: string }> }
-const RELATED_FIELDS = (prefix: string) => ['name', 'first_release_date', 'cover.image_id', 'artworks.image_id', 'screenshots.image_id'].map(f => `${prefix}.${f}`).join(', ')
+type IgdbRelated = { id: number; name: string; first_release_date?: number }
+const RELATED_FIELDS = (prefix: string) => ['name', 'first_release_date'].map(f => `${prefix}.${f}`).join(', ')
 
-function toRelated(g: IgdbRelated, nowMs: number, shape: 'wide' | 'cover'): StoreRelated {
-  const wide = g.artworks?.find(a => a.image_id)?.image_id ?? g.screenshots?.find(a => a.image_id)?.image_id
-  const image = shape === 'wide' && wide ? landscapeUrl(wide) : coverUrl(g.cover?.image_id) ?? (wide ? landscapeUrl(wide) : null)
+function toRelated(g: IgdbRelated, nowMs: number): StoreRelated {
   return {
     id: g.id,
     name: g.name,
     year: g.first_release_date ? new Date(g.first_release_date * 1000).getUTCFullYear() : null,
     upcoming: !g.first_release_date || g.first_release_date * 1000 > nowMs,
-    image,
   }
 }
 
@@ -517,13 +514,13 @@ export async function getStoreGame(id: number): Promise<StoreGame | null> {
   }
   const [g] = await igdbQuery<Raw>('games', `fields ${fields}; where id = ${id}; limit 1;`)
   if (!g) return null
-  const editions = await igdbQuery<IgdbRelated>('games', `fields name, first_release_date, cover.image_id, artworks.image_id, screenshots.image_id; where version_parent = ${id}; sort first_release_date asc; limit 20;`)
+  const editions = await igdbQuery<IgdbRelated>('games', `fields name, first_release_date; where version_parent = ${id}; sort first_release_date asc; limit 20;`)
 
   const now = Date.now()
   const upcoming = isUpcoming(g.first_release_date ?? null, now)
   const { cards, small } = splitAddOns(
-    [...(g.expansions ?? []), ...(g.standalone_expansions ?? [])].map(x => toRelated(x, now, 'wide')),
-    (g.dlcs ?? []).map(x => toRelated(x, now, 'wide')),
+    [...(g.expansions ?? []), ...(g.standalone_expansions ?? [])].map(x => toRelated(x, now)),
+    (g.dlcs ?? []).map(x => toRelated(x, now)),
   )
   const names = (list?: Array<{ name: string }>) => (list ?? []).map(x => x.name)
 
@@ -551,7 +548,7 @@ export async function getStoreGame(id: number): Promise<StoreGame | null> {
     steamAppId: steamAppIdFrom(g.external_games),
     dlc: cards,
     smallDlc: small,
-    editions: editions.map(e => toRelated(e, now, 'cover')),
+    editions: editions.map(e => toRelated(e, now)),
   }
 }
 

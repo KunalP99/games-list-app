@@ -84,7 +84,7 @@ describe('release', () => {
 })
 
 describe('splitAddOns', () => {
-  const rel = (id: number, year: number): StoreRelated => ({ id, name: `#${id}`, year, upcoming: false, image: null })
+  const rel = (id: number, year: number): StoreRelated => ({ id, name: `#${id}`, year, upcoming: false })
   it('expansions always get cards; a few DLC do too', () => {
     const out = splitAddOns([rel(2, 2016), rel(1, 2015)], [rel(3, 2015)])
     expect(out.cards.map(c => c.id)).toEqual([1, 2, 3])
