@@ -7,8 +7,8 @@ import { findGameByExactName } from '@/lib/name-games'
 import { cleanSubmittedSuffix, uniqueByBasename } from '@/lib/detectable'
 import { normaliseExeName } from '@/lib/agent-session'
 import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
-import { getVersionParent } from '@/lib/igdb'
-import { pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
+import { getVersionParent, getEditionFamily } from '@/lib/igdb'
+import { pickRow, resolveRow, rowsWithIgdbIds, type LibraryRow } from '@/lib/trackable-row'
 import { writeExeLink } from '@/lib/exe-links'
 import { editionStatus } from '@/lib/edition'
 
@@ -265,6 +265,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       existing = parentMatch ? resolveRow(parentMatch, library) : undefined
       if (existing && steamAppId != null) editionSteamAppId = steamAppId
     }
+  }
+
+  // The other way round: they own an edition, and what's running resolved to
+  // the base game (or a sibling edition). Steam's "Grand Theft Auto IV" app is
+  // the Complete Edition people now own, but maps to the base game on IGDB;
+  // owning the Complete Edition used to file a second, base-game row.
+  if (!existing) {
+    const family = await getEditionFamily(igdbId)
+    const editionMatch = pickRow(rowsWithIgdbIds(library, family))
+    existing = editionMatch ? resolveRow(editionMatch, library) : undefined
+    if (existing && steamAppId != null) editionSteamAppId = steamAppId
   }
 
   if (existing) {

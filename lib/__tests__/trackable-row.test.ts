@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickRow, resolveRow, sameGame, type LibraryRow } from '../trackable-row'
+import { pickRow, resolveRow, sameGame, rowsWithIgdbIds, type LibraryRow } from '../trackable-row'
 
 const row = (id: string, status: string, extra: Partial<LibraryRow> = {}): LibraryRow =>
   ({ id, title: 'Mortal Kombat 1', status, igdb_id: 1, steam_appid: 1971870, ...extra })
@@ -51,5 +51,26 @@ describe('resolveRow: story, multiplayer, replay', () => {
   it('never crosses into a different game', () => {
     const other = row('tekken', 'playing', { igdb_id: 2, steam_appid: 2, title: 'Tekken 8' })
     expect(resolveRow(multiplayer, [other, multiplayer]).id).toBe('mp')
+  })
+})
+
+describe('rowsWithIgdbIds: another edition of the running game', () => {
+  const edition = (id: string, igdb_id: number | null, status = 'playing'): LibraryRow => ({ id, title: id, status, igdb_id })
+  // Kunal owns "GTA IV: Complete Edition" (27912); the running Steam app
+  // resolves to "GTA IV" (731), whose edition family is [27912].
+  it('finds the owned edition', () => {
+    const library = [edition('other', 1), edition('gta4-ce', 27912), edition('none', null)]
+    expect(rowsWithIgdbIds(library, [27912]).map(r => r.id)).toEqual(['gta4-ce'])
+    expect(pickRow(rowsWithIgdbIds(library, [27912]))?.id).toBe('gta4-ce')
+  })
+
+  it('finds nothing when no edition is owned (or the lookup came back empty)', () => {
+    expect(rowsWithIgdbIds([edition('other', 1)], [27912])).toEqual([])
+    expect(rowsWithIgdbIds([edition('gta4-ce', 27912)], [])).toEqual([])
+  })
+
+  it('prefers a Playing row of the family, as pickRow always does', () => {
+    const library = [edition('ce-done', 27912, 'completed'), edition('ce-replay', 27912, 'playing')]
+    expect(pickRow(rowsWithIgdbIds(library, [27912]))?.id).toBe('ce-replay')
   })
 })

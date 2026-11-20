@@ -532,6 +532,23 @@ export async function gameFromSteamAppId(
  * linked at all — so a `null` here proves nothing; it just means this
  * particular route found no shortcut.
  */
+/**
+ * The other editions of the same game: the base game this one is a version
+ * of (if it is one), and every edition IGDB records as a version of that
+ * base. "Grand Theft Auto IV" (731) ↔ "Grand Theft Auto IV: Complete
+ * Edition" (27912, version_parent 731), either way round, and sibling
+ * editions of one base too. Version links only (`version_parent`): never
+ * DLC or expansions (`parent_game`), which are different games to play.
+ * Empty when IGDB can't be reached, so a lookup failing only means no match.
+ */
+export async function getEditionFamily(id: number): Promise<number[]> {
+  if (!Number.isInteger(id) || id <= 0) return []
+  const self = await igdbQuery<{ version_parent?: number }>('games', `fields version_parent; where id = ${id}; limit 1;`)
+  const root = self[0]?.version_parent ?? id
+  const editions = await igdbQuery<{ id: number }>('games', `fields id; where version_parent = ${root}; limit 50;`)
+  return [...new Set([root, ...editions.map(e => e.id)])].filter(x => x !== id)
+}
+
 export async function getVersionParent(id: number): Promise<number | null> {
   if (!Number.isInteger(id) || id <= 0) return null
   const rows = await igdbQuery<{ version_parent?: number; parent_game?: number }>(

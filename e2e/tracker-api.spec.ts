@@ -73,6 +73,20 @@ test('a device token can no longer create more tokens; listing devices still wor
   expect(list.status).toBe(200)
 })
 
+// Steam's "Grand Theft Auto IV" app (12210) maps to the base game on IGDB
+// (731), but what people own now is "GTA IV: Complete Edition" (27912, a
+// version of 731). It must count as the owned edition, not file a second game.
+// Uses the real IGDB, so needs internet and the IGDB keys.
+test('identify: running the base game counts as the owned edition (GTA IV → Complete Edition)', async () => {
+  const ce = await games.add({ title: 'Grand Theft Auto IV: Complete Edition', status: 'playing', igdb_id: 27912 })
+  const countGta = async () => ((await admin().from('games').select('id').eq('user_id', uid).ilike('title', 'Grand Theft Auto IV%')).data ?? []).length
+  const before = await countGta()
+  const body = await (await device.post('/api/agent/identify', { steamAppId: 12210, exeName: 'GTAIV.exe', platform: 'Steam' })).json()
+  expect(body).toMatchObject({ result: 'tracked', gameId: ce })
+  expect(await countGta(), 'no second GTA IV row').toBe(before)
+  expect((await admin().from('games').select('steam_appid').eq('id', ce).single()).data!.steam_appid, 'so the next launch matches directly').toBe(12210)
+})
+
 test('identify is limited to 30 a minute per account', async () => {
   await fillRateLimit(uid, 'agent_identify', 30)
   const res = await device.post('/api/agent/identify', { titleGuess: 'Portal 2', exeName: 'portal2.exe' })

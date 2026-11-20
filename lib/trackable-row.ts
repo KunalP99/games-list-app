@@ -72,3 +72,13 @@ function indexIn(library: LibraryRow[], row: LibraryRow): number {
   const i = library.findIndex(r => r.id === row.id)
   return i === -1 ? Number.MAX_SAFE_INTEGER : i
 }
+
+/**
+ * The library rows whose IGDB game is one of `ids` (another edition of the
+ * running game, from `getEditionFamily`), most recently touched first as
+ * given. Rows with no IGDB id never match.
+ */
+export function rowsWithIgdbIds<R extends LibraryRow>(library: R[], ids: number[]): R[] {
+  const wanted = new Set(ids)
+  return library.filter(r => r.igdb_id != null && wanted.has(r.igdb_id))
+}
