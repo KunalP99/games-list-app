@@ -17,6 +17,7 @@ import PlayCard from './PlayCard'
 import ComingUpCard, { ComingUpSkeleton } from './ComingUpCard'
 import ActivityCard, { ActivityCardSkeleton } from './ActivityCard'
 import { FEATURES, wheelOn } from '@/lib/edition'
+import { levelProgress } from '@/lib/achievements'
 import { getFriendsOverview, getPlayingNowFor, type FriendsOverview } from '@/lib/data/friends'
 
 // How far back sessions are loaded: a year (plus a day's slack for the time
@@ -117,7 +118,9 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   const weekTickets = ticketsEarnedThisWeek(weekTicketsRes.data ?? [])
 
   // Friends: who's on what, for the card's quiet rows.
-  const friendIds = friendProfiles.map(f => f.id)
+  // (The public edition shows each friend's level instead: no counts needed.)
+  const xpById = new Map((overview?.friends ?? []).map(f => [f.id, f.xp]))
+  const friendIds = overview ? [] : friendProfiles.map(f => f.id)
   const { data: friendGames } = friendIds.length > 0
     ? await (supabase.from('games').select('user_id, status').in('user_id', friendIds) as unknown as Promise<{ data: { user_id: string; status: string }[] | null }>)
     : { data: [] as { user_id: string; status: string }[] }
@@ -134,6 +137,8 @@ export default async function NewDashboard({ userId }: { userId: string }) {
     username: f.username,
     accentColour: f.accent_colour,
     ...(counts.get(f.id) ?? { completed: 0, playing: 0 }),
+    // Public edition: their level under their name, not game counts.
+    level: overview ? levelProgress(xpById.get(f.id) ?? 0).level : undefined,
   }))
 
   const wheelEnabled = wheelOn(profile)

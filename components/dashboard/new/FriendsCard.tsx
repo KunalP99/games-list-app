@@ -21,6 +21,8 @@ export type FriendSummary = {
   accentColour: string | null
   completed: number
   playing: number
+  /** Public edition: shown instead of the game counts. */
+  level?: number
 }
 
 /**
@@ -171,7 +173,9 @@ export default function FriendsCard({
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-fg-base truncate">{f.displayName}</span>
                 <span className="block text-xs text-fg-muted truncate">
-                  {f.completed} completed{f.playing > 0 ? ` · ${f.playing} playing` : ''}
+                  {f.level != null
+                    ? `Level ${f.level}`
+                    : `${f.completed} completed${f.playing > 0 ? ` · ${f.playing} playing` : ''}`}
                 </span>
               </span>
             </Link>

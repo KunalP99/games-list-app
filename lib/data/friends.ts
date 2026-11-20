@@ -14,12 +14,14 @@ export type PersonSummary = {
   username: string
   displayName: string
   accentColour: string | null
+  /** For their level (levelProgress); 0 where it wasn't loaded (search results). */
+  xp: number
 }
 
-type ProfileRow = { id: string; username: string; display_name: string | null; accent_colour: string | null }
+type ProfileRow = { id: string; username: string; display_name: string | null; accent_colour: string | null; xp?: number | null }
 
 export function toPerson(p: ProfileRow): PersonSummary {
-  return { id: p.id, username: p.username, displayName: p.display_name ?? p.username, accentColour: p.accent_colour }
+  return { id: p.id, username: p.username, displayName: p.display_name ?? p.username, accentColour: p.accent_colour, xp: p.xp ?? 0 }
 }
 
 export async function getFriendGraph(supabase: SupabaseClient, userId: string): Promise<FriendGraph> {
@@ -66,7 +68,7 @@ export async function getFriendsOverview(supabase: SupabaseClient, userId: strin
 
   const ids = [...new Set([...friendIds, ...incomingIds, ...sentIds, ...blockedIds])]
   const { data } = ids.length > 0
-    ? await supabase.from('profiles').select('id, username, display_name, accent_colour').in('id', ids)
+    ? await supabase.from('profiles').select('id, username, display_name, accent_colour, xp').in('id', ids)
     : { data: [] }
   const people = new Map(((data ?? []) as ProfileRow[]).map(p => [p.id, toPerson(p)]))
   const pick = (list: string[]) => list.map(id => people.get(id)).filter((p): p is PersonSummary => p != null)

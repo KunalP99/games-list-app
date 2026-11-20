@@ -228,6 +228,9 @@ test.describe('on the site', () => {
     await alex.goto('/dashboard')
     await expect(friendsCard(alex).getByText('Sam (test)')).toBeVisible()
     await expect(friendsCard(alex).getByText('No friends yet')).toHaveCount(0)
+    // Each friend's level under their name, not game counts.
+    await expect(friendsCard(alex).getByText(/^Level \d+$/)).toBeVisible()
+    await expect(friendsCard(alex).getByText(/completed/)).toHaveCount(0)
   })
 
   test('right-click a friend on the card to remove them', async () => {
