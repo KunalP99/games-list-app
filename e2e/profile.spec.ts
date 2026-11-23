@@ -177,13 +177,14 @@ test('a card dragged onto an empty space (a split one too) moves into it, and no
   // Where the other cards sit, measured from Currently playing (the edit bar
   // above the grid comes and goes).
   const others = ['achievements', 'completed_this_year', 'finish_rate']
+  // (Null while the page is still drawing them, so checks poll.)
   const where = async () => {
-    const origin = (await page.locator('[data-card="playing"]').boundingBox())!
-    return Promise.all(others.map(async card => {
-      const box = (await page.locator(`[data-card="${card}"]`).boundingBox())!
-      return [Math.round(box.x - origin.x), Math.round(box.y - origin.y)]
-    }))
+    const origin = await page.locator('[data-card="playing"]').boundingBox()
+    const boxes = await Promise.all(others.map(card => page.locator(`[data-card="${card}"]`).boundingBox()))
+    if (!origin || boxes.some(b => !b)) return null
+    return boxes.map(b => [Math.round(b!.x - origin.x), Math.round(b!.y - origin.y)])
   }
+  await expect.poll(where).not.toBeNull()
   const before = await where()
 
   const handle = page.getByRole('button', { name: 'Move Play streak', exact: true })
@@ -199,7 +200,7 @@ test('a card dragged onto an empty space (a split one too) moves into it, and no
 
   await expect.poll(() => cardsOnPage(page)).toEqual(['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak'])
   // Play streak's old place is kept as an empty space, so nothing else moved.
-  expect(await where()).toEqual(before)
+  await expect.poll(where).toEqual(before)
   await expect(page.locator('[data-space="small"]').first()).toBeVisible()
 
   await page.getByRole('toolbar', { name: 'Editing your profile' }).getByRole('button', { name: 'Done' }).click()
@@ -208,7 +209,7 @@ test('a card dragged onto an empty space (a split one too) moves into it, and no
   // And for everyone else too: the empty space holds its place on the page.
   await page.reload()
   await expect.poll(() => cardsOnPage(page)).toEqual(['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak'])
-  expect(await where()).toEqual(before)
+  await expect.poll(where).toEqual(before)
 })
 
 test('Cancel throws the changes away', async ({ page }) => {

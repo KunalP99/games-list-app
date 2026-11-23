@@ -179,11 +179,40 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
   return trimEmpties(layout)
 }
 
-/** Empty spaces at the very end hold nothing in place, so they go. */
+/**
+ * Tidies the kept empty spaces: a row with no card in it goes (every row has
+ * at least one card), and so do empty spaces at the very end, which hold
+ * nothing in place. Rows are worked out the way the grid lays them out: in
+ * order, a card that doesn't fit in what's left of a row starting the next.
+ */
 export function trimEmpties(layout: ProfileLayout): ProfileLayout {
-  let end = layout.length
-  while (end > 0 && layout[end - 1].card === 'empty') end--
-  return end === layout.length ? layout : layout.slice(0, end)
+  const rows: ProfileLayout[] = []
+  let column = GRID_COLUMNS
+  for (const item of layout) {
+    const width = CARD_COLUMNS[item.size]
+    if (column + width > GRID_COLUMNS) {
+      rows.push([])
+      column = 0
+    }
+    rows[rows.length - 1].push(item)
+    column += width
+  }
+  const keptRows = rows.filter(row => row.some(isCardItem))
+  // With a row gone, the next one could slide up into the gap at the end of
+  // the row before it: fill that gap with empty spaces so every card stays
+  // in its own row. (Without a row gone this never triggers: a card that
+  // fitted would already have been in that row.)
+  const kept: ProfileLayout = []
+  keptRows.forEach((row, i) => {
+    kept.push(...row)
+    const next = keptRows[i + 1]
+    const used = row.reduce((sum, item) => sum + CARD_COLUMNS[item.size], 0)
+    if (next && used + CARD_COLUMNS[next[0].size] <= GRID_COLUMNS) kept.push(...emptiesFor(GRID_COLUMNS - used, used))
+  })
+  let end = kept.length
+  while (end > 0 && kept[end - 1].card === 'empty') end--
+  const tidy = kept.slice(0, end)
+  return sameLayout(tidy, layout) ? layout : tidy
 }
 
 /**
@@ -303,7 +332,7 @@ export function addCard(layout: ProfileLayout, at: number, card: ProfileCardId, 
 }
 
 export function removeCard(layout: ProfileLayout, card: ProfileCardId): ProfileLayout {
-  return layout.filter(item => item.card !== card)
+  return trimEmpties(layout.filter(item => item.card !== card))
 }
 
 export function setSize(layout: ProfileLayout, card: ProfileCardId, size: CardSize): ProfileLayout {

@@ -388,3 +388,50 @@ describe('empty spaces kept in the layout', () => {
       .toEqual(['finish_rate:small', 'genres:half'])
   })
 })
+
+describe('no row without a card', () => {
+  const show = (l: ProfileLayout) => l.map(i => `${i.card}:${i.size}`)
+  const E = (size: 'small' | 'half' | 'full') => ({ card: 'empty', size }) as const
+
+  it('drops a row made only of empty spaces, and keeps rows with a card', () => {
+    const layout: ProfileLayout = [
+      { card: 'playing', size: 'half' }, E('half'),
+      E('small'), E('small'), E('half'),
+      E('full'),
+      E('small'), { card: 'streak', size: 'small' },
+    ]
+    expect(show(trimEmpties(layout))).toEqual(['playing:half', 'empty:half', 'empty:small', 'streak:small'])
+    // The rows that stay keep their cards: each row's cards, before and after.
+    const rowsOf = (l: ProfileLayout) => {
+      const out: string[][] = []
+      let col = 4
+      for (const i of l) {
+        const w = { full: 4, half: 2, small: 1 }[i.size]
+        if (col + w > 4) { out.push([]); col = 0 }
+        if (i.card !== 'empty') out[out.length - 1].push(i.card)
+        col += w
+      }
+      return out.filter(r => r.length > 0)
+    }
+    const gappy: ProfileLayout = [{ card: 'playing', size: 'half' }, E('full'), { card: 'streak', size: 'small' }, E('full'), { card: 'genres', size: 'half' }]
+    expect(rowsOf(trimEmpties(gappy))).toEqual(rowsOf(gappy))
+  })
+
+  it('drops the row a card is dragged out of when nothing else is in it', () => {
+    // Row 1: Currently playing, Finish rate and a square gap. Row 2: Year alone. Row 3: Play streak alone.
+    const layout: ProfileLayout = [{ card: 'playing', size: 'half' }, { card: 'finish_rate', size: 'small' }, { card: 'year', size: 'full' }, { card: 'streak', size: 'small' }]
+    // Play streak into the square gap in row 1: row 3 would be empty, so it goes.
+    expect(show(moveToSpace(layout, 'streak', { at: 2, size: 'small', root: 'small', offset: 0 })))
+      .toEqual(['playing:half', 'finish_rate:small', 'streak:small', 'year:full'])
+    // Year into the space after Play streak: row 2 would be empty, so it goes,
+    // and row 1 keeps its gap so Play streak doesn't slide up into it.
+    expect(show(moveToSpace(layout, 'year', { at: 4, size: 'full', root: 'full', offset: 0 })))
+      .toEqual(['playing:half', 'finish_rate:small', 'empty:small', 'streak:small', 'year:full'])
+  })
+
+  it('also when a card is removed, or a saved layout has one', () => {
+    const layout: ProfileLayout = [{ card: 'playing', size: 'half' }, E('half'), E('small'), { card: 'streak', size: 'small' }]
+    expect(show(removeCard(layout, 'streak'))).toEqual(['playing:half'])
+    expect(show(normaliseLayout([E('full'), { card: 'streak', size: 'small' }]))).toEqual(['streak:small'])
+  })
+})
