@@ -32,7 +32,9 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
       {games.length === 0 ? (
         <p className="flex min-h-[200px] items-center justify-center text-sm text-zinc-400">Complete a game to put it on the shelf.</p>
       ) : (
-        <div className="overflow-x-auto pb-1">
+        // Sideways scrolling also clips the top: the headroom (pulled back by
+        // the negative margin) leaves space for a cover lifted on hover.
+        <div className="-mt-3 overflow-x-auto pb-1 pt-3">
           <div className="mx-auto min-w-[560px]" style={{ maxWidth: games.length * 132 + (games.length - 1) * 28 }}>
             {/* The games, standing on the glass shelf (the row's bottom edge). */}
             <div className="relative grid items-end justify-between gap-7 px-1" style={{ gridTemplateColumns: columns }}>
