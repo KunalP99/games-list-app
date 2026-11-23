@@ -34,7 +34,12 @@ const SORT_OPTIONS = [
   { value: 'status', label: 'Status' },
 ]
 
-export default function GameFilters() {
+/**
+ * `keepScroll`: changing a tab, the sort, the view or the search leaves the
+ * page where it is instead of jumping to the top (the profile, where the list
+ * sits under the cards).
+ */
+export default function GameFilters({ keepScroll = false }: { keepScroll?: boolean } = {}) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -50,7 +55,8 @@ export default function GameFilters() {
     (searchParams.get('view') as 'grid' | 'table' | 'cover') ?? 'cover'
   )
   // The search box ↔ ?q= (lib/use-url-search.ts).
-  const { search, setSearch, applyTo } = useUrlSearch()
+  const { search, setSearch, applyTo } = useUrlSearch(300, keepScroll)
+  const navigation = { scroll: !keepScroll }
 
   // On mount: if no ?view= in URL, read cookie and update both the icon and
   // the URL so subsequent filter changes continue to preserve the view param.
@@ -62,7 +68,7 @@ export default function GameFilters() {
         setActiveView(saved)
         const params = new URLSearchParams(searchParams.toString())
         params.set('view', saved)
-        router.replace(`${pathname}?${params.toString()}`)
+        router.replace(`${pathname}?${params.toString()}`, navigation)
       }
     }
     // On mount only, by design: it restores the saved view once.
@@ -87,7 +93,7 @@ export default function GameFilters() {
     if (key === 'status' && value === 'completed') {
       params.set('sort', 'completion_date')
     }
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, navigation)
   }
 
   const searchInput = (

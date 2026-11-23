@@ -67,7 +67,7 @@ export default async function ProfileGames({
     <section aria-labelledby="profile-games" className="space-y-4 pt-4">
       <h2 id="profile-games" className="text-xl font-bold text-fg-base">Games</h2>
       <Suspense>
-        <GameFilters />
+        <GameFilters keepScroll />
       </Suspense>
       {games && games.length > 0 ? (
         <GameListView games={games} status={selectedStatus} isOwner={isOwner} view={view} liveSessions={liveSessions} />

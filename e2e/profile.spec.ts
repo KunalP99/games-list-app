@@ -309,9 +309,18 @@ test('the games list sits under the cards and its filters work', async ({ page }
   const lastCard = (await page.locator('[data-card]').last().boundingBox())!
   expect((await games.boundingBox())!.y).toBeGreaterThan(lastCard.y + lastCard.height)
   await page.waitForLoadState('networkidle')
+  // Changing tab leaves the page where it is: no jump back to the top.
+  await page.getByRole('button', { name: 'Backlog' }).scrollIntoViewIfNeeded()
+  const scrolled = await page.evaluate(() => window.scrollY)
+  expect(scrolled).toBeGreaterThan(100)
   await page.getByRole('button', { name: 'Backlog' }).click()
   await expect(page).toHaveURL(/status=backlog/)
   await expect(games.getByText('Persona 5 Royal')).toHaveCount(0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrolled)
+  await page.getByRole('button', { name: 'Completed' }).click()
+  await expect(page).toHaveURL(/status=completed/)
+  await expect(games.getByText('Persona 5 Royal').first()).toBeVisible()
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrolled)
 })
 
 test('Settings offers only the set accent colours, and saves the one picked', async ({ page }) => {
