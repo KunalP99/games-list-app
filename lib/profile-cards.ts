@@ -250,6 +250,23 @@ export function moveCard(layout: ProfileLayout, card: ProfileCardId, target: Pro
   return next
 }
 
+/**
+ * Moves `card` into an empty space (dropped there in the editor). The space
+ * sits before the card at `at` (or at the end), the same place "Add a card"
+ * would put one. The card takes the space's size when it comes in it, and
+ * keeps its own otherwise.
+ */
+export function moveToSpace(layout: ProfileLayout, card: ProfileCardId, at: number, space: CardSize): ProfileLayout {
+  const from = layout.findIndex(item => item.card === card)
+  if (from < 0) return layout
+  const item = layout[from]
+  const moved = canBe(card, space) ? { ...item, size: space } : item
+  const next = layout.filter((_, i) => i !== from)
+  const index = Math.max(0, Math.min(from < at ? at - 1 : at, next.length))
+  next.splice(index, 0, moved)
+  return sameLayout(next, layout) ? layout : next
+}
+
 /** Moves a card one place earlier (-1) or later (+1), for the keyboard. */
 export function nudgeCard(layout: ProfileLayout, card: ProfileCardId, by: -1 | 1): ProfileLayout {
   const from = layout.findIndex(item => item.card === card)

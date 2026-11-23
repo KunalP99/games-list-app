@@ -8,8 +8,11 @@ import {
   PointerSensor,
   TouchSensor,
   closestCenter,
+  pointerWithin,
+  useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -23,6 +26,7 @@ import {
   gridEntries,
   isProfileCardId,
   moveCard,
+  moveToSpace,
   removeCard,
   sameLayout,
   setShelfGames,
@@ -57,6 +61,19 @@ const SIZE_LABEL: Record<CardSize, string> = { full: 'Full', half: 'Half', small
 // as the pointer passes over another card, so the grid makes room for real
 // (cards here aren't all one size, which sliding transforms assume).
 const stayPut = () => null
+
+/** Ids of the empty spaces as drop targets; never a card id. */
+const SPACE_ID = 'space:'
+
+/**
+ * What the dragged card is over: whatever is under the pointer (so a card or
+ * a space only counts once you are actually over it), else, for the
+ * keyboard, the nearest card's centre.
+ */
+const overUnderPointer: CollisionDetection = args => {
+  const under = pointerWithin(args)
+  return under.length > 0 ? under : closestCenter(args)
+}
 
 type Props = {
   name: string
@@ -139,7 +156,15 @@ export default function ProfileView(props: Props) {
     if (!isProfileCardId(from) || !isProfileCardId(to) || from === to) return
     setDraft(current => moveCard(current, from, to))
   }
-  const onDragEnd = (_: DragEndEvent) => setDragging(null)
+  const onDragEnd = (e: DragEndEvent) => {
+    setDragging(null)
+    // Dropped on an empty space: the card moves into it. (Over a card, the
+    // layout already reordered while dragging.)
+    const from = e.active.id
+    const space = e.over?.data.current as { at: number; size: CardSize } | undefined
+    if (!isProfileCardId(from) || !String(e.over?.id ?? '').startsWith(SPACE_ID) || !space) return
+    setDraft(current => moveToSpace(current, from, space.at, space.size))
+  }
 
   const closeAdding = useCallback(() => setAdding(null), [])
   const entries = useMemo(() => gridEntries(layout), [layout])
@@ -158,12 +183,12 @@ export default function ProfileView(props: Props) {
     }
     const label = size === 'half' ? 'Half-size space' : size === 'small' ? 'Square space' : null
     return (
-      <div key={key} data-space={size} className={`relative ${SPAN[size]} ${size === 'full' ? 'min-h-[96px]' : size === 'half' ? 'min-h-[150px]' : ''}`}>
+      <Space key={key} id={`${SPACE_ID}${key}`} at={at} size={size}>
         <button
           type="button"
           onClick={() => setAdding({ at, size })}
           aria-label={label ? `Add a card (${label.toLowerCase()})` : 'Add a card'}
-          className="flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input p-2 text-center text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover"
+          className="flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input p-2 text-center text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover group-data-[over=true]/space:border-fg-base group-data-[over=true]/space:bg-surface-hover"
         >
           <span className="flex h-9 w-9 items-center justify-center rounded-full border border-edge-base bg-surface-base text-xl" aria-hidden>+</span>
           <span className="text-sm font-semibold">Add a card</span>
@@ -181,7 +206,7 @@ export default function ProfileView(props: Props) {
             {smaller === 'half' ? 'Split into halves' : 'Split into squares'}
           </button>
         )}
-      </div>
+      </Space>
     )
   }
   const draggingItem = dragging ? layout.find(item => item.card === dragging) : undefined
@@ -270,7 +295,7 @@ export default function ProfileView(props: Props) {
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={overUnderPointer}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
@@ -327,6 +352,21 @@ export default function ProfileView(props: Props) {
           }}
         />
       )}
+    </div>
+  )
+}
+
+/** An empty space in the editor: click it to add a card, or drop one on it. */
+function Space({ id, at, size, children }: { id: string; at: number; size: CardSize; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id, data: { at, size } })
+  return (
+    <div
+      ref={setNodeRef}
+      data-space={size}
+      data-over={isOver}
+      className={`group/space relative ${SPAN[size]} ${size === 'full' ? 'min-h-[96px]' : size === 'half' ? 'min-h-[150px]' : ''}`}
+    >
+      {children}
     </div>
   )
 }

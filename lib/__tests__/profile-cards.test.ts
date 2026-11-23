@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  moveToSpace,
   spotlightOrder,
   genreColumns,
   shortGenre,
@@ -324,5 +325,36 @@ describe('spotlightOrder', () => {
   it('puts a running game first, the most recently started if several are', () => {
     expect(spotlightOrder([g('a'), g('b', '2026-11-23T10:00:00Z'), g('c')]).map(x => x.id)).toEqual(['b', 'a', 'c'])
     expect(spotlightOrder([g('a', '2026-11-23T09:00:00Z'), g('b'), g('c', '2026-11-23T11:00:00Z')]).map(x => x.id)).toEqual(['c', 'a', 'b'])
+  })
+})
+
+describe('moveToSpace', () => {
+  const layout = L(['playing', 'half'], ['streak', 'small'], ['achievements', 'small'], ['completed_this_year', 'small'], ['finish_rate', 'small'])
+  const show = (l: ReturnType<typeof L>) => l.map(i => `${i.card}:${i.size}`)
+
+  it('moves a card into a space later on, where Add a card would put one', () => {
+    // A space at the end (at = length): Play streak goes last.
+    expect(show(moveToSpace(layout, 'streak', 5, 'small')))
+      .toEqual(['playing:half', 'achievements:small', 'completed_this_year:small', 'finish_rate:small', 'streak:small'])
+    // A space before Finish rate (at = 4).
+    expect(show(moveToSpace(layout, 'streak', 4, 'small')))
+      .toEqual(['playing:half', 'achievements:small', 'completed_this_year:small', 'streak:small', 'finish_rate:small'])
+  })
+
+  it('moves a card into a space earlier on', () => {
+    expect(show(moveToSpace(layout, 'finish_rate', 1, 'small')))
+      .toEqual(['playing:half', 'finish_rate:small', 'streak:small', 'achievements:small', 'completed_this_year:small'])
+  })
+
+  it('takes the space size when the card comes in it, else keeps its own', () => {
+    expect(moveToSpace(layout, 'streak', 5, 'half').at(-1)).toEqual({ card: 'streak', size: 'half' })
+    // Finish rate is square only; Currently playing half only.
+    expect(moveToSpace(layout, 'finish_rate', 0, 'half')[0]).toEqual({ card: 'finish_rate', size: 'small' })
+    expect(moveToSpace(layout, 'playing', 5, 'small').at(-1)).toEqual({ card: 'playing', size: 'half' })
+  })
+
+  it('changes nothing for a card not on the profile, or a drop where it already is', () => {
+    expect(moveToSpace(layout, 'genres', 2, 'half')).toBe(layout)
+    expect(moveToSpace(layout, 'streak', 2, 'small')).toBe(layout)
   })
 })

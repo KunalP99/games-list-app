@@ -156,6 +156,40 @@ test('an empty space splits into halves, then squares, and a card goes in a squa
   await expect.poll(async () => (await storedLayout()).profile_layout?.at(-1)).toEqual({ card: 'streak', size: 'small' })
 })
 
+test('a card dragged onto an empty space (a split one too) moves into it', async ({ page }) => {
+  // Row 1: Currently playing, Play streak, Achievements. Row 2: two squares
+  // and an empty half, which is split into squares and gets Play streak.
+  await admin().from('profiles').update({
+    profile_layout: [
+      { card: 'playing', size: 'half' }, { card: 'streak', size: 'small' }, { card: 'achievements', size: 'small' },
+      { card: 'completed_this_year', size: 'small' }, { card: 'finish_rate', size: 'small' },
+    ],
+  }).eq('id', alexId)
+  await login(page, TEST_USER)
+  await page.setViewportSize({ width: 1280, height: 1400 })
+  await openOwnProfile(page)
+  await page.getByRole('button', { name: 'Edit profile' }).click()
+  await page.getByRole('button', { name: 'Split into squares' }).first().click()
+  const square = page.locator('[data-space="small"]').first()
+  await expect(square).toBeVisible()
+
+  const handle = page.getByRole('button', { name: 'Move Play streak', exact: true })
+  const from = (await handle.boundingBox())!
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2, from.y + 20, { steps: 5 })
+  const to = (await square.boundingBox())!
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 })
+  await expect(square).toHaveAttribute('data-over', 'true')
+  await page.mouse.up()
+  await page.waitForTimeout(150)
+
+  const expected = ['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak']
+  await expect.poll(() => cardsOnPage(page)).toEqual(expected)
+  await page.getByRole('toolbar', { name: 'Editing your profile' }).getByRole('button', { name: 'Done' }).click()
+  await expect.poll(async () => (await storedLayout()).profile_layout?.map(i => i.card)).toEqual(expected)
+})
+
 test('Cancel throws the changes away', async ({ page }) => {
   await login(page, TEST_USER)
   await openOwnProfile(page)
