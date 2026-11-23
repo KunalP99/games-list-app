@@ -7,9 +7,13 @@ import type { CardGame } from '@/lib/profile-cards'
 // The Game shelf card: completed games in a lit glass display case (canvas
 // board J2). Box art stands on a glass shelf with a faint reflection below
 // and a small plaque with the hours. Always the dark case, in either theme,
-// like a cabinet lit from above.
+// like a cabinet lit from above. The covers float gently, each out of step
+// with the next, and their reflections drift the other way.
 
 type ShelfGame = CardGame & { completedOn: string | null }
+
+/** Each game's place in the float, so neighbours never bob together. */
+const floatDelay = (i: number) => ({ animationDelay: `${-((i * 1.7) % 4.5)}s` })
 
 const hoursText = (h: number | null) => (h == null ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 1 })}h`)
 const finished = (iso: string | null) =>
@@ -44,7 +48,7 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
           <div className="mx-auto min-w-[560px]" style={{ maxWidth: games.length * 132 + (games.length - 1) * 28 }}>
             {/* The games, standing on the glass shelf (the row's bottom edge). */}
             <div className="relative grid items-end justify-between gap-7 px-1" style={{ gridTemplateColumns: columns }}>
-              {games.map(g => (
+              {games.map((g, i) => (
                 <Link
                   key={g.id}
                   href={`/games/${g.id}`}
@@ -55,6 +59,7 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
                   onFocus={() => setLifted(g.id)}
                   onBlur={() => setLifted(l => (l === g.id ? null : l))}
                 >
+                  <span className="animate-shelf-float block" style={floatDelay(i)}>
                   {g.cover ? (
                     <img
                       src={g.cover}
@@ -64,6 +69,7 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
                   ) : (
                     <span className="flex aspect-[3/4] w-full items-center justify-center rounded-md bg-zinc-800 p-2 text-center text-xs font-semibold">{g.title}</span>
                   )}
+                  </span>
                 </Link>
               ))}
             </div>
@@ -72,15 +78,17 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
 
             {/* Their reflections in the glass, and a plaque with the hours. */}
             <div className="grid justify-between gap-7 px-1" style={{ gridTemplateColumns: columns }}>
-              {games.map(g => (
+              {games.map((g, i) => (
                 <div key={g.id} className="flex flex-col items-center">
                   <div aria-hidden className="h-10 w-full overflow-hidden opacity-25 [mask-image:linear-gradient(180deg,#000,transparent)]">
                     {g.cover && (
-                      <img
-                        src={g.cover}
-                        alt=""
-                        className={`aspect-[3/4] w-full -scale-y-100 rounded-md object-cover object-bottom transition-transform duration-200 ${lifted === g.id ? 'translate-y-1.5' : ''}`}
-                      />
+                      <div className="animate-shelf-float-mirror" style={floatDelay(i)}>
+                        <img
+                          src={g.cover}
+                          alt=""
+                          className={`aspect-[3/4] w-full -scale-y-100 rounded-md object-cover object-bottom transition-transform duration-200 ${lifted === g.id ? 'translate-y-1.5' : ''}`}
+                        />
+                      </div>
                     )}
                   </div>
                   {hoursText(g.hours) && (
