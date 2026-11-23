@@ -287,6 +287,10 @@ function renderResumePrompt(prompt) {
 
 function renderUpdateModal(pendingUpdate) {
   const modal = el('update-modal')
+  // After "Later" the update stays on screen as a banner, so it's never
+  // more than a glance away.
+  updateBanner.hidden = !pendingUpdate || !updateDismissed
+  if (pendingUpdate) updateBanner.querySelector('strong').textContent = pendingUpdate.version
   if (updateDismissed || !pendingUpdate) {
     modal.hidden = true
     return
@@ -413,7 +417,32 @@ el('update-now').addEventListener('click', async () => {
 })
 el('update-later').addEventListener('click', () => {
   updateDismissed = true
-  el('update-modal').hidden = true
+  refresh()
+})
+
+// The slim "Update available" bar shown after "Later". Built here so the
+// page's markup stays as it is.
+const updateBanner = document.createElement('div')
+updateBanner.className = 'update-banner'
+updateBanner.setAttribute('role', 'status')
+updateBanner.hidden = true
+updateBanner.append('Update available: version ', document.createElement('strong'), ' ')
+const updateBannerButton = document.createElement('button')
+updateBannerButton.type = 'button'
+updateBannerButton.className = 'primary'
+updateBannerButton.textContent = 'Update now'
+updateBannerButton.addEventListener('click', () => {
+  updateDismissed = false
+  refresh()
+})
+updateBanner.append(updateBannerButton)
+document.body.prepend(updateBanner)
+
+// A version found while the app was in the tray: the window was just
+// brought up for it, so show the box even if an earlier one was put off.
+listen('update-announced', () => {
+  updateDismissed = false
+  refresh()
 })
 
 el('platform-prompt-save').addEventListener('click', async () => {

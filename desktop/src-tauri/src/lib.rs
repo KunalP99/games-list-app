@@ -658,6 +658,49 @@ fn set_api_base(app: AppHandle, base: String) {
     config::save(&tracker.data_dir, &config);
 }
 
+/// How often to look for a newer version while the app keeps running.
+const UPDATE_CHECK_EVERY: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
+
+/// Looks for an update at launch and every `UPDATE_CHECK_EVERY`, and shows
+/// the main window (with its update box) the first time a version is found,
+/// once nothing is being tracked.
+async fn update_loop(app: AppHandle) {
+    use tauri_plugin_updater::UpdaterExt;
+    // Let the window and the first status read settle first.
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    let mut next_check = std::time::Instant::now();
+    let mut announced: Option<String> = None;
+    loop {
+        if std::time::Instant::now() >= next_check {
+            next_check = std::time::Instant::now() + UPDATE_CHECK_EVERY;
+            match app.updater() {
+                Ok(updater) => match updater.check().await {
+                    Ok(Some(update)) => {
+                        log::info!("update available: {}", update.version);
+                        *app.state::<UpdateState>().0.lock().unwrap() = Some(update);
+                        let _ = app.emit("status-changed", ());
+                    }
+                    Ok(None) => {}
+                    Err(err) => log::warn!("update check failed: {err}"),
+                },
+                Err(err) => log::warn!("updater unavailable: {err}"),
+            }
+        }
+
+        let pending = app.state::<UpdateState>().0.lock().unwrap().as_ref().map(|u| u.version.clone());
+        if let Some(version) = pending {
+            let playing = app.state::<Tracker>().shared.lock().unwrap().session.is_some();
+            if announced.as_deref() != Some(version.as_str()) && !playing {
+                log::info!("showing the update box for {version}");
+                announced = Some(version);
+                show_main(&app);
+                let _ = app.emit("update-announced", ());
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+    }
+}
+
 fn show_main(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -712,35 +755,16 @@ pub fn run() {
             app.manage(Tracker::new(data_dir));
             app.manage(UpdateState::default());
 
-            // Checked once per launch, never periodically — the main
-            // window's modal (fed by `pending_update` on `get_status`) is the
-            // only place this is ever asked about again. Not gated by
-            // `cfg!(debug_assertions)` like autostart above: this is just a
-            // read-only network check, harmless in dev, and running it on
-            // every launch (including a silent `--minimised` one) means the
-            // check has already happened by the time the user opens the main
-            // window, autostarted or not.
+            // At launch, then every few hours: the app sits in the tray for
+            // days, so a check at launch alone would leave it on an old
+            // version. A newly found version brings the main window up with
+            // its update box (`pending_update` on `get_status`), once per
+            // version, and never over a game being tracked: it waits for the
+            // session to end. Not gated by `cfg!(debug_assertions)`: a
+            // read-only network check, harmless in dev.
             {
                 let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    use tauri_plugin_updater::UpdaterExt;
-                    let updater = match handle.updater() {
-                        Ok(u) => u,
-                        Err(err) => {
-                            log::warn!("updater unavailable: {err}");
-                            return;
-                        }
-                    };
-                    match updater.check().await {
-                        Ok(Some(update)) => {
-                            log::info!("update available: {}", update.version);
-                            *handle.state::<UpdateState>().0.lock().unwrap() = Some(update);
-                            let _ = handle.emit("status-changed", ());
-                        }
-                        Ok(None) => {}
-                        Err(err) => log::warn!("update check failed: {err}"),
-                    }
-                });
+                tauri::async_runtime::spawn(async move { update_loop(handle).await });
             }
 
             // Forced, not a setting: there is no toggle anywhere to turn this

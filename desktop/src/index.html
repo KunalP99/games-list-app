@@ -243,10 +243,11 @@
        outside both #signed-in and #settings-view so it can appear over
        either. -->
   <div class="modal-overlay" id="update-modal" hidden>
-    <section class="card modal-dialog">
-      <p class="modal-heading">Update available</p>
+    <section class="card modal-dialog" role="dialog" aria-modal="true" aria-labelledby="update-heading">
+      <p class="modal-heading" id="update-heading">Update GamesList</p>
       <p class="modal-body">
-        Version <strong id="update-version"></strong> is ready.
+        Version <strong id="update-version"></strong> is ready. Update now so tracking keeps working
+        with the latest fixes. It takes a moment, and a game being tracked carries on.
         <span id="update-notes"></span>
       </p>
       <div class="modal-actions">
