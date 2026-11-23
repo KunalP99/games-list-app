@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, useTransition } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -27,6 +27,7 @@ import {
   sameLayout,
   setSize,
   sizeForSpace,
+  splitSize,
   type CardSize,
   type LayoutItem,
   type ProfileCardData,
@@ -76,6 +77,9 @@ export default function ProfileView(props: Props) {
   const [draft, setDraft] = useState<ProfileLayout>(props.layout)
   const [draftBio, setDraftBio] = useState(props.bio ?? '')
   const [adding, setAdding] = useState<{ at: number; size: CardSize } | null>(null)
+  // Empty spaces the owner has split (full → halves → squares), by key. Only
+  // for the layout they were split on: any change to the cards starts afresh.
+  const [splits, setSplits] = useState<{ on: ProfileLayout; keys: ReadonlySet<string> }>({ on: [], keys: new Set() })
   const [dragging, setDragging] = useState<ProfileCardId | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, startSaving] = useTransition()
@@ -136,6 +140,47 @@ export default function ProfileView(props: Props) {
 
   const closeAdding = useCallback(() => setAdding(null), [])
   const entries = useMemo(() => gridEntries(layout), [layout])
+  const splitKeys = splits.on === draft ? splits.keys : new Set<string>()
+  const split = (key: string) => setSplits({ on: draft, keys: new Set([...splitKeys, key]) })
+
+  function renderSpace(at: number, size: CardSize, key: string): React.ReactNode {
+    const smaller = splitSize(size)
+    if (smaller && splitKeys.has(key)) {
+      return (
+        <Fragment key={key}>
+          {renderSpace(at, smaller, `${key}.0`)}
+          {renderSpace(at, smaller, `${key}.1`)}
+        </Fragment>
+      )
+    }
+    const label = size === 'half' ? 'Half-size space' : size === 'small' ? 'Square space' : null
+    return (
+      <div key={key} data-space={size} className={`relative ${SPAN[size]} ${size === 'full' ? 'min-h-[96px]' : size === 'half' ? 'min-h-[150px]' : ''}`}>
+        <button
+          type="button"
+          onClick={() => setAdding({ at, size })}
+          aria-label={label ? `Add a card (${label.toLowerCase()})` : 'Add a card'}
+          className="flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input p-2 text-center text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border border-edge-base bg-surface-base text-xl" aria-hidden>+</span>
+          <span className="text-sm font-semibold">Add a card</span>
+          {label && <span className="text-xs text-fg-muted">{label}</span>}
+        </button>
+        {smaller && (
+          <button
+            type="button"
+            onClick={() => split(key)}
+            className="absolute right-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-lg border border-edge-base bg-surface-base px-2.5 py-1 text-xs font-semibold text-fg-secondary shadow-sm hover:text-fg-base"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M12 4v16" />
+            </svg>
+            {smaller === 'half' ? 'Split into halves' : 'Split into squares'}
+          </button>
+        )}
+      </div>
+    )
+  }
   const draggingItem = dragging ? layout.find(item => item.card === dragging) : undefined
 
   const bio = editing ? (
@@ -230,7 +275,7 @@ export default function ProfileView(props: Props) {
         >
           <SortableContext items={layout.map(item => item.card)} strategy={stayPut}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              {entries.map(entry => entry.kind === 'card' ? (
+              {entries.map((entry, i) => entry.kind === 'card' ? (
                 <SortableCard
                   key={entry.item.card}
                   item={entry.item}
@@ -241,18 +286,7 @@ export default function ProfileView(props: Props) {
                   onResize={size => setDraft(d => setSize(d, entry.item.card, size))}
                 />
               ) : editing ? (
-                <button
-                  key={`space-${entry.size}-${entry.at}`}
-                  type="button"
-                  onClick={() => setAdding({ at: entry.at, size: entry.size })}
-                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input p-2 text-center text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover ${SPAN[entry.size]} ${
-                    entry.size === 'full' ? 'min-h-[96px]' : entry.size === 'half' ? 'min-h-[150px]' : ''
-                  }`}
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-edge-base bg-surface-base text-xl" aria-hidden>+</span>
-                  <span className="text-sm font-semibold">Add a card</span>
-                  {entry.size !== 'full' && <span className="text-xs text-fg-muted">{entry.size === 'half' ? 'Half-size space' : 'Square space'}</span>}
-                </button>
+                renderSpace(entry.at, entry.size, `space-${i}`)
               ) : null)}
             </div>
           </SortableContext>

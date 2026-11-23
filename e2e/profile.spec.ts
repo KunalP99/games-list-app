@@ -131,6 +131,31 @@ test('a card moves with the keyboard', async ({ page }) => {
     .toEqual(['playing', 'achievements', 'finish_rate', 'streak', 'completed_this_year', 'recently_completed', 'genres', 'platforms'])
 })
 
+test('an empty space splits into halves, then squares, and a card goes in a square', async ({ page }) => {
+  await login(page, TEST_USER)
+  await openOwnProfile(page)
+  await page.getByRole('button', { name: 'Edit profile' }).click()
+  // Free up a square-sized card, then split the full space at the end.
+  await page.getByRole('button', { name: 'Remove Play streak' }).click()
+  const spaces = () => page.locator('[data-space]').evaluateAll(nodes => nodes.map(n => n.getAttribute('data-space')))
+  await expect.poll(spaces).toEqual(['small', 'full'])
+
+  await page.getByRole('button', { name: 'Split into halves' }).click()
+  await expect.poll(spaces).toEqual(['small', 'half', 'half'])
+  await page.getByRole('button', { name: 'Split into squares' }).first().click()
+  await expect.poll(spaces).toEqual(['small', 'small', 'small', 'half'])
+
+  // The first square at the end (the row's own gap comes first).
+  await page.locator('[data-space="small"]').nth(1).getByRole('button', { name: /Add a card/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Add a card' })
+  await expect(dialog.getByText('This is a square space.', { exact: false })).toBeVisible()
+  await dialog.locator('button[data-card="streak"]').click()
+  await dialog.getByRole('button', { name: 'Add Play streak' }).click()
+
+  await page.getByRole('toolbar', { name: 'Editing your profile' }).getByRole('button', { name: 'Done' }).click()
+  await expect.poll(async () => (await storedLayout()).profile_layout?.at(-1)).toEqual({ card: 'streak', size: 'small' })
+})
+
 test('Cancel throws the changes away', async ({ page }) => {
   await login(page, TEST_USER)
   await openOwnProfile(page)

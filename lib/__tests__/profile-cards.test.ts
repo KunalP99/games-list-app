@@ -15,6 +15,7 @@ import {
   sameLayout,
   setSize,
   sizeForSpace,
+  splitSize,
   type ProfileLayout,
 } from '../profile-cards'
 
@@ -108,6 +109,14 @@ describe('gridEntries', () => {
   it('has no full space once every card is on', () => {
     const all = PROFILE_CARD_IDS.map(card => ({ card, size: PROFILE_CARDS[card].sizes[0] }))
     expect(gridEntries(all).some(e => e.kind === 'space' && e.size === 'full')).toBe(false)
+  })
+})
+
+describe('splitSize', () => {
+  it('splits a full space into halves, a half into squares, and a square not at all', () => {
+    expect(splitSize('full')).toBe('half')
+    expect(splitSize('half')).toBe('small')
+    expect(splitSize('small')).toBeNull()
   })
 })
 

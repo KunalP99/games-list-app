@@ -172,6 +172,14 @@ export function gridEntries(layout: ProfileLayout): GridEntry[] {
   return entries
 }
 
+/**
+ * What an empty space splits into, in edit mode: a full-width space into two
+ * halves, a half into two squares. A square doesn't split.
+ */
+export function splitSize(size: CardSize): CardSize | null {
+  return size === 'full' ? 'half' : size === 'half' ? 'small' : null
+}
+
 /** The cards that aren't on the profile yet, in catalogue order. */
 export function cardsToAdd(layout: ProfileLayout): ProfileCardId[] {
   const used = new Set(layout.map(item => item.card))
