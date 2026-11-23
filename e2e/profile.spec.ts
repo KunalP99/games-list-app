@@ -4,7 +4,7 @@ import { admin, userId, setPrivacy, clearFriends, DEFAULT_PRIVACY, ALEX, SAM } f
 
 // The public edition's profile (FEATURES.newProfile, lib/profile-cards.ts):
 // the profile card, cards you add, size, move and remove, the bio, what
-// visitors see, and the Games tab. Puts test-alex's layout and bio back.
+// visitors see, and the games list under the cards. Puts test-alex's layout and bio back.
 
 test.describe.configure({ mode: 'serial' })
 test.skip(EDITION !== 'public', 'the card profile is public edition only')
@@ -177,14 +177,16 @@ test('someone else sees the layout without edit controls, minus what privacy hid
   }
 })
 
-test('the Games tab lists their games and its filters work', async ({ page }) => {
+test('the games list sits under the cards and its filters work', async ({ page }) => {
   await login(page, TEST_USER)
   await openOwnProfile(page)
-  await page.getByRole('navigation', { name: 'Profile' }).getByRole('link', { name: /Games/ }).click()
-  await expect(page).toHaveURL(/\/users\/test-alex\/games/)
-  await expect(page.getByText('Persona 5 Royal').first()).toBeVisible()
+  const games = page.getByRole('region', { name: 'Games' })
+  await expect(games.getByText('Persona 5 Royal').first()).toBeVisible()
+  // Below the last card.
+  const lastCard = (await page.locator('[data-card]').last().boundingBox())!
+  expect((await games.boundingBox())!.y).toBeGreaterThan(lastCard.y + lastCard.height)
   await page.waitForLoadState('networkidle')
   await page.getByRole('button', { name: 'Backlog' }).click()
   await expect(page).toHaveURL(/status=backlog/)
-  await expect(page.getByText('Persona 5 Royal')).toHaveCount(0)
+  await expect(games.getByText('Persona 5 Royal')).toHaveCount(0)
 })

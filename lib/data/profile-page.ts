@@ -9,14 +9,13 @@ import type { Profile } from '@/lib/types'
 
 /**
  * The person a `/users/[username]` page is about, and how the viewer stands
- * to them. Shared by the profile and its Games tab.
+ * to them.
  *
  * The friends edition matches the name exactly, as it always has. The public
  * edition's usernames are case-insensitive, and an old name (from before a
- * rename, kept in username_redirects) forwards to the current profile, on the
- * same tab (`tab`, e.g. "/games").
+ * rename, kept in username_redirects) forwards to the current profile.
  */
-export async function getProfileForPage(rawUsername: string, tab = '') {
+export async function getProfileForPage(rawUsername: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -37,7 +36,7 @@ export async function getProfileForPage(rawUsername: string, tab = '') {
       .select('profiles(username)')
       .eq('old_username', requested.toLowerCase())
       .maybeSingle() as { data: { profiles: { username: string } | null } | null }
-    if (moved?.profiles?.username) redirect(`/users/${encodeURIComponent(moved.profiles.username)}${tab}`)
+    if (moved?.profiles?.username) redirect(`/users/${encodeURIComponent(moved.profiles.username)}`)
   }
   if (!profile) notFound()
 

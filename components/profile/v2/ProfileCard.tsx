@@ -5,8 +5,7 @@ import { levelProgress } from '@/lib/levels'
 //
 // Colour: their accent, passed as a value, never `brand-*` (which is the
 // signed-in viewer's colour; on someone else's profile it would paint yours
-// over theirs). Plain component, no hooks: the page's client part and the
-// Games tab's server page both render it.
+// over theirs). Plain component, no hooks.
 
 export type ProfileFigures = { hours: number; games: number; completed: number }
 

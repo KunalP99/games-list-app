@@ -34,12 +34,11 @@ import {
   type ProfileLayout,
 } from '@/lib/profile-cards'
 import ProfileCard, { type ProfileFigures } from './ProfileCard'
-import ProfileTabs from './ProfileTabs'
 import CardBody from './CardBody'
 import AddCardDialog from './AddCardDialog'
 
-// The profile page's Overview (public edition): the profile card, then the
-// cards in two columns. The owner can switch to editing: drag cards about
+// The top of the profile page (public edition): the profile card, then the
+// cards in a four-column grid (the games list follows, ProfileGames). The owner can switch to editing: drag cards about
 // (mouse, touch or keyboard), add one in any empty space, resize or remove
 // one, and edit the bio. Nothing is saved until Done.
 
@@ -63,7 +62,6 @@ type Props = {
   accent: string
   xp: number
   figures: ProfileFigures | null
-  gameCount: number | null
   layout: ProfileLayout
   bio: string | null
   data: ProfileCardData
@@ -215,9 +213,7 @@ export default function ProfileView(props: Props) {
           </button>
           {error && <p role="alert" className="basis-full text-sm text-red-300">{error}</p>}
         </div>
-      ) : (
-        <ProfileTabs username={props.username} active="overview" gameCount={props.gameCount} />
-      )}
+      ) : null}
 
       {!editing && layout.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-edge-base px-6 py-10 text-center text-sm text-fg-muted">

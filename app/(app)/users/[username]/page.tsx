@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { getProfileForPage } from '@/lib/data/profile-page'
 import ProfileOverview from '@/components/profile/v2/ProfileOverview'
+import ProfileGames from '@/components/profile/v2/ProfileGames'
 import { computeUserStats } from '@/lib/user-stats'
 import { resolveBannerImage } from '@/lib/hero-banner'
 import { buildActivityItems, suppressRepeatedStarts, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
@@ -47,10 +48,10 @@ export default async function UserProfilePage(
     )
   }
 
-  // Public edition: the profile you make your own (cards), with the games
-  // list on its own tab (./games/page.tsx).
+  // Public edition: the profile you make your own (cards), then the games list.
   if (FEATURES.newProfile) {
     return (
+      <div className="space-y-5">
       <ProfileOverview
         profile={{ id: profile.id, username: profile.username, xp: profile.xp ?? 0, bio: profile.bio ?? null, profile_layout: profile.profile_layout }}
         name={name}
@@ -60,6 +61,15 @@ export default async function UserProfilePage(
         allows={allows}
         friendButton={friendButton && <FriendButton personId={profile.id} username={profile.username} name={name} relation={relation} onDark />}
       />
+      <ProfileGames
+        userId={profile.id}
+        name={name}
+        isOwner={isOwner}
+        allowed={allows('privacy_games')}
+        privateTo={profile.privacy_games}
+        searchParams={searchParams}
+      />
+      </div>
     )
   }
 

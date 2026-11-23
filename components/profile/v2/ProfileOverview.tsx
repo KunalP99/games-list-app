@@ -55,7 +55,6 @@ export default async function ProfileOverview({
       accent={accent}
       xp={profile.xp ?? 0}
       figures={seesGames ? profileFigures(stats) : null}
-      gameCount={seesGames ? profileFigures(stats).games : null}
       layout={layout}
       bio={profile.bio}
       data={data}
