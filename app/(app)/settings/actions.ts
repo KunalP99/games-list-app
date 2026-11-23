@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { isAccentChoice } from '@/lib/accent-choices'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import type { ActionResult } from '@/lib/types'
@@ -128,6 +129,10 @@ export async function updateAppearance(formData: FormData): Promise<ActionResult
 
   const theme_preference = formData.get('theme_preference') as 'light' | 'dark' | 'system'
   const accent_colour = (formData.get('accent_colour') as string) || null
+  // Public edition: only the set colours (lib/accent-choices.ts).
+  if (FEATURES.presetAccents && accent_colour !== null && !isAccentChoice(accent_colour)) {
+    return { success: false, error: 'Pick one of the colours shown.' }
+  }
 
   const { error } = await supabase
     .from('profiles')

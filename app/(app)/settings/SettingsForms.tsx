@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { updateProfile, updatePassword, updateAppearance, updateWheelEnabled, revokeDevice, ignoreExecutable, unignoreExecutable } from './actions'
 import { applyAccentPalette } from '@/lib/accent'
+import { ACCENT_CHOICES, nearestAccentChoice } from '@/lib/accent-choices'
 import type { Profile } from '@/lib/types'
 import { FEATURES } from '@/lib/edition'
 import UsernameSetting from './UsernameSetting'
@@ -54,7 +55,11 @@ export default function SettingsForms({ profile, email, hasPassword = true, devi
 
   const profileData = profile as any
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(profileData.theme_preference ?? 'system')
-  const [accent, setAccent] = useState<string>(profileData.accent_colour ?? '#ff5722')
+  // Public edition: one of the set colours; a colour picked freely before
+  // shows as the closest one until another is chosen.
+  const [accent, setAccent] = useState<string>(
+    FEATURES.presetAccents ? nearestAccentChoice(profileData.accent_colour) : profileData.accent_colour ?? '#ff5722',
+  )
   // Existing accounts predate the column, so treat a missing value as opted in.
   const [wheelEnabled, setWheelEnabled] = useState<boolean>(profileData.wheel_enabled ?? true)
 
@@ -314,6 +319,33 @@ export default function SettingsForms({ profile, email, hasPassword = true, devi
           </div>
 
           {/* Accent colour */}
+          {FEATURES.presetAccents ? (
+          <fieldset>
+            <legend className="block text-sm font-medium text-fg-secondary mb-2">Accent Colour</legend>
+            <p className="text-xs text-fg-subtle mb-3">Used for your profile, avatar and highlights. Each works in light and dark mode.</p>
+            <input type="hidden" name="accent_colour" value={accent} />
+            <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Accent colour">
+              {ACCENT_CHOICES.map(choice => {
+                const on = accent === choice.hex
+                return (
+                  <button
+                    key={choice.hex}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    aria-label={choice.name}
+                    title={choice.name}
+                    onClick={() => { setAccent(choice.hex); applyAccentPalette(choice.hex) }}
+                    className={`h-9 w-9 rounded-full transition-transform hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-fg-muted ${on ? 'ring-2 ring-offset-2 ring-offset-surface-base' : ''}`}
+                    style={{ backgroundColor: choice.hex, ...(on ? { ['--tw-ring-color' as string]: choice.hex } : {}) }}
+                  >
+                    {on && <span className="text-sm font-bold text-white" aria-hidden>✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </fieldset>
+          ) : (
           <div>
             <label className="block text-sm font-medium text-fg-secondary mb-2">Accent Colour</label>
             <p className="text-xs text-fg-subtle mb-3">Used for your avatar and row highlights across the app.</p>
@@ -343,6 +375,7 @@ export default function SettingsForms({ profile, email, hasPassword = true, devi
               </button>
             </div>
           </div>
+          )}
 
           <div className="flex items-center gap-3 pt-1">
             <button

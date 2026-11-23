@@ -50,6 +50,11 @@ describe('featuresFor', () => {
     expect(featuresFor('public').newProfile).toBe(true)
   })
 
+  it('offers set accent colours in the public edition only', () => {
+    expect(featuresFor('friends').presetAccents).toBe(false)
+    expect(featuresFor('public').presetAccents).toBe(true)
+  })
+
   it('shares the ticket ledger in the friends edition only', () => {
     expect(featuresFor('friends').sharedTicketLedger).toBe(true)
     expect(featuresFor('public').sharedTicketLedger).toBe(false)

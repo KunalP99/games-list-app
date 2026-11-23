@@ -96,6 +96,12 @@ export function featuresFor(edition: Edition) {
      * friends edition keeps its profile page as it was.
      */
     newProfile: edition === 'public',
+    /**
+     * The accent colour is picked from a set (lib/accent-choices.ts) that
+     * works in light and dark mode, not a free colour picker. The friends
+     * edition keeps its picker.
+     */
+    presetAccents: edition === 'public',
   }
 }
 

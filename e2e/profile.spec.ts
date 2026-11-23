@@ -215,3 +215,24 @@ test('the games list sits under the cards and its filters work', async ({ page }
   await expect(page).toHaveURL(/status=backlog/)
   await expect(games.getByText('Persona 5 Royal')).toHaveCount(0)
 })
+
+test('Settings offers only the set accent colours, and saves the one picked', async ({ page }) => {
+  const before = (await admin().from('profiles').select('accent_colour').eq('id', alexId).single()).data!.accent_colour
+  try {
+    await login(page, TEST_USER)
+    await page.goto('/settings')
+    const colours = page.getByRole('radiogroup', { name: 'Accent colour' })
+    await expect(colours).toBeVisible()
+    await expect(page.locator('input[type="color"]')).toHaveCount(0)
+    // Let React take over before clicking (the Turnstile widget keeps the network busy).
+    await expect(async () => {
+      await colours.getByRole('radio', { name: 'Teal' }).click()
+      await expect(colours.getByRole('radio', { name: 'Teal' })).toHaveAttribute('aria-checked', 'true', { timeout: 1_000 })
+    }).toPass({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Save Appearance' }).click()
+    await expect.poll(async () => (await admin().from('profiles').select('accent_colour').eq('id', alexId).single()).data!.accent_colour)
+      .toBe('#0d9488')
+  } finally {
+    await admin().from('profiles').update({ accent_colour: before }).eq('id', alexId)
+  }
+})
