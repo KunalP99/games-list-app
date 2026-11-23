@@ -300,14 +300,16 @@ test.describe('on the site', () => {
   })
 
   test('a stranger sees a public profile without the friends-only parts', async () => {
-    // Defaults: games public, tickets and play activity friends only.
+    // Defaults: games public, tickets and play activity friends only. The
+    // profile's Currently playing card is play activity (lib/profile-cards.ts).
     await sam.goto('/users/test-alex')
     await expect(sam.getByRole('heading', { name: 'Alex (test)' })).toBeVisible()
-    await expect(sam.getByText(/^tickets$/), 'the banner ticket figure is friends only').toHaveCount(0)
+    await expect(sam.locator('[data-card="finish_rate"]'), 'games are public').toHaveCount(1)
+    await expect(sam.locator('[data-card="playing"]'), 'play activity is friends only').toHaveCount(0)
     await expect(sam.getByRole('button', { name: 'Add friend' })).toBeVisible()
     await befriend(alexId, samId)
     await sam.goto('/users/test-alex')
-    await expect(sam.getByText(/^tickets$/)).toHaveCount(1)
+    await expect(sam.locator('[data-card="playing"]')).toHaveCount(1)
   })
 
   test('Settings → Privacy: a private profile shows only the private card', async () => {

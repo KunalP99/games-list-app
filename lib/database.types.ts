@@ -43,6 +43,10 @@ export type Database = {
           privacy_achievements: PrivacySetting
           privacy_activity: PrivacySetting
           privacy_tickets: PrivacySetting
+          /** The cards under the profile card, in order (lib/profile-cards.ts); null = the default. db/profile-cards.sql */
+          profile_layout: unknown | null
+          /** One or two lines on the profile card (public edition). */
+          bio: string | null
           created_at: string
           updated_at: string
         }
@@ -67,6 +71,8 @@ export type Database = {
           privacy_achievements?: PrivacySetting
           privacy_activity?: PrivacySetting
           privacy_tickets?: PrivacySetting
+          profile_layout?: unknown | null
+          bio?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -91,6 +97,8 @@ export type Database = {
           privacy_achievements?: PrivacySetting
           privacy_activity?: PrivacySetting
           privacy_tickets?: PrivacySetting
+          profile_layout?: unknown | null
+          bio?: string | null
           created_at?: string
           updated_at?: string
         }

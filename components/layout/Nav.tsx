@@ -36,9 +36,18 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
   // Opting out of wheel turns in Settings takes the Wheel tab out of the nav,
   // as does an edition without the wheel. Wheel History stays for an opted-out
   // user — it's shared history, and still worth looking back on.
-  const primaryNavItems = wheelOn(profile)
-    ? navItemsBefore
-    : navItemsBefore.filter(item => item.href !== '/wheel')
+  // Public edition: your own profile comes first (lib/edition.ts newProfile).
+  const profileHref = `/users/${encodeURIComponent(profile.username)}`
+  const primaryNavItems = [
+    ...(FEATURES.newProfile ? [{ href: profileHref, label: 'Profile' }] : []),
+    ...(wheelOn(profile) ? navItemsBefore : navItemsBefore.filter(item => item.href !== '/wheel')),
+  ]
+  // The wheel's page is active only on itself (not Wheel History); your
+  // profile on itself and its tabs, not on someone whose name starts the same.
+  const isActive = (href: string) =>
+    href === '/wheel' ? pathname === '/wheel'
+      : href === profileHref ? pathname.toLowerCase() === href.toLowerCase() || pathname.toLowerCase().startsWith(`${href.toLowerCase()}/`)
+        : pathname.startsWith(href)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [ticketAnimating, setTicketAnimating] = useState(false)
@@ -115,7 +124,7 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
           {/* Center: desktop nav links */}
           <nav className="hidden lg:flex items-center gap-0.5">
             {primaryNavItems.map((item) => {
-              const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
+              const active = isActive(item.href)
               return (
                 <Link
                   key={item.href}
@@ -248,7 +257,7 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2">
           {[...primaryNavItems, ...navItemsAfter].map((item) => {
-            const active = item.href === '/wheel' ? pathname === '/wheel' : pathname.startsWith(item.href)
+            const active = isActive(item.href)
             return (
               <Link
                 key={item.href}

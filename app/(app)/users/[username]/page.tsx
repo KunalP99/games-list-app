@@ -1,11 +1,11 @@
-import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { createClient } from '@/lib/supabase/server'
+import { getProfileForPage } from '@/lib/data/profile-page'
+import ProfileOverview from '@/components/profile/v2/ProfileOverview'
 import { computeUserStats } from '@/lib/user-stats'
 import { resolveBannerImage } from '@/lib/hero-banner'
 import { buildActivityItems, suppressRepeatedStarts, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
 import { ACHIEVEMENTS } from '@/lib/achievements'
-import type { Game, Profile } from '@/lib/types'
+import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
 import ProfileHero from '@/components/profile/ProfileHero'
@@ -16,9 +16,7 @@ import { getRecentlyPlayed } from '@/lib/recently-played'
 import { getLiveSessions, settleSession } from '@/lib/presence'
 import { Suspense } from 'react'
 import { FEATURES, wheelOn } from '@/lib/edition'
-import { escapeLike, ilikeAnyFilter } from '@/lib/query-escape'
-import { privacyAllows, type PrivacyKey, type Relation } from '@/lib/friends'
-import { getRelation } from '@/lib/data/friends'
+import { ilikeAnyFilter } from '@/lib/query-escape'
 import FriendButton from '@/components/friends/FriendButton'
 import PrivateProfile from '@/components/friends/PrivateProfile'
 
@@ -31,61 +29,10 @@ export default async function UserProfilePage(
   const searchParams = await props.searchParams;
   const params = await props.params;
 
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  // The friends edition matches the name exactly, as it always has. The public
-  // edition's usernames are case-insensitive, and an old name (from before a
-  // rename, kept in username_redirects) forwards to the current profile.
-  let profileQuery = supabase
-    .from('profiles')
-    .select(FEATURES.friendSystem
-      ? 'id, display_name, username, ticket_balance, xp, accent_colour, wheel_turn, wheel_enabled, privacy_profile, privacy_games, privacy_achievements, privacy_activity, privacy_tickets'
-      : 'id, display_name, username, ticket_balance, accent_colour, wheel_turn, wheel_enabled')
-  const requested = decodeURIComponent(params.username)
-  profileQuery = FEATURES.secureAuth
-    ? profileQuery.ilike('username', escapeLike(requested))
-    : profileQuery.eq('username', params.username)
-  const { data: profile } = await profileQuery.maybeSingle() as { data: Profile | null }
-
-  if (!profile && FEATURES.secureAuth) {
-    const { data: moved } = await ((supabase as any).from('username_redirects'))
-      .select('profiles(username)')
-      .eq('old_username', requested.toLowerCase())
-      .maybeSingle() as { data: { profiles: { username: string } | null } | null }
-    if (moved?.profiles?.username) redirect(`/users/${encodeURIComponent(moved.profiles.username)}`)
-  }
-  if (!profile) notFound()
-
-  const isOwner = user?.id === profile.id
-
-  // Public edition: what this viewer may see of them (lib/friends.ts). The
-  // database applies the same rule to the rows themselves (db/friends.sql);
-  // this just keeps sections it would leave empty off the page.
-  const relation: Relation = !FEATURES.friendSystem || isOwner
-    ? 'self'
-    : user ? await getRelation(supabase, user.id, profile.id) : 'none'
-  const allows = (key: PrivacyKey) => privacyAllows(profile[key] ?? 'everyone', relation)
-  const name = profile.display_name ?? profile.username
+  const { supabase, user, profile, isOwner, relation, allows, name, initials, accent } = await getProfileForPage(params.username)
   const friendButton = FEATURES.friendSystem && user && !isOwner
     ? <FriendButton personId={profile.id} username={profile.username} name={name} relation={relation} />
     : null
-
-  // Only letters/digits start an initial — a display name like "Alex (test)"
-  // would otherwise render as "A(".
-  const initials = (profile.display_name ?? profile.username)
-    .split(/[\s_-]+/)
-    // Strip leading punctuation so a word like "(test)" contributes "t", not "(".
-    // No \p{…} escapes here — the TS target predates the `u` flag.
-    .map((w: string) => w.replace(/^[^0-9A-Za-zÀ-ɏ]+/, '').charAt(0))
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase() || '?'
-  // Their accent, never the viewer's — `brand-*` classes resolve to whoever is
-  // logged in, so the friend's colour is always passed down as a value.
-  const accent = profile.accent_colour ?? '#7c3aed'
 
   if (!allows('privacy_profile')) {
     return (
@@ -96,6 +43,22 @@ export default async function UserProfilePage(
         accent={accent}
         xp={profile.xp ?? 0}
         friendButton={friendButton}
+      />
+    )
+  }
+
+  // Public edition: the profile you make your own (cards), with the games
+  // list on its own tab (./games/page.tsx).
+  if (FEATURES.newProfile) {
+    return (
+      <ProfileOverview
+        profile={{ id: profile.id, username: profile.username, xp: profile.xp ?? 0, bio: profile.bio ?? null, profile_layout: profile.profile_layout }}
+        name={name}
+        initials={initials}
+        accent={accent}
+        isOwner={isOwner}
+        allows={allows}
+        friendButton={friendButton && <FriendButton personId={profile.id} username={profile.username} name={name} relation={relation} onDark />}
       />
     )
   }

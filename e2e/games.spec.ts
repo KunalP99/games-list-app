@@ -83,7 +83,9 @@ test('a tab clicked as soon as the page opens sticks', async () => {
 })
 
 test('search on a profile copes with a comma too', async () => {
-  await page.goto(`/users/test-sam?status=all&q=${encodeURIComponent('40,000')}`)
+  // The public edition's profile keeps the list on its Games tab.
+  const list = EDITION === 'public' ? '/users/test-sam/games' : '/users/test-sam'
+  await page.goto(`${list}?status=all&q=${encodeURIComponent('40,000')}`)
   await expect(card()).toBeVisible()
 })
 

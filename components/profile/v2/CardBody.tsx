@@ -1,0 +1,224 @@
+import Link from 'next/link'
+import LiveIndicator from '@/components/games/LiveIndicator'
+import { PROFILE_CARDS, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
+
+// What each profile card shows, at either size. Plain components fed by
+// ProfileCardData (lib/data/profile-cards.ts), so the editor can switch a
+// card's size, or add one, without going back to the server.
+
+const hoursText = (h: number | null) =>
+  h == null ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 1 })}h`
+
+function Frame({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`flex h-full min-h-[150px] flex-col gap-3 rounded-2xl border border-edge-base bg-surface-base p-5 ${className}`}>
+      <h2 className="text-sm font-semibold text-fg-base">{title}</h2>
+      {children}
+    </div>
+  )
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="flex flex-1 items-center text-sm text-fg-muted">{children}</p>
+}
+
+/** A big number card in one colour. */
+function Figure({
+  label, value, note, tone,
+}: { label: string; value: string; note?: string; tone: 'ink' | 'amber' | 'orange' | 'plain' }) {
+  const tones = {
+    ink: 'bg-zinc-900 text-white dark:bg-zinc-800 border-transparent',
+    amber: 'bg-amber-200 text-amber-950 dark:bg-amber-400/15 dark:text-amber-100 border-transparent',
+    orange: 'bg-orange-100 text-orange-950 dark:bg-orange-400/15 dark:text-orange-100 border-transparent',
+    plain: 'bg-surface-base text-fg-base border-edge-base',
+  }
+  return (
+    <div className={`flex h-full min-h-[150px] flex-col justify-between gap-3 rounded-2xl border p-5 ${tones[tone]}`}>
+      <h2 className="text-sm font-medium opacity-80">{label}</h2>
+      <p className="font-display text-5xl leading-[0.9] tabular-nums">{value}</p>
+      {note && <p className="mt-1 text-xs opacity-75">{note}</p>}
+    </div>
+  )
+}
+
+function GameRow({ game, aside }: { game: CardGame; aside?: React.ReactNode }) {
+  return (
+    <Link href={`/games/${game.id}`} className="flex items-center gap-3 rounded-xl bg-surface-sunken p-2 hover:bg-surface-hover transition-colors">
+      {game.cover
+        ? <img src={game.cover} alt="" className="h-14 w-10 shrink-0 rounded-md object-cover" />
+        : <span className="h-14 w-10 shrink-0 rounded-md bg-surface-hover" aria-hidden />}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-fg-base">{game.title}</span>
+        {aside && <span className="block truncate text-xs text-fg-muted">{aside}</span>}
+      </span>
+    </Link>
+  )
+}
+
+function PlayingTile({ game, big }: { game: CardGame & { liveSince: string | null }; big: boolean }) {
+  return (
+    <Link
+      href={`/games/${game.id}`}
+      className={`relative flex flex-col justify-end overflow-hidden rounded-xl bg-zinc-800 p-4 text-white ${big ? 'min-h-[170px] sm:col-span-2' : 'min-h-[170px]'}`}
+    >
+      {game.wide && (
+        <img src={game.wide} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      )}
+      <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden />
+      {game.liveSince && (
+        <span className="absolute left-3 top-3 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold">
+          <LiveIndicator startedAt={game.liveSince} dark />
+        </span>
+      )}
+      <span className="relative block truncate text-base font-bold">{game.title}</span>
+      {game.hours != null && <span className="relative text-xs text-white/85">{hoursText(game.hours)} played</span>}
+    </Link>
+  )
+}
+
+const MONTHS = 'JFMAMJJASOND'
+
+const formatDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null
+
+export default function CardBody({
+  card, size, data, accent,
+}: {
+  card: ProfileCardId
+  size: CardSize
+  data: ProfileCardData
+  accent: string
+}) {
+  const full = size === 'full'
+  const title = PROFILE_CARDS[card].name
+
+  switch (card) {
+    case 'playing': {
+      const games = data.playing ?? []
+      return (
+        <Frame title={title}>
+          {games.length === 0 ? <Empty>Nothing in Playing right now.</Empty> : full ? (
+            <div className="grid gap-3 sm:grid-cols-4">
+              {games.slice(0, 3).map((g, i) => <PlayingTile key={g.id} game={g} big={i === 0} />)}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {games.slice(0, 3).map(g => (
+                <GameRow
+                  key={g.id}
+                  game={g}
+                  aside={g.liveSince ? <LiveIndicator startedAt={g.liveSince} /> : hoursText(g.hours) && `${hoursText(g.hours)} played`}
+                />
+              ))}
+            </div>
+          )}
+        </Frame>
+      )
+    }
+    case 'recently_completed':
+    case 'up_next': {
+      const games = (card === 'up_next' ? data.up_next : data.recently_completed) ?? []
+      return (
+        <Frame title={title}>
+          {games.length === 0
+            ? <Empty>{card === 'up_next' ? 'The backlog is empty.' : 'No completed games yet.'}</Empty>
+            : (
+              <div className={full ? 'grid gap-2 sm:grid-cols-3' : 'space-y-2'}>
+                {games.slice(0, 3).map(g => (
+                  <GameRow
+                    key={g.id}
+                    game={g}
+                    aside={'completedOn' in g
+                      ? [hoursText(g.hours), formatDate((g as { completedOn: string | null }).completedOn)].filter(Boolean).join(' · ')
+                      : null}
+                  />
+                ))}
+              </div>
+            )}
+        </Frame>
+      )
+    }
+    case 'year': {
+      const year = data.year
+      const max = Math.max(1, ...(year?.bars.map(b => b.minutes) ?? [0]))
+      return (
+        <Frame title={title}>
+          {!year || year.totalMinutes === 0 ? <Empty>No tracked play in the last 12 months.</Empty> : (
+            <>
+              <p className="text-xs text-fg-muted">
+                <span className="font-display text-3xl leading-[0.9] text-fg-base tabular-nums">{Math.round(year.totalMinutes / 60).toLocaleString()}h</span>
+                {' '}in the last 12 months
+              </p>
+              <div className="flex h-28 items-end gap-1.5" role="img" aria-label="Tracked hours each month">
+                {year.bars.map(bar => (
+                  <div key={bar.start} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                    <div
+                      className="w-full rounded-t-md"
+                      style={{ height: `${Math.max(bar.minutes > 0 ? 4 : 2, (bar.minutes / max) * 100)}%`, backgroundColor: bar.minutes > 0 ? accent : 'rgba(127,127,127,0.25)' }}
+                      title={`${Math.round(bar.minutes / 6) / 10}h`}
+                    />
+                    <span className="text-[10px] text-fg-muted">{MONTHS[Number(bar.start.slice(5, 7)) - 1]}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Frame>
+      )
+    }
+    case 'finish_rate': {
+      const f = data.finish_rate
+      return (
+        <Figure
+          tone="ink"
+          label={title}
+          value={f?.rate != null ? `${f.rate}%` : '–'}
+          note={f && f.stopped > 0 ? `${f.completed} of ${f.stopped} finished` : 'Nothing finished or dropped yet'}
+        />
+      )
+    }
+    case 'achievements': {
+      const a = data.achievements
+      return <Figure tone="amber" label={title} value={(a?.unlocked ?? 0).toLocaleString()} note={`${(a?.xp ?? 0).toLocaleString()} XP`} />
+    }
+    case 'streak': {
+      const s = data.streak
+      return (
+        <Figure
+          tone="orange"
+          label={title}
+          value={`${s?.current ?? 0} ${s?.current === 1 ? 'day' : 'days'}`}
+          note={s && s.best > 0 ? `Best in the last year: ${s.best} ${s.best === 1 ? 'day' : 'days'}` : 'No tracked play yet'}
+        />
+      )
+    }
+    case 'completed_this_year': {
+      const c = data.completed_this_year
+      return <Figure tone="plain" label={title} value={(c?.count ?? 0).toLocaleString()} note={c ? `in ${c.year}` : undefined} />
+    }
+    case 'genres':
+    case 'platforms': {
+      const items = (card === 'genres' ? data.genres : data.platforms) ?? []
+      const top = Math.max(1, ...items.map(i => i.count))
+      return (
+        <Frame title={title}>
+          {items.length === 0 ? <Empty>Nothing to show yet.</Empty> : (
+            <ul className="space-y-2.5">
+              {items.map(item => (
+                <li key={item.name} className="text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="truncate text-fg-base">{item.name}</span>
+                    <span className="tabular-nums text-fg-muted">{item.count}</span>
+                  </div>
+                  <div className="mt-1 h-1.5 rounded-full bg-surface-sunken" aria-hidden>
+                    <div className="h-full rounded-full" style={{ width: `${(item.count / top) * 100}%`, backgroundColor: accent }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Frame>
+      )
+    }
+  }
+}

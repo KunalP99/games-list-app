@@ -116,6 +116,8 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
     pages.push(['wheel history', () => '/wheel/history'])
   } else {
     pages.push(['reset password', () => '/reset-password'])
+    pages.push(['your profile’s Games tab', () => '/users/test-alex/games'])
+    pages.push(['someone else’s Games tab, searched', () => '/users/test-sam/games?status=all&q=' + encodeURIComponent('40,000')])
     // The store page of a game from IGDB (The Witcher 3); needs internet.
     pages.push(['game store page (IGDB)', () => '/discover/1942'])
   }
@@ -149,6 +151,7 @@ test.describe(`smoke (${EDITION} edition), signed in`, () => {
       await expectNotFound(page, '/reset-password')
       await expectNotFound(page, '/welcome')
       await expectNotFound(page, '/discover/1942')
+      await expectNotFound(page, '/users/test-alex/games')
     })
 
     test('the dashboard has no game search in the friends edition', async () => {

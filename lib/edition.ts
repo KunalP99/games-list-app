@@ -89,6 +89,13 @@ export function featuresFor(edition: Edition) {
      * it, add to your library). The friends edition has neither.
      */
     gameStore: edition === 'public',
+    /**
+     * The profile you make your own (lib/profile-cards.ts): the profile card
+     * at the top, then cards you pick, size and drag into place, with the
+     * games list on its own Games tab, and Profile first in the nav. The
+     * friends edition keeps its profile page as it was.
+     */
+    newProfile: edition === 'public',
   }
 }
 

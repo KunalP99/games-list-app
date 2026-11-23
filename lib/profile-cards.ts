@@ -1,0 +1,250 @@
+/**
+ * The cards on a profile (public edition, `FEATURES.newProfile`).
+ *
+ * Under the profile card, which never moves, each person picks which cards to
+ * show and in what order. A card is full width (a whole row) or half width
+ * (one of two columns); some can be either. The layout is stored as an ordered
+ * list in `profiles.profile_layout` (db/profile-cards.sql). Everything here is
+ * pure: the page, the editor and the save action all go through it, so a
+ * layout means the same thing everywhere.
+ */
+import type { PrivacyKey } from './friends'
+
+export type CardSize = 'full' | 'half'
+
+export const PROFILE_CARD_IDS = [
+  'playing',
+  'recently_completed',
+  'up_next',
+  'year',
+  'finish_rate',
+  'achievements',
+  'genres',
+  'platforms',
+  'streak',
+  'completed_this_year',
+] as const
+
+export type ProfileCardId = (typeof PROFILE_CARD_IDS)[number]
+
+export type ProfileCardDef = {
+  id: ProfileCardId
+  name: string
+  description: string
+  /** The sizes it comes in; the first is what it's added at by default. */
+  sizes: readonly CardSize[]
+  /** The privacy setting that hides it from viewers it doesn't allow. */
+  privacy: PrivacyKey
+}
+
+export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
+  playing: {
+    id: 'playing', name: 'Currently playing', description: 'The games you’re playing, and what’s on right now.',
+    sizes: ['full', 'half'], privacy: 'privacy_activity',
+  },
+  recently_completed: {
+    id: 'recently_completed', name: 'Recently completed', description: 'The last games you finished.',
+    sizes: ['full', 'half'], privacy: 'privacy_games',
+  },
+  up_next: {
+    id: 'up_next', name: 'Up next', description: 'The newest games in your backlog.',
+    sizes: ['full', 'half'], privacy: 'privacy_games',
+  },
+  year: {
+    id: 'year', name: 'Your year', description: 'Tracked hours each month for the last 12 months.',
+    sizes: ['full'], privacy: 'privacy_activity',
+  },
+  finish_rate: {
+    id: 'finish_rate', name: 'Finish rate', description: 'How many of the games you stopped you finished.',
+    sizes: ['half'], privacy: 'privacy_games',
+  },
+  achievements: {
+    id: 'achievements', name: 'Achievements', description: 'How many you’ve unlocked, and the XP.',
+    sizes: ['half'], privacy: 'privacy_achievements',
+  },
+  genres: {
+    id: 'genres', name: 'Favourite genres', description: 'The genres you play most.',
+    sizes: ['half'], privacy: 'privacy_games',
+  },
+  platforms: {
+    id: 'platforms', name: 'Platforms', description: 'Where you play.',
+    sizes: ['half'], privacy: 'privacy_games',
+  },
+  streak: {
+    id: 'streak', name: 'Play streak', description: 'Days in a row with tracked play, and your best.',
+    sizes: ['half'], privacy: 'privacy_activity',
+  },
+  completed_this_year: {
+    id: 'completed_this_year', name: 'Completed this year', description: 'Games finished so far this year.',
+    sizes: ['half'], privacy: 'privacy_games',
+  },
+}
+
+export type LayoutItem = { card: ProfileCardId; size: CardSize }
+export type ProfileLayout = LayoutItem[]
+
+/** Every card at most once, so the list can never be longer than this. */
+export const MAX_PROFILE_CARDS = PROFILE_CARD_IDS.length
+
+/** What a profile shows until its owner changes it. */
+export const DEFAULT_LAYOUT: ProfileLayout = [
+  { card: 'playing', size: 'full' },
+  { card: 'finish_rate', size: 'half' },
+  { card: 'achievements', size: 'half' },
+  { card: 'recently_completed', size: 'full' },
+  { card: 'genres', size: 'half' },
+  { card: 'streak', size: 'half' },
+]
+
+export function isProfileCardId(value: unknown): value is ProfileCardId {
+  return typeof value === 'string' && (PROFILE_CARD_IDS as readonly string[]).includes(value)
+}
+
+export function canBe(card: ProfileCardId, size: CardSize): boolean {
+  return PROFILE_CARDS[card].sizes.includes(size)
+}
+
+/**
+ * A stored or submitted layout, made safe: unknown cards, repeats and sizes a
+ * card doesn't come in are dropped, and it's capped. `null`/missing (never
+ * edited) or anything that isn't a list gives the default. An empty list is
+ * kept: someone may want no cards at all.
+ */
+export function normaliseLayout(raw: unknown): ProfileLayout {
+  if (!Array.isArray(raw)) return DEFAULT_LAYOUT.map(item => ({ ...item }))
+  const seen = new Set<ProfileCardId>()
+  const layout: ProfileLayout = []
+  for (const entry of raw) {
+    if (layout.length >= MAX_PROFILE_CARDS) break
+    if (!entry || typeof entry !== 'object') continue
+    const { card, size } = entry as { card?: unknown; size?: unknown }
+    if (!isProfileCardId(card) || seen.has(card)) continue
+    if (size !== 'full' && size !== 'half') continue
+    if (!canBe(card, size)) continue
+    seen.add(card)
+    layout.push({ card, size })
+  }
+  return layout
+}
+
+/**
+ * Where everything sits in the two-column grid, in edit mode: each card, the
+ * empty half next to a half card that has no partner, and one full-width space
+ * at the end while there are cards left to add. `at` is where a card added in
+ * that space goes in the layout.
+ *
+ * Half cards pair up in order; a full card always starts a row, so a half card
+ * just before it is left on its own. This is exactly how a CSS grid with
+ * full = 2 columns and half = 1 places them, so the page needs no other maths.
+ */
+export type GridEntry =
+  | { kind: 'card'; index: number; item: LayoutItem }
+  | { kind: 'space'; at: number; size: CardSize }
+
+export function gridEntries(layout: ProfileLayout): GridEntry[] {
+  const entries: GridEntry[] = []
+  let column = 0
+  layout.forEach((item, index) => {
+    if (item.size === 'full') {
+      if (column === 1) entries.push({ kind: 'space', at: index, size: 'half' })
+      entries.push({ kind: 'card', index, item })
+      column = 0
+    } else {
+      entries.push({ kind: 'card', index, item })
+      column = column === 0 ? 1 : 0
+    }
+  })
+  if (column === 1) entries.push({ kind: 'space', at: layout.length, size: 'half' })
+  if (cardsToAdd(layout).length > 0) entries.push({ kind: 'space', at: layout.length, size: 'full' })
+  return entries
+}
+
+/** The cards that aren't on the profile yet, in catalogue order. */
+export function cardsToAdd(layout: ProfileLayout): ProfileCardId[] {
+  const used = new Set(layout.map(item => item.card))
+  return PROFILE_CARD_IDS.filter(id => !used.has(id))
+}
+
+/**
+ * The size a card goes in at, in a space of `space` size: the space's size if
+ * the card comes in it, else the card's only size (a full card picked for a
+ * half space takes its own row).
+ */
+export function sizeForSpace(card: ProfileCardId, space: CardSize): CardSize {
+  return canBe(card, space) ? space : PROFILE_CARDS[card].sizes[0]
+}
+
+export function addCard(layout: ProfileLayout, at: number, card: ProfileCardId, size: CardSize): ProfileLayout {
+  if (layout.some(item => item.card === card) || !canBe(card, size)) return layout
+  const index = Math.max(0, Math.min(at, layout.length))
+  return [...layout.slice(0, index), { card, size }, ...layout.slice(index)]
+}
+
+export function removeCard(layout: ProfileLayout, card: ProfileCardId): ProfileLayout {
+  return layout.filter(item => item.card !== card)
+}
+
+export function setSize(layout: ProfileLayout, card: ProfileCardId, size: CardSize): ProfileLayout {
+  if (!canBe(card, size)) return layout
+  return layout.map(item => (item.card === card ? { ...item, size } : item))
+}
+
+/** Moves `card` to where `target` is now; the cards between shift along. */
+export function moveCard(layout: ProfileLayout, card: ProfileCardId, target: ProfileCardId): ProfileLayout {
+  const from = layout.findIndex(item => item.card === card)
+  const to = layout.findIndex(item => item.card === target)
+  if (from < 0 || to < 0 || from === to) return layout
+  const next = [...layout]
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
+/** Moves a card one place earlier (-1) or later (+1), for the keyboard. */
+export function nudgeCard(layout: ProfileLayout, card: ProfileCardId, by: -1 | 1): ProfileLayout {
+  const from = layout.findIndex(item => item.card === card)
+  const to = from + by
+  if (from < 0 || to < 0 || to >= layout.length) return layout
+  return moveCard(layout, card, layout[to].card)
+}
+
+export function sameLayout(a: ProfileLayout, b: ProfileLayout): boolean {
+  return a.length === b.length && a.every((item, i) => item.card === b[i].card && item.size === b[i].size)
+}
+
+// ── What the cards show ───────────────────────────────────────────────────
+// Loaded on the server (lib/data/profile-cards.ts) and handed to the page's
+// client component, so a card can switch size or be added in edit mode
+// without another trip. Only cards the viewer may see are filled in.
+
+export type CardGame = {
+  id: string
+  title: string
+  /** Wide art (artwork, else the capsule image). */
+  wide: string | null
+  /** Box art (cover, else the capsule image). */
+  cover: string | null
+  hours: number | null
+}
+
+export type ProfileCardData = {
+  playing?: (CardGame & { liveSince: string | null })[]
+  recently_completed?: (CardGame & { completedOn: string | null })[]
+  up_next?: CardGame[]
+  year?: { bars: { start: string; minutes: number }[]; totalMinutes: number }
+  finish_rate?: { rate: number | null; completed: number; stopped: number }
+  achievements?: { unlocked: number; xp: number }
+  genres?: { name: string; count: number }[]
+  platforms?: { name: string; count: number }[]
+  streak?: { current: number; best: number }
+  completed_this_year?: { year: number; count: number }
+}
+
+/** The bio as stored: trimmed, line breaks folded to spaces, at most this long. */
+export const MAX_BIO_LENGTH = 160
+
+export function normaliseBio(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const bio = raw.replace(/\s+/g, ' ').trim().slice(0, MAX_BIO_LENGTH).trim()
+  return bio === '' ? null : bio
+}
