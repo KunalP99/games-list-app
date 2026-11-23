@@ -28,7 +28,7 @@ function Empty({ children }: { children: React.ReactNode }) {
  * half card puts the picture beside the number.
  */
 function Figure({
-  label, value, note, tone, square, visual,
+  label, value, note, tone, square, visual, fill,
 }: {
   label: string
   /** Left out when the picture carries the number itself (the finish rate's ring). */
@@ -37,6 +37,8 @@ function Figure({
   tone: 'ink' | 'amber' | 'orange' | 'plain'
   square: boolean
   visual?: React.ReactNode
+  /** The card itself as a progress bar, 0 to 1: filling up a square, across a half card. */
+  fill?: number
 }) {
   const tones = {
     ink: 'bg-zinc-900 text-white dark:bg-zinc-800 border-transparent',
@@ -48,7 +50,18 @@ function Figure({
     <p className={`font-display leading-[0.9] tabular-nums ${square ? 'text-4xl sm:text-5xl' : 'text-5xl'}`}>{value}</p>
   )
   return (
-    <div className={`flex h-full flex-col gap-3 rounded-2xl border ${square ? 'p-4' : 'min-h-[150px] p-5'} ${tones[tone]}`}>
+    <div className={`relative isolate flex h-full flex-col gap-3 overflow-hidden rounded-2xl border ${square ? 'p-4' : 'min-h-[150px] p-5'} ${tones[tone]}`}>
+      {fill != null && (
+        <div
+          aria-hidden
+          className={`absolute -z-10 ${square ? 'inset-x-0 bottom-0 border-t-2' : 'inset-y-0 left-0 border-r-2'}`}
+          style={{
+            [square ? 'height' : 'width']: `${Math.max(0, Math.min(1, fill)) * 100}%`,
+            backgroundColor: 'color-mix(in srgb, currentColor 14%, transparent)',
+            borderColor: 'color-mix(in srgb, currentColor 35%, transparent)',
+          }}
+        />
+      )}
       <h2 className="text-sm font-medium opacity-80">{label}</h2>
       {square ? (
         <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
@@ -80,16 +93,6 @@ function Ring({ percent, children, size }: { percent: number; children: React.Re
         />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center font-display text-3xl leading-none tabular-nums">{children}</span>
-    </div>
-  )
-}
-
-/** A bar `share` (0 to 1) full, in the card's own colour. */
-function Bar({ share }: { share: number }) {
-  return (
-    <div className="relative h-2 overflow-hidden rounded-full" aria-hidden>
-      <div className="absolute inset-0 rounded-full" style={{ backgroundColor: 'currentColor', opacity: 0.18 }} />
-      <div className="absolute inset-y-0 left-0 rounded-full" style={{ backgroundColor: 'currentColor', width: `${Math.max(0, Math.min(1, share)) * 100}%` }} />
     </div>
   )
 }
@@ -245,11 +248,9 @@ export default function CardBody({
           tone="amber"
           label={title}
           value={unlocked.toLocaleString()}
+          fill={total > 0 ? unlocked / total : 0}
           visual={total > 0 && (
-            <div className="space-y-1.5">
-              <Bar share={unlocked / total} />
-              <p className="text-xs font-medium opacity-80 tabular-nums">{unlocked} of {total} unlocked</p>
-            </div>
+            <p className="text-xs font-medium opacity-80 tabular-nums">{unlocked} of {total} unlocked · {Math.round((unlocked / total) * 100)}%</p>
           )}
           note={`${(a?.xp ?? 0).toLocaleString()} XP earned`}
         />
