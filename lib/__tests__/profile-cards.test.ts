@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  spotlightOrder,
   genreColumns,
   shortGenre,
   streakFlame,
@@ -309,5 +310,17 @@ describe('the Favourite genres blocks', () => {
     const cols = genreColumns([{ name: 'A', count: 50 }, { name: 'B', count: 1 }, { name: 'C', count: 30 }, { name: 'D', count: 1 }])
     expect(cols[1].weight).toBe(0.18)
     expect(cols[2].blocks[1].weight).toBe(0.18)
+  })
+})
+
+describe('spotlightOrder', () => {
+  const g = (id: string, liveSince: string | null = null) => ({ id, liveSince })
+  it('keeps the order when nothing is running', () => {
+    expect(spotlightOrder([g('a'), g('b'), g('c')]).map(x => x.id)).toEqual(['a', 'b', 'c'])
+    expect(spotlightOrder([])).toEqual([])
+  })
+  it('puts a running game first, the most recently started if several are', () => {
+    expect(spotlightOrder([g('a'), g('b', '2026-11-23T10:00:00Z'), g('c')]).map(x => x.id)).toEqual(['b', 'a', 'c'])
+    expect(spotlightOrder([g('a', '2026-11-23T09:00:00Z'), g('b'), g('c', '2026-11-23T11:00:00Z')]).map(x => x.id)).toEqual(['c', 'a', 'b'])
   })
 })

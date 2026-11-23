@@ -1,19 +1,16 @@
 import Link from 'next/link'
-import LiveIndicator from '@/components/games/LiveIndicator'
 import PlayCalendar from './PlayCalendar'
 import GameShelf from './GameShelf'
 import PlatformIcon from '@/components/games/PlatformIcon'
 import RecentTimeline from './RecentTimeline'
 import StreakFlame from './StreakFlame'
 import GenreBlocks from './GenreBlocks'
+import PlayingSpotlight from './PlayingSpotlight'
 import { PROFILE_CARDS, genreColumns, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
 // ProfileCardData (lib/data/profile-cards.ts), so the editor can switch a
 // card's size, or add one, without going back to the server.
-
-const hoursText = (h: number | null) =>
-  h == null ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 1 })}h`
 
 function Frame({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -127,27 +124,6 @@ function GameRow({ game, aside }: { game: CardGame; aside?: React.ReactNode }) {
   )
 }
 
-function PlayingTile({ game, big }: { game: CardGame & { liveSince: string | null }; big: boolean }) {
-  return (
-    <Link
-      href={`/games/${game.id}`}
-      className={`relative flex flex-col justify-end overflow-hidden rounded-xl bg-zinc-800 p-4 text-white ${big ? 'min-h-[170px] sm:col-span-2' : 'min-h-[170px]'}`}
-    >
-      {game.wide && (
-        <img src={game.wide} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      )}
-      <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden />
-      {game.liveSince && (
-        <span className="absolute left-3 top-3 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold">
-          <LiveIndicator startedAt={game.liveSince} dark />
-        </span>
-      )}
-      <span className="relative block truncate text-base font-bold">{game.title}</span>
-      {game.hours != null && <span className="relative text-xs text-white/85">{hoursText(game.hours)} played</span>}
-    </Link>
-  )
-}
-
 const MONTHS = 'JFMAMJJASOND'
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -170,21 +146,7 @@ export default function CardBody({
       const games = data.playing ?? []
       return (
         <Frame title={title}>
-          {games.length === 0 ? <Empty>Nothing in Playing right now.</Empty> : full ? (
-            <div className="grid gap-3 sm:grid-cols-4">
-              {games.slice(0, 3).map((g, i) => <PlayingTile key={g.id} game={g} big={i === 0} />)}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {games.slice(0, 3).map(g => (
-                <GameRow
-                  key={g.id}
-                  game={g}
-                  aside={g.liveSince ? <LiveIndicator startedAt={g.liveSince} /> : hoursText(g.hours) && `${hoursText(g.hours)} played`}
-                />
-              ))}
-            </div>
-          )}
+          {games.length === 0 ? <Empty>Nothing in Playing right now.</Empty> : <PlayingSpotlight games={games} full={full} />}
         </Frame>
       )
     }

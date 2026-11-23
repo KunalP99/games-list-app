@@ -300,6 +300,19 @@ export function streakFlame(days: number): { size: number; glow: number } {
   return { size: 0.6 + 0.4 * grown, glow: Math.min(1, Math.log(days + 1) / Math.log(31)) }
 }
 
+export type PlayingGame = CardGame & { liveSince: string | null; platform: string | null }
+
+/**
+ * The Currently playing card's games in the order it shows them: the
+ * spotlight first (a game running right now, the most recently started if
+ * several are; else the first, the latest started), then the rest as loaded.
+ */
+export function spotlightOrder<T extends { liveSince: string | null }>(games: T[]): T[] {
+  const live = games.filter(g => g.liveSince).sort((a, b) => b.liveSince!.localeCompare(a.liveSince!))[0]
+  if (!live) return games
+  return [live, ...games.filter(g => g !== live)]
+}
+
 /** How many genres the Favourite genres card shows. */
 export const GENRE_BLOCKS_MAX = 4
 
@@ -357,7 +370,7 @@ export type CardGame = {
 }
 
 export type ProfileCardData = {
-  playing?: (CardGame & { liveSince: string | null })[]
+  playing?: PlayingGame[]
   recently_completed?: (CardGame & { completedOn: string | null })[]
   up_next?: CardGame[]
   year?: { bars: { start: string; minutes: number }[]; totalMinutes: number }

@@ -18,6 +18,7 @@ type GameRow = {
   cover_image_url: string | null
   hours_played: number | null
   completion_date?: string | null
+  platform?: string | null
 }
 
 const GAME_COLUMNS = 'id, title, image_url, artwork_url, cover_image_url, hours_played'
@@ -58,7 +59,7 @@ export async function loadProfileCardData(
 
   const [playingRes, live, completedRes, backlogRes, sessions, thisYearRes, shelfRes] = await Promise.all([
     wants('playing')
-      ? supabase.from('games').select(GAME_COLUMNS).eq('user_id', userId).eq('status', 'playing')
+      ? supabase.from('games').select(`${GAME_COLUMNS}, platform`).eq('user_id', userId).eq('status', 'playing')
         .order('start_date', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(6) as unknown as Promise<{ data: GameRow[] | null }>
@@ -104,7 +105,7 @@ export async function loadProfileCardData(
   ])
 
   if (wants('playing')) {
-    data.playing = (playingRes.data ?? []).map(g => ({ ...toCardGame(g), liveSince: live.get(g.id) ?? null }))
+    data.playing = (playingRes.data ?? []).map(g => ({ ...toCardGame(g), liveSince: live.get(g.id) ?? null, platform: g.platform ?? null }))
     // Whatever's running now goes first.
     data.playing.sort((a, b) => Number(Boolean(b.liveSince)) - Number(Boolean(a.liveSince)))
   }
