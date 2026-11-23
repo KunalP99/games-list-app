@@ -18,7 +18,7 @@ import {
   type ProfileLayout,
 } from '../profile-cards'
 
-const L = (...items: [string, 'full' | 'half'][]) => items.map(([card, size]) => ({ card, size })) as ProfileLayout
+const L = (...items: [string, 'full' | 'half' | 'small'][]) => items.map(([card, size]) => ({ card, size })) as ProfileLayout
 
 describe('the card catalogue', () => {
   it('describes every card, each with at least one size', () => {
@@ -58,6 +58,7 @@ describe('normaliseLayout', () => {
       { card: 'playing', size: 'full' },
       { card: 'year', size: 'half' },
       { card: 'streak', size: 'huge' },
+      { card: 'genres', size: 'small' },
       null,
       7,
       { card: 'streak', size: 'half' },
@@ -71,22 +72,33 @@ describe('normaliseLayout', () => {
 })
 
 describe('gridEntries', () => {
-  it('pairs half cards and ends with a full space while cards are left', () => {
-    const entries = gridEntries(L(['playing', 'full'], ['finish_rate', 'half'], ['achievements', 'half']))
-    expect(entries.map(e => e.kind === 'card' ? e.item.card : `space:${e.size}@${e.at}`))
+  const show = (layout: ProfileLayout) =>
+    gridEntries(layout).map(e => e.kind === 'card' ? e.item.card : `space:${e.size}@${e.at}`)
+
+  it('fills rows of four columns and ends with a full space while cards are left', () => {
+    expect(show(L(['playing', 'full'], ['finish_rate', 'half'], ['achievements', 'half'])))
       .toEqual(['playing', 'finish_rate', 'achievements', 'space:full@3'])
+    expect(show(L(['finish_rate', 'small'], ['achievements', 'small'], ['streak', 'small'], ['completed_this_year', 'small'])))
+      .toEqual(['finish_rate', 'achievements', 'streak', 'completed_this_year', 'space:full@4'])
+    expect(show(L(['finish_rate', 'small'], ['genres', 'half'], ['streak', 'small'])))
+      .toEqual(['finish_rate', 'genres', 'streak', 'space:full@3'])
   })
 
   it('leaves a half space beside a lone half card before a full one', () => {
-    const entries = gridEntries(L(['streak', 'half'], ['year', 'full']))
-    expect(entries.map(e => e.kind === 'card' ? e.item.card : `space:${e.size}@${e.at}`))
-      .toEqual(['streak', 'space:half@1', 'year', 'space:full@2'])
+    expect(show(L(['genres', 'half'], ['year', 'full'])))
+      .toEqual(['genres', 'space:half@1', 'year', 'space:full@2'])
   })
 
-  it('leaves a half space after a lone half card at the end', () => {
-    const entries = gridEntries(L(['streak', 'half']))
-    expect(entries.map(e => e.kind === 'card' ? e.item.card : `space:${e.size}@${e.at}`))
-      .toEqual(['streak', 'space:half@1', 'space:full@1'])
+  it('offers squares where a half would not line up', () => {
+    expect(show(L(['streak', 'small'], ['year', 'full'])))
+      .toEqual(['streak', 'space:small@1', 'space:half@1', 'year', 'space:full@2'])
+    expect(show(L(['streak', 'small'], ['genres', 'half'], ['year', 'full'])))
+      .toEqual(['streak', 'genres', 'space:small@2', 'year', 'space:full@3'])
+  })
+
+  it('moves a half card that does not fit to the next row, leaving a square', () => {
+    expect(show(L(['finish_rate', 'small'], ['achievements', 'small'], ['streak', 'small'], ['genres', 'half'])))
+      .toEqual(['finish_rate', 'achievements', 'streak', 'space:small@3', 'genres', 'space:half@4', 'space:full@4'])
   })
 
   it('is just a full space for an empty profile', () => {
@@ -119,17 +131,21 @@ describe('editing', () => {
     expect(addCard(base, 0, 'year', 'half')).toBe(base)
   })
 
-  it('fills a space at its size when the card comes in it, else at the card’s own size', () => {
+  it('fills a space at its size when the card comes in it, else at the card’s largest', () => {
     expect(sizeForSpace('up_next', 'half')).toBe('half')
     expect(sizeForSpace('up_next', 'full')).toBe('full')
     expect(sizeForSpace('year', 'half')).toBe('full')
     expect(sizeForSpace('streak', 'full')).toBe('half')
+    expect(sizeForSpace('streak', 'small')).toBe('small')
+    expect(sizeForSpace('genres', 'small')).toBe('half')
   })
 
   it('removes and resizes', () => {
     expect(removeCard(base, 'finish_rate').map(i => i.card)).toEqual(['playing', 'achievements'])
     expect(setSize(base, 'playing', 'half')[0]).toEqual({ card: 'playing', size: 'half' })
     expect(setSize(base, 'finish_rate', 'full')).toBe(base)
+    expect(setSize(base, 'finish_rate', 'small')[1]).toEqual({ card: 'finish_rate', size: 'small' })
+    expect(setSize(base, 'playing', 'small')).toBe(base)
   })
 
   it('moves a card to another’s place, the rest shifting along', () => {

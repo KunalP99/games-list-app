@@ -43,6 +43,14 @@ import AddCardDialog from './AddCardDialog'
 // (mouse, touch or keyboard), add one in any empty space, resize or remove
 // one, and edit the bio. Nothing is saved until Done.
 
+/** Grid columns a card or space takes: four on wider screens, two on phones. */
+const SPAN: Record<CardSize, string> = {
+  full: 'col-span-2 sm:col-span-4',
+  half: 'col-span-2',
+  small: 'col-span-1 aspect-square',
+}
+const SIZE_LABEL: Record<CardSize, string> = { full: 'Full', half: 'Half', small: 'Square' }
+
 // Cards stay where they are while dragging; the layout itself is reordered
 // as the pointer passes over another card, so the grid makes room for real
 // (cards here aren't all one size, which sliding transforms assume).
@@ -225,7 +233,7 @@ export default function ProfileView(props: Props) {
           onDragCancel={() => setDragging(null)}
         >
           <SortableContext items={layout.map(item => item.card)} strategy={stayPut}>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {entries.map(entry => entry.kind === 'card' ? (
                 <SortableCard
                   key={entry.item.card}
@@ -241,13 +249,13 @@ export default function ProfileView(props: Props) {
                   key={`space-${entry.size}-${entry.at}`}
                   type="button"
                   onClick={() => setAdding({ at: entry.at, size: entry.size })}
-                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover ${
-                    entry.size === 'full' ? 'min-h-[96px] sm:col-span-2' : 'min-h-[150px]'
+                  className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input p-2 text-center text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover ${SPAN[entry.size]} ${
+                    entry.size === 'full' ? 'min-h-[96px]' : entry.size === 'half' ? 'min-h-[150px]' : ''
                   }`}
                 >
                   <span className="flex h-9 w-9 items-center justify-center rounded-full border border-edge-base bg-surface-base text-xl" aria-hidden>+</span>
                   <span className="text-sm font-semibold">Add a card</span>
-                  {entry.size === 'half' && <span className="text-xs text-fg-muted">Half-size space</span>}
+                  {entry.size !== 'full' && <span className="text-xs text-fg-muted">{entry.size === 'half' ? 'Half-size space' : 'Square space'}</span>}
                 </button>
               ) : null)}
             </div>
@@ -289,11 +297,10 @@ function SortableCard({
 }) {
   const card = PROFILE_CARDS[item.card]
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useSortable({ id: item.card, disabled: !editing })
-  const span = item.size === 'full' ? 'sm:col-span-2' : ''
-
   return (
-    <div ref={setNodeRef} data-card={item.card} className={`relative ${span}`}>
-      <div className={isDragging ? 'invisible' : ''}>
+    <div ref={setNodeRef} data-card={item.card} className={`relative ${SPAN[item.size]}`}>
+      {/* While editing, a square's bottom line is where its controls go. */}
+      <div className={`h-full ${isDragging ? 'invisible' : ''} ${editing && item.size === 'small' ? '[&_[data-note]]:invisible' : ''}`}>
         <CardBody card={item.card} size={item.size} data={data} accent={accent} />
       </div>
       {isDragging && (
@@ -304,19 +311,24 @@ function SortableCard({
           Drop here
         </div>
       )}
-      {editing && !isDragging && (
-        <>
+      {editing && !isDragging && (() => {
+        const square = item.size === 'small'
+        const handle = (
           <button
             ref={setActivatorNodeRef}
             type="button"
             {...attributes}
             {...listeners}
             aria-label={`Move ${card.name}`}
-            className="absolute left-1/2 top-2 -translate-x-1/2 cursor-grab touch-none rounded-full border border-edge-base bg-surface-base px-3 py-0.5 text-xs tracking-[3px] text-fg-muted shadow-sm hover:text-fg-base"
+            className={`cursor-grab touch-none rounded-full border border-edge-base bg-surface-base px-3 py-0.5 text-xs tracking-[3px] text-fg-muted shadow-sm hover:text-fg-base ${
+              square ? '' : 'absolute left-1/2 top-2 -translate-x-1/2'
+            }`}
           >
             ⋮⋮⋮
           </button>
-          <div className="absolute right-3 top-3 flex gap-1.5">
+        )
+        const controls = (
+          <div className={`flex gap-1.5 ${square ? '' : 'absolute right-3 top-3'}`}>
             {card.sizes.length > 1 && (
               <div role="group" aria-label={`${card.name} size`} className="flex rounded-lg border border-edge-base bg-surface-base p-0.5 text-xs font-semibold shadow-sm">
                 {card.sizes.map(size => (
@@ -325,9 +337,9 @@ function SortableCard({
                     type="button"
                     aria-pressed={item.size === size}
                     onClick={() => onResize(size)}
-                    className={`rounded-md px-2 py-1 ${item.size === size ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'text-fg-muted hover:text-fg-base'}`}
+                    className={`rounded-md py-1 ${square ? 'px-1.5' : 'px-2'} ${item.size === size ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'text-fg-muted hover:text-fg-base'}`}
                   >
-                    {size === 'full' ? 'Full' : 'Half'}
+                    {SIZE_LABEL[size]}
                   </button>
                 ))}
               </div>
@@ -336,13 +348,26 @@ function SortableCard({
               type="button"
               onClick={onRemove}
               aria-label={`Remove ${card.name}`}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-edge-base bg-surface-base text-sm text-fg-secondary shadow-sm hover:text-fg-base"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-edge-base bg-surface-base text-sm text-fg-secondary shadow-sm hover:text-fg-base"
             >
               ✕
             </button>
           </div>
-        </>
-      )}
+        )
+        // A square has no room up top beside its title: everything goes in
+        // one row along the bottom instead.
+        return square ? (
+          <div className="absolute inset-x-2.5 bottom-2.5 flex flex-wrap items-center justify-between gap-1.5">
+            {handle}
+            {controls}
+          </div>
+        ) : (
+          <>
+            {handle}
+            {controls}
+          </>
+        )
+      })()}
     </div>
   )
 }

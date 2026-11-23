@@ -17,7 +17,12 @@ const ICONS: Record<ProfileCardId, string> = {
   completed_this_year: '📅',
 }
 
-const SIZE_LABEL: Record<CardSize, string> = { full: 'Full', half: 'Half' }
+const SIZE_LABEL: Record<CardSize, string> = { full: 'Full', half: 'Half', small: 'Square' }
+const SPACE_TEXT: Record<CardSize, string> = {
+  full: 'This is a full-width space. Smaller cards sit on the left, ready for others beside them.',
+  half: 'This is a half-size space. A bigger card starts the next row, and the cards after it move down.',
+  small: 'This is a square space. A bigger card starts the next row, and the cards after it move down.',
+}
 
 /**
  * Picks a card for an empty space on the profile. Cards already on it are
@@ -65,9 +70,7 @@ export default function AddCardDialog({
           <div>
             <h2 id="add-card-title" className="text-xl font-semibold text-fg-base">Add a card</h2>
             <p className="mt-1 text-sm text-fg-muted">
-              {space === 'half'
-                ? 'This is a half-size space. A full card gets its own row, and the cards after it move down.'
-                : 'This is a full-width space. Half cards sit on the left, ready for another beside them.'}
+              {SPACE_TEXT[space]}
             </p>
           </div>
           <button
@@ -89,7 +92,7 @@ export default function AddCardDialog({
               onClick={() => setFitsOnly(only)}
               className={`rounded-full px-3 py-1.5 ${fitsOnly === only ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'bg-surface-sunken text-fg-secondary hover:text-fg-base'}`}
             >
-              {only ? `Fits here (${space})` : 'All'}
+              {only ? `Fits here (${SIZE_LABEL[space].toLowerCase()})` : 'All'}
             </button>
           ))}
         </div>

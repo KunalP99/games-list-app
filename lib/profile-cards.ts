@@ -2,15 +2,21 @@
  * The cards on a profile (public edition, `FEATURES.newProfile`).
  *
  * Under the profile card, which never moves, each person picks which cards to
- * show and in what order. A card is full width (a whole row) or half width
- * (one of two columns); some can be either. The layout is stored as an ordered
+ * show and in what order. The grid has four columns: a card is full width (a
+ * whole row), half (two columns) or a square (one); some come in more than
+ * one size. The layout is stored as an ordered
  * list in `profiles.profile_layout` (db/profile-cards.sql). Everything here is
  * pure: the page, the editor and the save action all go through it, so a
  * layout means the same thing everywhere.
  */
 import type { PrivacyKey } from './friends'
 
-export type CardSize = 'full' | 'half'
+export type CardSize = 'full' | 'half' | 'small'
+
+/** Columns each size takes, of the grid's four. */
+export const CARD_COLUMNS: Record<CardSize, number> = { full: 4, half: 2, small: 1 }
+const GRID_COLUMNS = 4
+const SIZES: readonly CardSize[] = ['full', 'half', 'small']
 
 export const PROFILE_CARD_IDS = [
   'playing',
@@ -31,7 +37,7 @@ export type ProfileCardDef = {
   id: ProfileCardId
   name: string
   description: string
-  /** The sizes it comes in; the first is what it's added at by default. */
+  /** The sizes it comes in, largest first. */
   sizes: readonly CardSize[]
   /** The privacy setting that hides it from viewers it doesn't allow. */
   privacy: PrivacyKey
@@ -56,11 +62,11 @@ export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
   },
   finish_rate: {
     id: 'finish_rate', name: 'Finish rate', description: 'How many of the games you stopped you finished.',
-    sizes: ['half'], privacy: 'privacy_games',
+    sizes: ['half', 'small'], privacy: 'privacy_games',
   },
   achievements: {
     id: 'achievements', name: 'Achievements', description: 'How many you’ve unlocked, and the XP.',
-    sizes: ['half'], privacy: 'privacy_achievements',
+    sizes: ['half', 'small'], privacy: 'privacy_achievements',
   },
   genres: {
     id: 'genres', name: 'Favourite genres', description: 'The genres you play most.',
@@ -72,11 +78,11 @@ export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
   },
   streak: {
     id: 'streak', name: 'Play streak', description: 'Days in a row with tracked play, and your best.',
-    sizes: ['half'], privacy: 'privacy_activity',
+    sizes: ['half', 'small'], privacy: 'privacy_activity',
   },
   completed_this_year: {
     id: 'completed_this_year', name: 'Completed this year', description: 'Games finished so far this year.',
-    sizes: ['half'], privacy: 'privacy_games',
+    sizes: ['half', 'small'], privacy: 'privacy_games',
   },
 }
 
@@ -89,11 +95,13 @@ export const MAX_PROFILE_CARDS = PROFILE_CARD_IDS.length
 /** What a profile shows until its owner changes it. */
 export const DEFAULT_LAYOUT: ProfileLayout = [
   { card: 'playing', size: 'full' },
-  { card: 'finish_rate', size: 'half' },
-  { card: 'achievements', size: 'half' },
+  { card: 'finish_rate', size: 'small' },
+  { card: 'achievements', size: 'small' },
+  { card: 'streak', size: 'small' },
+  { card: 'completed_this_year', size: 'small' },
   { card: 'recently_completed', size: 'full' },
   { card: 'genres', size: 'half' },
-  { card: 'streak', size: 'half' },
+  { card: 'platforms', size: 'half' },
 ]
 
 export function isProfileCardId(value: unknown): value is ProfileCardId {
@@ -119,23 +127,24 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
     if (!entry || typeof entry !== 'object') continue
     const { card, size } = entry as { card?: unknown; size?: unknown }
     if (!isProfileCardId(card) || seen.has(card)) continue
-    if (size !== 'full' && size !== 'half') continue
-    if (!canBe(card, size)) continue
+    if (!SIZES.includes(size as CardSize)) continue
+    if (!canBe(card, size as CardSize)) continue
     seen.add(card)
-    layout.push({ card, size })
+    layout.push({ card, size: size as CardSize })
   }
   return layout
 }
 
 /**
- * Where everything sits in the two-column grid, in edit mode: each card, the
- * empty half next to a half card that has no partner, and one full-width space
- * at the end while there are cards left to add. `at` is where a card added in
- * that space goes in the layout.
+ * Where everything sits in the four-column grid, in edit mode: each card, the
+ * empty spaces a row is left with when the next card doesn't fit in it (or
+ * the layout ends), and one full-width space at the end while there are cards
+ * left to add. `at` is where a card added in that space goes in the layout.
  *
- * Half cards pair up in order; a full card always starts a row, so a half card
- * just before it is left on its own. This is exactly how a CSS grid with
- * full = 2 columns and half = 1 places them, so the page needs no other maths.
+ * Cards fill a row in order; one that doesn't fit in what's left starts the
+ * next row. That's exactly how a CSS grid with full = 4 columns, half = 2 and
+ * square = 1 places them, so the page needs no other maths. A gap is offered
+ * as half spaces where one lines up with the halves of the row, else squares.
  */
 export type GridEntry =
   | { kind: 'card'; index: number; item: LayoutItem }
@@ -144,17 +153,21 @@ export type GridEntry =
 export function gridEntries(layout: ProfileLayout): GridEntry[] {
   const entries: GridEntry[] = []
   let column = 0
-  layout.forEach((item, index) => {
-    if (item.size === 'full') {
-      if (column === 1) entries.push({ kind: 'space', at: index, size: 'half' })
-      entries.push({ kind: 'card', index, item })
-      column = 0
-    } else {
-      entries.push({ kind: 'card', index, item })
-      column = column === 0 ? 1 : 0
+  const fillRow = (at: number) => {
+    while (column > 0 && column < GRID_COLUMNS) {
+      const size: CardSize = column % 2 === 0 ? 'half' : 'small'
+      entries.push({ kind: 'space', at, size })
+      column += CARD_COLUMNS[size]
     }
+    column = 0
+  }
+  layout.forEach((item, index) => {
+    const width = CARD_COLUMNS[item.size]
+    if (column + width > GRID_COLUMNS) fillRow(index)
+    entries.push({ kind: 'card', index, item })
+    column = (column + width) % GRID_COLUMNS
   })
-  if (column === 1) entries.push({ kind: 'space', at: layout.length, size: 'half' })
+  fillRow(layout.length)
   if (cardsToAdd(layout).length > 0) entries.push({ kind: 'space', at: layout.length, size: 'full' })
   return entries
 }
@@ -167,8 +180,8 @@ export function cardsToAdd(layout: ProfileLayout): ProfileCardId[] {
 
 /**
  * The size a card goes in at, in a space of `space` size: the space's size if
- * the card comes in it, else the card's only size (a full card picked for a
- * half space takes its own row).
+ * the card comes in it, else the card's largest (a card too big for the space
+ * starts the next row, and the cards after it move down).
  */
 export function sizeForSpace(card: ProfileCardId, space: CardSize): CardSize {
   return canBe(card, space) ? space : PROFILE_CARDS[card].sizes[0]

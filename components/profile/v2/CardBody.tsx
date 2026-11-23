@@ -24,8 +24,8 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 /** A big number card in one colour. */
 function Figure({
-  label, value, note, tone,
-}: { label: string; value: string; note?: string; tone: 'ink' | 'amber' | 'orange' | 'plain' }) {
+  label, value, note, tone, square,
+}: { label: string; value: string; note?: string; tone: 'ink' | 'amber' | 'orange' | 'plain'; square: boolean }) {
   const tones = {
     ink: 'bg-zinc-900 text-white dark:bg-zinc-800 border-transparent',
     amber: 'bg-amber-200 text-amber-950 dark:bg-amber-400/15 dark:text-amber-100 border-transparent',
@@ -33,10 +33,10 @@ function Figure({
     plain: 'bg-surface-base text-fg-base border-edge-base',
   }
   return (
-    <div className={`flex h-full min-h-[150px] flex-col justify-between gap-3 rounded-2xl border p-5 ${tones[tone]}`}>
+    <div className={`flex h-full flex-col justify-between gap-2 rounded-2xl border ${square ? 'p-4' : 'min-h-[150px] p-5'} ${tones[tone]}`}>
       <h2 className="text-sm font-medium opacity-80">{label}</h2>
-      <p className="font-display text-5xl leading-[0.9] tabular-nums">{value}</p>
-      {note && <p className="mt-1 text-xs opacity-75">{note}</p>}
+      <p className={`font-display leading-[0.9] tabular-nums ${square ? 'text-4xl sm:text-5xl' : 'text-5xl'}`}>{value}</p>
+      {note && <p data-note className="mt-1 text-xs opacity-75">{note}</p>}
     </div>
   )
 }
@@ -90,6 +90,7 @@ export default function CardBody({
   accent: string
 }) {
   const full = size === 'full'
+  const square = size === 'small'
   const title = PROFILE_CARDS[card].name
 
   switch (card) {
@@ -170,6 +171,7 @@ export default function CardBody({
       const f = data.finish_rate
       return (
         <Figure
+          square={square}
           tone="ink"
           label={title}
           value={f?.rate != null ? `${f.rate}%` : '–'}
@@ -179,12 +181,13 @@ export default function CardBody({
     }
     case 'achievements': {
       const a = data.achievements
-      return <Figure tone="amber" label={title} value={(a?.unlocked ?? 0).toLocaleString()} note={`${(a?.xp ?? 0).toLocaleString()} XP`} />
+      return <Figure square={square} tone="amber" label={title} value={(a?.unlocked ?? 0).toLocaleString()} note={`${(a?.xp ?? 0).toLocaleString()} XP`} />
     }
     case 'streak': {
       const s = data.streak
       return (
         <Figure
+          square={square}
           tone="orange"
           label={title}
           value={`${s?.current ?? 0} ${s?.current === 1 ? 'day' : 'days'}`}
@@ -194,7 +197,7 @@ export default function CardBody({
     }
     case 'completed_this_year': {
       const c = data.completed_this_year
-      return <Figure tone="plain" label={title} value={(c?.count ?? 0).toLocaleString()} note={c ? `in ${c.year}` : undefined} />
+      return <Figure square={square} tone="plain" label={title} value={(c?.count ?? 0).toLocaleString()} note={c ? `in ${c.year}` : undefined} />
     }
     case 'genres':
     case 'platforms': {
