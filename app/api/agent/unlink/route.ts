@@ -6,6 +6,8 @@ import { cleanSubmittedSuffix } from '@/lib/detectable'
 
 export const dynamic = 'force-dynamic'
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
  * Forget that an executable is a game.
  *
@@ -41,6 +43,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .eq('user_id', identity.userId)
     .eq('exe_name', exeName)
   if (pathSuffix) query = query.eq('path_suffix', pathSuffix)
+  // Only this game's link, when given: changing one game's program must not
+  // take away another game's link to an exe of the same name (WoW Retail and
+  // Forever are both Wow.exe). Trackers before v0.3.0 never send it.
+  const gameId = typeof body?.gameId === 'string' && UUID.test(body.gameId) ? body.gameId : null
+  if (body?.gameId != null && !gameId) return NextResponse.json({ error: 'gameId must be a game id' }, { status: 400 })
+  if (gameId) query = query.eq('game_id', gameId)
   const { error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

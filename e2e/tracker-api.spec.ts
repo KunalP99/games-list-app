@@ -131,6 +131,23 @@ test('identify: The Witcher 3, owning only a DLC adds the game rather than track
   }
 })
 
+test('unlink with a game id removes only that game\'s link to the exe', async () => {
+  const retail = await games.add({ title: 'ZZ E2E Unlink Retail', status: 'playing' })
+  const forever = await games.add({ title: 'ZZ E2E Unlink Forever', status: 'playing' })
+  await admin().from('game_executables').insert([
+    { user_id: uid, game_id: retail, exe_name: 'zz-e2e-wow.exe', path_suffix: '_retail_/zz-e2e-wow.exe' },
+    { user_id: uid, game_id: forever, exe_name: 'zz-e2e-wow.exe', path_suffix: '_forever_/zz-e2e-wow.exe' },
+  ])
+  const linksFor = async () => ((await admin().from('game_executables').select('game_id').eq('user_id', uid).eq('exe_name', 'zz-e2e-wow.exe')).data ?? []).map(r => r.game_id)
+  try {
+    expect((await device.post('/api/agent/unlink', { exeName: 'zz-e2e-wow.exe', gameId: 'nope' })).status).toBe(400)
+    expect((await device.post('/api/agent/unlink', { exeName: 'zz-e2e-wow.exe', gameId: retail })).status).toBe(200)
+    expect(await linksFor()).toEqual([forever])
+  } finally {
+    await admin().from('game_executables').delete().eq('user_id', uid).eq('exe_name', 'zz-e2e-wow.exe')
+  }
+})
+
 // Emulator mode (lib/agent-emulator.ts): a PlayStation game shown in an
 // emulator's window title. Real IGDB, limited to that console.
 const emu = (emulator: Record<string, unknown>) => device.post('/api/agent/identify', { emulator }).then(r => r.json())
