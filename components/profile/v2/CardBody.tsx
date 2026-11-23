@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import LiveIndicator from '@/components/games/LiveIndicator'
+import PlayCalendar from './PlayCalendar'
 import { PROFILE_CARDS, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
@@ -236,6 +237,12 @@ export default function CardBody({
         </Frame>
       )
     }
+    case 'calendar':
+      return (
+        <Frame title={title}>
+          {data.calendar ? <PlayCalendar start={data.calendar.start} minutes={data.calendar.minutes} accent={accent} /> : <Empty>No tracked play yet.</Empty>}
+        </Frame>
+      )
     case 'finish_rate': {
       const f = data.finish_rate
       return (

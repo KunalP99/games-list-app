@@ -6,7 +6,7 @@ import { londonDay } from '@/lib/activity'
 import { playSummary, MAX_PLAY_PERIOD_DAYS } from '@/lib/dashboard'
 import { streaks } from '@/lib/stats-wrapped'
 import { AVAILABLE_ACHIEVEMENTS } from '@/lib/achievements'
-import type { CardGame, ProfileCardData, ProfileCardId } from '@/lib/profile-cards'
+import { calendarDays, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -46,7 +46,7 @@ export async function loadProfileCardData(
 ): Promise<ProfileCardData> {
   const data: ProfileCardData = {}
   const wants = (card: ProfileCardId) => cards.has(card)
-  const needSessions = wants('year') || wants('streak')
+  const needSessions = wants('year') || wants('streak') || wants('calendar')
 
   const today = londonDay(new Date().toISOString())
   const year = Number(today.slice(0, 4))
@@ -99,6 +99,14 @@ export async function loadProfileCardData(
   if (wants('year')) {
     const summary = playSummary(sessions, 'year')
     data.year = { bars: summary.bars.map(b => ({ start: b.start, minutes: b.minutes })), totalMinutes: summary.totalMinutes }
+  }
+  if (wants('calendar')) {
+    const byDay = new Map<string, number>()
+    for (const s of sessions) {
+      const minutes = Math.max(0, s.minutes ?? 0)
+      if (minutes > 0) byDay.set(londonDay(s.started_at), (byDay.get(londonDay(s.started_at)) ?? 0) + minutes)
+    }
+    data.calendar = calendarDays(byDay, today)
   }
   if (wants('streak')) {
     // A session under a minute isn't play, the same rule as the Stats page.

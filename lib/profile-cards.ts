@@ -23,6 +23,7 @@ export const PROFILE_CARD_IDS = [
   'recently_completed',
   'up_next',
   'year',
+  'calendar',
   'finish_rate',
   'achievements',
   'genres',
@@ -58,6 +59,10 @@ export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
   },
   year: {
     id: 'year', name: 'Your year', description: 'Tracked hours each month for the last 12 months.',
+    sizes: ['full'], privacy: 'privacy_activity',
+  },
+  calendar: {
+    id: 'calendar', name: 'Play calendar', description: 'Every day of the last year, shaded by the hours tracked.',
     sizes: ['full'], privacy: 'privacy_activity',
   },
   finish_rate: {
@@ -254,6 +259,8 @@ export type ProfileCardData = {
   up_next?: CardGame[]
   year?: { bars: { start: string; minutes: number }[]; totalMinutes: number }
   finish_rate?: { rate: number | null; completed: number; stopped: number }
+  /** Tracked minutes per UK day from `start` (a Monday, 52 weeks before this week's) to today. */
+  calendar?: { start: string; minutes: number[] }
   /** `total`: every achievement there is in this edition. */
   achievements?: { unlocked: number; xp: number; total: number }
   genres?: { name: string; count: number }[]
@@ -262,6 +269,38 @@ export type ProfileCardData = {
   streak?: { current: number; best: number; week: { day: string; played: boolean }[] }
   /** `months`: completions in each month of the year, January first. */
   completed_this_year?: { year: number; count: number; months: number[]; month: number }
+}
+
+// ── Play calendar ─────────────────────────────────────────────────────────
+
+const DAY_MS = 86_400_000
+const addDays = (day: string, by: number) => new Date(Date.parse(`${day}T00:00:00Z`) + by * DAY_MS).toISOString().slice(0, 10)
+
+/**
+ * The Play calendar's days: from the Monday 52 weeks before this week's
+ * Monday, through `today` (both UK days, YYYY-MM-DD), so the grid is 53 week
+ * columns with this week's partly filled. `minutesByDay` has each day's
+ * tracked minutes; days without any are 0.
+ */
+export function calendarDays(minutesByDay: ReadonlyMap<string, number>, today: string): { start: string; minutes: number[] } {
+  const weekday = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7 // Monday = 0
+  const start = addDays(today, -weekday - 52 * 7)
+  const minutes: number[] = []
+  for (let day = start; day <= today; day = addDays(day, 1)) minutes.push(minutesByDay.get(day) ?? 0)
+  return { start, minutes }
+}
+
+/** How dark a day is: 0 none, then under 1h, 1–2h, 2–4h, 4h or more. */
+export function playLevel(minutes: number): 0 | 1 | 2 | 3 | 4 {
+  if (minutes <= 0) return 0
+  if (minutes < 60) return 1
+  if (minutes < 120) return 2
+  if (minutes < 240) return 3
+  return 4
+}
+
+export function shiftDay(day: string, by: number): string {
+  return addDays(day, by)
 }
 
 /** The bio as stored: trimmed, line breaks folded to spaces, at most this long. */

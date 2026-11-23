@@ -5,6 +5,8 @@ import {
   PROFILE_CARD_IDS,
   PROFILE_CARDS,
   addCard,
+  calendarDays,
+  playLevel,
   cardsToAdd,
   gridEntries,
   moveCard,
@@ -187,5 +189,29 @@ describe('normaliseBio', () => {
   it('stores nothing for an empty bio or something that is not text', () => {
     expect(normaliseBio('   ')).toBeNull()
     expect(normaliseBio(42)).toBeNull()
+  })
+})
+
+describe('the Play calendar', () => {
+  it('runs from the Monday 52 weeks before this week to today', () => {
+    // 2026-11-23 is a Monday: 52 whole weeks before it, plus today.
+    const monday = calendarDays(new Map(), '2026-11-23')
+    expect(monday.start).toBe('2025-11-24')
+    expect(monday.minutes).toHaveLength(52 * 7 + 1)
+    // A Thursday: this week's Monday to Thursday on the end.
+    const thursday = calendarDays(new Map(), '2026-11-26')
+    expect(thursday.start).toBe('2025-11-24')
+    expect(thursday.minutes).toHaveLength(52 * 7 + 4)
+  })
+
+  it('puts each day’s minutes in its place, and 0 elsewhere', () => {
+    const { minutes } = calendarDays(new Map([['2026-11-26', 90], ['2025-11-24', 30], ['2020-01-01', 999]]), '2026-11-26')
+    expect(minutes[0]).toBe(30)
+    expect(minutes.at(-1)).toBe(90)
+    expect(minutes.reduce((a, b) => a + b, 0)).toBe(120)
+  })
+
+  it('shades by hours: none, under 1h, 1–2h, 2–4h, 4h+', () => {
+    expect([0, 1, 59, 60, 119, 120, 239, 240, 900].map(playLevel)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4])
   })
 })
