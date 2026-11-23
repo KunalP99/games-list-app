@@ -58,7 +58,7 @@ describe('normaliseLayout', () => {
     expect(normaliseLayout([])).toEqual([])
   })
 
-  it('drops unknown cards, repeats and sizes a card does not come in', () => {
+  it('drops unknown cards, repeats and unknown sizes; a size a card does not come in becomes its largest', () => {
     expect(normaliseLayout([
       { card: 'playing', size: 'half' },
       { card: 'shop_item', size: 'full' },
@@ -69,7 +69,9 @@ describe('normaliseLayout', () => {
       null,
       7,
       { card: 'streak', size: 'half' },
-    ])).toEqual(L(['playing', 'half'], ['streak', 'half']))
+    ])).toEqual(L(['playing', 'half'], ['year', 'full'], ['genres', 'half'], ['streak', 'half']))
+    // Finish rate was once half or square; a saved half becomes a square.
+    expect(normaliseLayout([{ card: 'finish_rate', size: 'half' }])).toEqual(L(['finish_rate', 'small']))
   })
 
   it('caps the list', () => {
@@ -159,7 +161,7 @@ describe('editing', () => {
     expect(removeCard(base, 'finish_rate').map(i => i.card)).toEqual(['playing', 'achievements'])
     expect(setSize(base, 'playing', 'half')[0]).toEqual({ card: 'playing', size: 'half' })
     expect(setSize(base, 'finish_rate', 'full')).toBe(base)
-    expect(setSize(base, 'finish_rate', 'small')[1]).toEqual({ card: 'finish_rate', size: 'small' })
+    expect(setSize(base, 'achievements', 'small')[2]).toEqual({ card: 'achievements', size: 'small' })
     expect(setSize(base, 'playing', 'small')).toBe(base)
   })
 

@@ -87,7 +87,7 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
   await dialog.getByRole('button', { name: 'Add Up next' }).click()
   await expect(dialog).toHaveCount(0)
 
-  await page.getByRole('group', { name: 'Finish rate size' }).getByRole('button', { name: 'Half' }).click()
+  await page.getByRole('group', { name: 'Achievements size' }).getByRole('button', { name: 'Half' }).click()
   await page.getByRole('group', { name: 'Currently playing size' }).getByRole('button', { name: 'Half' }).click()
 
   // Drag Platforms (last) onto Currently playing (first).
@@ -112,7 +112,7 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
   await expect(toolbar).toHaveCount(0)
   await expect.poll(async () => (await storedLayout()).profile_layout?.map(i => i.card)).toEqual(expected)
   const sizes = Object.fromEntries(((await storedLayout()).profile_layout ?? []).map(i => [i.card, i.size]))
-  expect(sizes).toMatchObject({ playing: 'half', finish_rate: 'half', achievements: 'small', up_next: 'full' })
+  expect(sizes).toMatchObject({ playing: 'half', finish_rate: 'small', achievements: 'half', up_next: 'full' })
 
   await page.reload()
   await expect.poll(() => cardsOnPage(page)).toEqual(expected)

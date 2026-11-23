@@ -72,7 +72,7 @@ export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
   },
   finish_rate: {
     id: 'finish_rate', name: 'Finish rate', description: 'How many of the games you stopped you finished.',
-    sizes: ['half', 'small'], privacy: 'privacy_games',
+    sizes: ['small'], privacy: 'privacy_games',
   },
   achievements: {
     id: 'achievements', name: 'Achievements', description: 'How many you’ve unlocked, and the XP.',
@@ -137,8 +137,9 @@ export function canBe(card: ProfileCardId, size: CardSize): boolean {
 }
 
 /**
- * A stored or submitted layout, made safe: unknown cards, repeats and sizes a
- * card doesn't come in are dropped, and it's capped. `null`/missing (never
+ * A stored or submitted layout, made safe: unknown cards and repeats are
+ * dropped, a card at a size it doesn't come in (any more) takes its largest
+ * one, and it's capped. `null`/missing (never
  * edited) or anything that isn't a list gives the default. An empty list is
  * kept: someone may want no cards at all.
  */
@@ -152,9 +153,8 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
     const { card, size } = entry as { card?: unknown; size?: unknown }
     if (!isProfileCardId(card) || seen.has(card)) continue
     if (!SIZES.includes(size as CardSize)) continue
-    if (!canBe(card, size as CardSize)) continue
     seen.add(card)
-    const item: LayoutItem = { card, size: size as CardSize }
+    const item: LayoutItem = { card, size: canBe(card, size as CardSize) ? size as CardSize : PROFILE_CARDS[card].sizes[0] }
     if (card === 'shelf') {
       const games = normaliseShelfGames((entry as { games?: unknown }).games)
       if (games.length > 0) item.games = games
