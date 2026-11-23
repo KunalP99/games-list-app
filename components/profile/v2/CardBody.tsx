@@ -63,15 +63,20 @@ function Figure({
         />
       )}
       <h2 className="text-sm font-medium opacity-80">{label}</h2>
-      {square ? (
+      {square && value == null ? (
+        <>
+          <div className="absolute inset-6 -z-10 flex items-center justify-center">{visual}</div>
+          <span className="flex-1" />
+        </>
+      ) : square ? (
         <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
           {number}
           {visual}
         </div>
       ) : (
-        <div className="flex flex-1 items-center justify-between gap-5">
+        <div className={`flex min-h-0 flex-1 items-center gap-5 ${value == null ? 'justify-center' : 'justify-between'}`}>
           {number}
-          {visual && <div className={value != null ? 'w-1/2 max-w-[220px]' : ''}>{visual}</div>}
+          {visual && <div className={value != null ? 'w-1/2 max-w-[220px]' : 'flex h-full min-h-[96px] items-center justify-center'}>{visual}</div>}
         </div>
       )}
       {note && <p data-note className="text-xs opacity-75">{note}</p>}
@@ -79,20 +84,25 @@ function Figure({
   )
 }
 
-/** A ring filled to `percent`, with the figure in the middle. */
-function Ring({ percent, children, size }: { percent: number; children: React.ReactNode; size: number }) {
-  const r = 42
+/**
+ * A ring filled to `percent`, with the figure in the middle, as big as the
+ * space it's given (its height decides; the figure scales with it).
+ */
+function Ring({ percent, children }: { percent: number; children: React.ReactNode }) {
+  const r = 44
   const length = 2 * Math.PI * r
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
+    <div className="relative aspect-square h-full max-w-full" style={{ containerType: 'inline-size' }}>
       <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden>
-        <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth="10" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth="8" />
         <circle
-          cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round"
+          cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round"
           strokeDasharray={`${(Math.max(0, Math.min(100, percent)) / 100) * length} ${length}`}
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-display text-3xl leading-none tabular-nums">{children}</span>
+      <span className="absolute inset-0 flex items-center justify-center font-display leading-none tabular-nums" style={{ fontSize: '26cqw' }}>
+        {children}
+      </span>
     </div>
   )
 }
@@ -233,7 +243,7 @@ export default function CardBody({
           square={square}
           tone="ink"
           label={title}
-          visual={<Ring percent={f?.rate ?? 0} size={square ? 112 : 96}>{f?.rate != null ? `${f.rate}%` : '–'}</Ring>}
+          visual={<Ring percent={f?.rate ?? 0}>{f?.rate != null ? `${f.rate}%` : '–'}</Ring>}
           note={f && f.stopped > 0 ? `${f.completed} of ${f.stopped} finished` : 'Nothing finished or dropped yet'}
         />
       )
