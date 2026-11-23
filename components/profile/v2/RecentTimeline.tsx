@@ -4,6 +4,8 @@ import { RECENT_COMPLETED_MAX, timelineDate, type CardGame } from '@/lib/profile
 // The Recently completed card: the last four finishes hanging off a line,
 // newest on the left, each with its completion date and hours. The line and
 // the newest dot are in the person's accent, fading along the older ones.
+// The covers take whatever height the card has (a half card stretches to the
+// tallest card in its row), so it never ends in an empty band.
 
 const hours = (h: number | null) =>
   h == null ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 0 })}h`
@@ -21,16 +23,18 @@ export default function RecentTimeline({
 }) {
   const thisYear = new Date().getFullYear()
   return (
-    <ol className="grid grid-cols-4" aria-label="Recently completed, newest first">
+    <ol className="grid min-h-0 flex-1 grid-cols-4" aria-label="Recently completed, newest first">
       {games.slice(0, RECENT_COMPLETED_MAX).map((g, i) => {
         const date = timelineDate(g.completedOn, thisYear)
         return (
-          <li key={g.id} className="min-w-0">
-            <Link href={`/games/${g.id}`} title={g.title} className="group flex flex-col items-center px-1.5 text-center">
-              <span className={`block w-full ${full ? 'max-w-[104px]' : 'max-w-[84px]'}`}>
+          <li key={g.id} className="flex min-h-0 min-w-0">
+            <Link href={`/games/${g.id}`} title={g.title} className="group flex w-full flex-col items-center px-1.5 text-center">
+              {/* The cover is as tall as this space (it never sets the space's
+                  height itself): its usual size, or more when the card is stretched. */}
+              <span className={`relative w-full flex-1 ${full ? 'min-h-[88px] sm:min-h-[140px]' : 'min-h-[88px] sm:min-h-[112px]'}`}>
                 {g.cover
-                  ? <img src={g.cover} alt="" className="aspect-[3/4] w-full rounded-lg object-cover shadow-md transition-transform duration-200 group-hover:-translate-y-1" />
-                  : <span className="flex aspect-[3/4] w-full items-center justify-center rounded-lg bg-surface-sunken p-2 text-xs font-semibold text-fg-muted transition-transform duration-200 group-hover:-translate-y-1">{g.title}</span>}
+                  ? <img src={g.cover} alt="" className="absolute bottom-0 left-1/2 aspect-[3/4] h-full max-w-full -translate-x-1/2 rounded-lg object-cover shadow-md transition-transform duration-200 group-hover:-translate-y-1" />
+                  : <span className="absolute bottom-0 left-1/2 flex aspect-[3/4] h-full max-w-full -translate-x-1/2 items-center justify-center rounded-lg bg-surface-sunken p-2 text-xs font-semibold text-fg-muted transition-transform duration-200 group-hover:-translate-y-1">{g.title}</span>}
               </span>
               <span className="h-3 w-0.5 bg-fg-muted opacity-40" aria-hidden />
               {/* The line runs through every column; each piece fades from this game's strength to the next one's. */}
