@@ -5,6 +5,10 @@ import {
   PROFILE_CARD_IDS,
   PROFILE_CARDS,
   addCard,
+  normaliseShelfGames,
+  setShelfGames,
+  shelfGames,
+  SHELF_MAX,
   calendarDays,
   playLevel,
   cardsToAdd,
@@ -213,5 +217,36 @@ describe('the Play calendar', () => {
 
   it('shades by hours: none, under 1h, 1–2h, 2–4h, 4h+', () => {
     expect([0, 1, 59, 60, 119, 120, 239, 240, 900].map(playLevel)).toEqual([0, 1, 1, 2, 2, 3, 3, 4, 4])
+  })
+})
+
+describe('the Game shelf', () => {
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+
+  it('keeps only game ids, each once, up to the shelf’s size', () => {
+    expect(normaliseShelfGames([id(1), 'nope', 7, id(1), id(2)])).toEqual([id(1), id(2)])
+    expect(normaliseShelfGames(Array.from({ length: 12 }, (_, i) => id(i)))).toHaveLength(SHELF_MAX)
+    expect(normaliseShelfGames('x')).toEqual([])
+  })
+
+  it('stores its games in the layout, and only on the shelf', () => {
+    expect(normaliseLayout([{ card: 'shelf', size: 'full', games: [id(1), 'bad'] }, { card: 'streak', size: 'small', games: [id(2)] }]))
+      .toEqual([{ card: 'shelf', size: 'full', games: [id(1)] }, { card: 'streak', size: 'small' }])
+    expect(normaliseLayout([{ card: 'shelf', size: 'full', games: [] }])).toEqual([{ card: 'shelf', size: 'full' }])
+  })
+
+  it('sets and clears its games, and counts them as a change', () => {
+    const layout = L(['shelf', 'full'], ['streak', 'small'])
+    const set = setShelfGames(layout, [id(3), id(1)])
+    expect(set[0]).toEqual({ card: 'shelf', size: 'full', games: [id(3), id(1)] })
+    expect(sameLayout(layout, set)).toBe(false)
+    expect(setShelfGames(set, [])[0]).toEqual({ card: 'shelf', size: 'full' })
+  })
+
+  it('shows the chosen games in order, skipping missing ones, else the latest', () => {
+    const completed = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ id: id(n) }))
+    expect(shelfGames(completed, [id(5), id(99), id(2)]).map(g => g.id)).toEqual([id(5), id(2)])
+    expect(shelfGames(completed, undefined)).toHaveLength(SHELF_MAX)
+    expect(shelfGames(completed, [])[0].id).toBe(id(1))
   })
 })

@@ -6,7 +6,7 @@ import { londonDay } from '@/lib/activity'
 import { playSummary, MAX_PLAY_PERIOD_DAYS } from '@/lib/dashboard'
 import { streaks } from '@/lib/stats-wrapped'
 import { AVAILABLE_ACHIEVEMENTS } from '@/lib/achievements'
-import { calendarDays, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
+import { SHELF_MAX, calendarDays, shelfGames, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -43,6 +43,11 @@ export async function loadProfileCardData(
   userId: string,
   cards: ReadonlySet<ProfileCardId>,
   stats: UserStats,
+  /**
+   * The Game shelf's chosen games. Undefined: load every completed game (the
+   * owner, who may choose others while editing); else only what it shows.
+   */
+  shelfChosen?: string[],
 ): Promise<ProfileCardData> {
   const data: ProfileCardData = {}
   const wants = (card: ProfileCardId) => cards.has(card)
@@ -51,7 +56,7 @@ export async function loadProfileCardData(
   const today = londonDay(new Date().toISOString())
   const year = Number(today.slice(0, 4))
 
-  const [playingRes, live, completedRes, backlogRes, sessions, thisYearRes] = await Promise.all([
+  const [playingRes, live, completedRes, backlogRes, sessions, thisYearRes, shelfRes] = await Promise.all([
     wants('playing')
       ? supabase.from('games').select(GAME_COLUMNS).eq('user_id', userId).eq('status', 'playing')
         .order('start_date', { ascending: false, nullsFirst: false })
@@ -84,6 +89,18 @@ export async function loadProfileCardData(
       ? supabase.from('games').select('completion_date').eq('user_id', userId).eq('status', 'completed')
         .gte('completion_date', `${year}-01-01`) as unknown as Promise<{ data: { completion_date: string | null }[] | null }>
       : Promise.resolve({ data: null }),
+    wants('shelf')
+      ? (() => {
+        let q = supabase.from('games').select(`${GAME_COLUMNS}, completion_date`).eq('user_id', userId).eq('status', 'completed')
+          .order('completion_date', { ascending: false, nullsFirst: false })
+          .order('updated_at', { ascending: false })
+        // A visitor needs only what's on the shelf: the chosen games, else the latest.
+        if (shelfChosen && shelfChosen.length > 0) q = q.in('id', shelfChosen)
+        else if (shelfChosen) q = q.limit(SHELF_MAX)
+        else q = q.limit(500)
+        return q as unknown as Promise<{ data: GameRow[] | null }>
+      })()
+      : Promise.resolve({ data: null }),
   ])
 
   if (wants('playing')) {
@@ -95,6 +112,10 @@ export async function loadProfileCardData(
     data.recently_completed = (completedRes.data ?? []).map(g => ({ ...toCardGame(g), completedOn: g.completion_date ?? null }))
   }
   if (wants('up_next')) data.up_next = (backlogRes.data ?? []).map(toCardGame)
+  if (wants('shelf')) {
+    const completed = (shelfRes.data ?? []).map(g => ({ ...toCardGame(g), completedOn: g.completion_date ?? null }))
+    data.shelf = shelfChosen ? shelfGames(completed, shelfChosen) : completed
+  }
 
   if (wants('year')) {
     const summary = playSummary(sessions, 'year')

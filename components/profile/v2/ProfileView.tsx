@@ -25,6 +25,7 @@ import {
   moveCard,
   removeCard,
   sameLayout,
+  setShelfGames,
   setSize,
   sizeForSpace,
   splitSize,
@@ -37,6 +38,7 @@ import {
 import ProfileCard, { type ProfileFigures } from './ProfileCard'
 import CardBody from './CardBody'
 import AddCardDialog from './AddCardDialog'
+import ShelfPicker from './ShelfPicker'
 
 // The top of the profile page (public edition): the profile card, then the
 // cards in a four-column grid (the games list follows, ProfileGames). The owner can switch to editing: drag cards about
@@ -81,6 +83,7 @@ export default function ProfileView(props: Props) {
   // for the layout they were split on: any change to the cards starts afresh.
   const [splits, setSplits] = useState<{ on: ProfileLayout; keys: ReadonlySet<string> }>({ on: [], keys: new Set() })
   const [dragging, setDragging] = useState<ProfileCardId | null>(null)
+  const [choosingShelf, setChoosingShelf] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, startSaving] = useTransition()
 
@@ -284,6 +287,7 @@ export default function ProfileView(props: Props) {
                   accent={accent}
                   onRemove={() => setDraft(d => removeCard(d, entry.item.card))}
                   onResize={size => setDraft(d => setSize(d, entry.item.card, size))}
+                  onChooseGames={entry.item.card === 'shelf' ? () => setChoosingShelf(true) : undefined}
                 />
               ) : editing ? (
                 renderSpace(entry.at, entry.size, `space-${i}`)
@@ -293,11 +297,23 @@ export default function ProfileView(props: Props) {
           <DragOverlay>
             {draggingItem && (
               <div className="rotate-[-1.5deg] cursor-grabbing rounded-2xl shadow-2xl shadow-black/30">
-                <CardBody card={draggingItem.card} size={draggingItem.size} data={data} accent={accent} />
+                <CardBody card={draggingItem.card} size={draggingItem.size} data={data} accent={accent} chosen={draggingItem.games} />
               </div>
             )}
           </DragOverlay>
         </DndContext>
+      )}
+
+      {choosingShelf && (
+        <ShelfPicker
+          games={data.shelf ?? []}
+          initial={draft.find(item => item.card === 'shelf')?.games ?? []}
+          onClose={() => setChoosingShelf(false)}
+          onDone={games => {
+            setDraft(d => setShelfGames(d, games))
+            setChoosingShelf(false)
+          }}
+        />
       )}
 
       {adding && (
@@ -316,7 +332,7 @@ export default function ProfileView(props: Props) {
 }
 
 function SortableCard({
-  item, editing, data, accent, onRemove, onResize,
+  item, editing, data, accent, onRemove, onResize, onChooseGames,
 }: {
   item: LayoutItem
   editing: boolean
@@ -324,6 +340,8 @@ function SortableCard({
   accent: string
   onRemove: () => void
   onResize: (size: CardSize) => void
+  /** The Game shelf only: opens the picker for its games. */
+  onChooseGames?: () => void
 }) {
   const card = PROFILE_CARDS[item.card]
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useSortable({ id: item.card, disabled: !editing })
@@ -331,7 +349,7 @@ function SortableCard({
     <div ref={setNodeRef} data-card={item.card} className={`relative ${SPAN[item.size]}`}>
       {/* While editing, a square's bottom line is where its controls go. */}
       <div className={`h-full ${isDragging ? 'invisible' : ''} ${editing && item.size === 'small' ? '[&_[data-note]]:invisible' : ''}`}>
-        <CardBody card={item.card} size={item.size} data={data} accent={accent} />
+        <CardBody card={item.card} size={item.size} data={data} accent={accent} chosen={item.games} />
       </div>
       {isDragging && (
         <div
@@ -359,6 +377,15 @@ function SortableCard({
         )
         const controls = (
           <div className={`flex gap-1.5 ${square ? '' : 'absolute right-3 top-3'}`}>
+            {onChooseGames && (
+              <button
+                type="button"
+                onClick={onChooseGames}
+                className="h-8 rounded-lg border border-edge-base bg-surface-base px-3 text-xs font-semibold text-fg-secondary shadow-sm hover:text-fg-base"
+              >
+                Choose games
+              </button>
+            )}
             {card.sizes.length > 1 && (
               <div role="group" aria-label={`${card.name} size`} className="flex rounded-lg border border-edge-base bg-surface-base p-0.5 text-xs font-semibold shadow-sm">
                 {card.sizes.map(size => (

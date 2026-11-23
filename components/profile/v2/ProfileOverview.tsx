@@ -44,7 +44,9 @@ export default async function ProfileOverview({
   const stored = normaliseLayout(profile.profile_layout)
   const layout = isOwner ? stored : stored.filter(item => allows(PROFILE_CARDS[item.card].privacy))
   const cards = new Set<ProfileCardId>(isOwner ? PROFILE_CARD_IDS : layout.map(item => item.card))
-  const data = await loadProfileCardData(supabase, profile.id, cards, stats)
+  // The owner may change the shelf while editing, so gets every completed game.
+  const shelfChosen = isOwner ? undefined : (layout.find(item => item.card === 'shelf')?.games ?? [])
+  const data = await loadProfileCardData(supabase, profile.id, cards, stats, shelfChosen)
   const seesGames = allows('privacy_games')
 
   return (

@@ -24,6 +24,7 @@ export const PROFILE_CARD_IDS = [
   'up_next',
   'year',
   'calendar',
+  'shelf',
   'finish_rate',
   'achievements',
   'genres',
@@ -65,6 +66,10 @@ export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
     id: 'calendar', name: 'Play calendar', description: 'Every day of the last year, shaded by the hours tracked.',
     sizes: ['full'], privacy: 'privacy_activity',
   },
+  shelf: {
+    id: 'shelf', name: 'Game shelf', description: 'Completed games you choose, on show in a lit glass case.',
+    sizes: ['full'], privacy: 'privacy_games',
+  },
   finish_rate: {
     id: 'finish_rate', name: 'Finish rate', description: 'How many of the games you stopped you finished.',
     sizes: ['half', 'small'], privacy: 'privacy_games',
@@ -91,7 +96,21 @@ export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
   },
 }
 
-export type LayoutItem = { card: ProfileCardId; size: CardSize }
+/**
+ * A card in the layout. `games`: the Game shelf's chosen games (game ids, in
+ * shelf order); without it the shelf shows the latest completions.
+ */
+export type LayoutItem = { card: ProfileCardId; size: CardSize; games?: string[] }
+
+/** How many games fit on the Game shelf. */
+export const SHELF_MAX = 7
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The shelf's game ids, made safe: ids only, each once, at most SHELF_MAX. */
+export function normaliseShelfGames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return Array.from(new Set(raw.filter((id): id is string => typeof id === 'string' && UUID.test(id)))).slice(0, SHELF_MAX)
+}
 export type ProfileLayout = LayoutItem[]
 
 /** Every card at most once, so the list can never be longer than this. */
@@ -135,7 +154,12 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
     if (!SIZES.includes(size as CardSize)) continue
     if (!canBe(card, size as CardSize)) continue
     seen.add(card)
-    layout.push({ card, size: size as CardSize })
+    const item: LayoutItem = { card, size: size as CardSize }
+    if (card === 'shelf') {
+      const games = normaliseShelfGames((entry as { games?: unknown }).games)
+      if (games.length > 0) item.games = games
+    }
+    layout.push(item)
   }
   return layout
 }
@@ -235,7 +259,29 @@ export function nudgeCard(layout: ProfileLayout, card: ProfileCardId, by: -1 | 1
 }
 
 export function sameLayout(a: ProfileLayout, b: ProfileLayout): boolean {
-  return a.length === b.length && a.every((item, i) => item.card === b[i].card && item.size === b[i].size)
+  return a.length === b.length && a.every((item, i) =>
+    item.card === b[i].card && item.size === b[i].size && (item.games ?? []).join() === (b[i].games ?? []).join())
+}
+
+/** Sets the Game shelf's games (an empty list goes back to the latest completions). */
+export function setShelfGames(layout: ProfileLayout, games: string[]): ProfileLayout {
+  const chosen = normaliseShelfGames(games)
+  return layout.map(item => {
+    if (item.card !== 'shelf') return item
+    const { games: _old, ...rest } = item
+    return chosen.length > 0 ? { ...rest, games: chosen } : rest
+  })
+}
+
+/**
+ * What the shelf shows: the chosen games in their order (ones no longer
+ * completed or no longer there are skipped), else the latest completions.
+ * `completed` is newest first.
+ */
+export function shelfGames<G extends { id: string }>(completed: G[], chosen: string[] | undefined): G[] {
+  if (!chosen || chosen.length === 0) return completed.slice(0, SHELF_MAX)
+  const byId = new Map(completed.map(g => [g.id, g]))
+  return chosen.flatMap(id => byId.get(id) ?? [])
 }
 
 // ── What the cards show ───────────────────────────────────────────────────
@@ -259,6 +305,8 @@ export type ProfileCardData = {
   up_next?: CardGame[]
   year?: { bars: { start: string; minutes: number }[]; totalMinutes: number }
   finish_rate?: { rate: number | null; completed: number; stopped: number }
+  /** Completed games, newest first: all of them for the owner (to choose from), else only what the shelf shows. */
+  shelf?: (CardGame & { completedOn: string | null })[]
   /** Tracked minutes per UK day from `start` (a Monday, 52 weeks before this week's) to today. */
   calendar?: { start: string; minutes: number[] }
   /** `total`: every achievement there is in this edition. */

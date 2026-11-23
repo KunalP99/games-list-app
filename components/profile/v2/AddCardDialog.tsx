@@ -10,6 +10,7 @@ const ICONS: Record<ProfileCardId, string> = {
   up_next: '📚',
   year: '📊',
   calendar: '🗓️',
+  shelf: '🗄️',
   finish_rate: '✅',
   achievements: '🏆',
   genres: '🏷️',

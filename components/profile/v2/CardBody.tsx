@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import LiveIndicator from '@/components/games/LiveIndicator'
 import PlayCalendar from './PlayCalendar'
-import { PROFILE_CARDS, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
+import GameShelf from './GameShelf'
+import { PROFILE_CARDS, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
 // ProfileCardData (lib/data/profile-cards.ts), so the editor can switch a
@@ -152,12 +153,14 @@ const formatDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null
 
 export default function CardBody({
-  card, size, data, accent,
+  card, size, data, accent, chosen,
 }: {
   card: ProfileCardId
   size: CardSize
   data: ProfileCardData
   accent: string
+  /** The Game shelf's chosen games (layout item `games`). */
+  chosen?: string[]
 }) {
   const full = size === 'full'
   const square = size === 'small'
@@ -237,6 +240,8 @@ export default function CardBody({
         </Frame>
       )
     }
+    case 'shelf':
+      return <GameShelf games={shelfGames(data.shelf ?? [], chosen)} chosen={Boolean(chosen?.length)} />
     case 'calendar':
       return (
         <Frame title={title}>
