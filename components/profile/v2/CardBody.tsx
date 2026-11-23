@@ -67,7 +67,7 @@ function Figure({
       <h2 className="text-sm font-medium opacity-80">{label}</h2>
       {square && value == null ? (
         <>
-          <div className="absolute inset-6 -z-10 flex items-center justify-center">{visual}</div>
+          <div className="absolute inset-x-10 bottom-11 top-10 -z-10 flex items-center justify-center">{visual}</div>
           <span className="flex-1" />
         </>
       ) : square ? (
@@ -81,7 +81,7 @@ function Figure({
           {visual && <div className={value != null ? 'w-1/2 max-w-[220px]' : 'flex h-full min-h-[96px] items-center justify-center'}>{visual}</div>}
         </div>
       )}
-      {note && <p data-note className="text-xs opacity-75">{note}</p>}
+      {note && <p data-note className={`text-xs opacity-75 ${square && value == null ? 'text-center' : ''}`}>{note}</p>}
     </div>
   )
 }
