@@ -1,7 +1,7 @@
 import { streakFlame } from '@/lib/profile-cards'
 
 // The Play streak card: a flame with the streak inside it, bigger and glowing
-// brighter the longer the streak runs (streakFlame), unlit at none. A square
+// brighter the longer the streak runs (streakFlame); a small blue one at none. A square
 // is just the flame; a half card puts the days and the best beside it.
 
 const FLAME = 'M12 2c.6 3.2 2.6 5 4.4 7 1.6 1.8 2.6 3.8 2.6 6.2A7 7 0 0 1 5 15.2c0-2.3 1-4 2.3-5.4.3 1.6 1.2 2.8 2.4 3.3C9.2 9.4 10.2 5.3 12 2Z'
@@ -17,24 +17,29 @@ function Flame({ current }: { current: number }) {
     <div className="relative aspect-square h-full max-w-full" style={{ containerType: 'inline-size' }}>
       <div
         className="absolute inset-0 origin-bottom"
-        style={{ transform: `scale(${lit ? size : 0.75})` }}
+        // No streak: a small blue pilot flame, waiting to be lit, with no number.
+        style={{ transform: `scale(${lit ? size : 0.45})` }}
       >
         <svg
           viewBox="0 0 24 24"
           className="h-full w-full"
           aria-hidden
-          style={lit ? { filter: `drop-shadow(0 0 ${4 + glow * 10}cqw rgba(249,115,22,${0.25 + glow * 0.45}))` } : undefined}
+          style={{
+            filter: lit
+              ? `drop-shadow(0 0 ${4 + glow * 10}cqw rgba(249,115,22,${0.25 + glow * 0.45}))`
+              : 'drop-shadow(0 0 6cqw rgba(56,189,248,0.35))',
+          }}
         >
-          {lit
-            ? <path d={FLAME} className="fill-orange-500 dark:fill-orange-400" />
-            : <path d={FLAME} fill="none" stroke="currentColor" strokeOpacity={0.3} strokeWidth={1} strokeDasharray="1.5 1.2" />}
+          <path d={FLAME} className={lit ? 'fill-orange-500 dark:fill-orange-400' : 'fill-sky-500 dark:fill-sky-400'} />
         </svg>
-        <span
-          className={`absolute inset-x-0 top-[57%] text-center font-display leading-none tabular-nums ${lit ? 'text-orange-950' : 'opacity-50'}`}
-          style={{ fontSize: digits >= 3 ? '20cqw' : '30cqw' }}
-        >
-          {current}
-        </span>
+        {lit && (
+          <span
+            className="absolute inset-x-0 top-[57%] text-center font-display leading-none tabular-nums text-orange-950"
+            style={{ fontSize: digits >= 3 ? '20cqw' : '30cqw' }}
+          >
+            {current}
+          </span>
+        )}
       </div>
     </div>
   )
