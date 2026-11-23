@@ -30,8 +30,8 @@ function Flame({ current }: { current: number }) {
               : 'drop-shadow(0 0 6cqw rgba(56,189,248,0.35))',
           }}
         >
-          <g className="animate-flame-sway">
-            <path d={FLAME} className={lit ? 'fill-orange-500 dark:fill-orange-400' : 'fill-sky-500 dark:fill-sky-400'} />
+          <g>
+            <path d={FLAME} className={`animate-flame-shape ${lit ? 'fill-orange-500 dark:fill-orange-400' : 'fill-sky-500 dark:fill-sky-400'}`} />
             {/* The brighter core, low in the flame. */}
             {/* Scaled on a group: the animation's own transform would replace one on the path. */}
             <g transform="translate(12 22.2) scale(0.5) translate(-12 -22.2)">

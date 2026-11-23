@@ -123,30 +123,32 @@ body {
   }
 }
 
-/* The profile's Play streak flame: the whole flame sways and stretches a
-   little from its base, and the brighter core inside flickers faster, out of
-   step with it, so the two never move together. Off for reduced motion. */
-@keyframes flame-sway {
-  0%, 100% { transform: skewX(0deg) scaleY(1); }
-  25% { transform: skewX(-2.5deg) scaleY(1.03); }
-  50% { transform: skewX(1.5deg) scaleY(0.98); }
-  75% { transform: skewX(2.5deg) scaleY(1.025); }
+/* The profile's Play streak flame. The flame changes shape: its tip darts
+   left and right, stretches and shrinks, and the side tongue grows and falls
+   back (keyframes of the same path, StreakFlame.tsx's FLAME is the first).
+   The brighter core inside does the same, faster and out of step, and
+   flickers. Browsers that can't animate a path's shape (Safari) show it
+   still. Off for reduced motion. */
+@keyframes flame-shape {
+  0%, 100% { d: path("M12 2C12.6 5.2 14.6 7 16.4 9C18 10.8 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 12.9 6 11.2 7.3 9.8C7.6 11.4 8.5 12.6 9.7 13.1C9.2 9.4 10.2 5.3 12 2Z"); }
+  20% { d: path("M10.6 1.5C11.7 4.8 14.3 6.6 16.2 8.8C17.9 10.7 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 12.6 6.2 10.8 7.6 9.3C7.8 11 8.6 12.3 9.8 12.9C9 9.2 9.3 5 10.6 1.5Z"); }
+  45% { d: path("M13.4 1C13.5 4.6 15.1 6.8 16.8 8.9C18.3 10.8 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 13.1 5.8 11.5 7 10.3C7.4 11.8 8.4 12.8 9.6 13.2C9.7 9.2 11.1 4.9 13.4 1Z"); }
+  65% { d: path("M11.5 2.9C12.4 5.9 14.4 7.5 16.2 9.4C17.8 11.1 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 12.6 5.6 10.4 6.7 8.5C7.2 10.6 8.4 12.2 9.6 12.8C9.4 9.6 10.1 6.1 11.5 2.9Z"); }
+  85% { d: path("M12.6 1.8C13 5 14.9 7.1 16.6 9.1C18.1 10.9 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 13 5.9 11.3 7.2 10C7.5 11.5 8.5 12.7 9.7 13.1C9.5 9.4 10.6 5.2 12.6 1.8Z"); }
 }
 @keyframes flame-core {
   0%, 100% { transform: scale(1, 1); opacity: 0.9; }
-  30% { transform: scale(0.94, 1.08); opacity: 1; }
-  60% { transform: scale(1.04, 0.95); opacity: 0.75; }
+  30% { transform: scale(0.9, 1.12); opacity: 1; }
+  60% { transform: scale(1.06, 0.92); opacity: 0.7; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .animate-flame-sway {
-    transform-box: fill-box;
-    transform-origin: 50% 100%;
-    animation: flame-sway 2.4s ease-in-out infinite;
+  .animate-flame-shape {
+    animation: flame-shape 1.5s ease-in-out infinite;
   }
   .animate-flame-core {
     transform-box: fill-box;
     transform-origin: 50% 100%;
-    animation: flame-core 1.1s ease-in-out infinite;
+    animation: flame-shape 0.9s ease-in-out infinite reverse, flame-core 0.7s ease-in-out infinite;
   }
 }
 
