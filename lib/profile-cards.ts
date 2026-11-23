@@ -254,11 +254,14 @@ export type ProfileCardData = {
   up_next?: CardGame[]
   year?: { bars: { start: string; minutes: number }[]; totalMinutes: number }
   finish_rate?: { rate: number | null; completed: number; stopped: number }
-  achievements?: { unlocked: number; xp: number }
+  /** `total`: every achievement there is in this edition. */
+  achievements?: { unlocked: number; xp: number; total: number }
   genres?: { name: string; count: number }[]
   platforms?: { name: string; count: number }[]
-  streak?: { current: number; best: number }
-  completed_this_year?: { year: number; count: number }
+  /** `week`: the last 7 UK days, oldest first, whether each had play. */
+  streak?: { current: number; best: number; week: { day: string; played: boolean }[] }
+  /** `months`: completions in each month of the year, January first. */
+  completed_this_year?: { year: number; count: number; months: number[]; month: number }
 }
 
 /** The bio as stored: trimmed, line breaks folded to spaces, at most this long. */

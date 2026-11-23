@@ -5,6 +5,7 @@ import { getLiveSessions } from '@/lib/presence'
 import { londonDay } from '@/lib/activity'
 import { playSummary, MAX_PLAY_PERIOD_DAYS } from '@/lib/dashboard'
 import { streaks } from '@/lib/stats-wrapped'
+import { AVAILABLE_ACHIEVEMENTS } from '@/lib/achievements'
 import type { CardGame, ProfileCardData, ProfileCardId } from '@/lib/profile-cards'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -47,7 +48,10 @@ export async function loadProfileCardData(
   const wants = (card: ProfileCardId) => cards.has(card)
   const needSessions = wants('year') || wants('streak')
 
-  const [playingRes, live, completedRes, backlogRes, sessions] = await Promise.all([
+  const today = londonDay(new Date().toISOString())
+  const year = Number(today.slice(0, 4))
+
+  const [playingRes, live, completedRes, backlogRes, sessions, thisYearRes] = await Promise.all([
     wants('playing')
       ? supabase.from('games').select(GAME_COLUMNS).eq('user_id', userId).eq('status', 'playing')
         .order('start_date', { ascending: false, nullsFirst: false })
@@ -76,6 +80,10 @@ export async function loadProfileCardData(
         .order('started_at', { ascending: false })
         .order('id'))
       : Promise.resolve([]),
+    wants('completed_this_year')
+      ? supabase.from('games').select('completion_date').eq('user_id', userId).eq('status', 'completed')
+        .gte('completion_date', `${year}-01-01`) as unknown as Promise<{ data: { completion_date: string | null }[] | null }>
+      : Promise.resolve({ data: null }),
   ])
 
   if (wants('playing')) {
@@ -94,19 +102,30 @@ export async function loadProfileCardData(
   }
   if (wants('streak')) {
     // A session under a minute isn't play, the same rule as the Stats page.
-    const run = streaks(sessions.filter(s => (s.minutes ?? 0) >= 1).map(s => londonDay(s.started_at)))
-    data.streak = { current: run?.current ?? 0, best: run?.days ?? 0 }
+    const days = sessions.filter(s => (s.minutes ?? 0) >= 1).map(s => londonDay(s.started_at))
+    const run = streaks(days)
+    const played = new Set(days)
+    const week = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(Date.parse(`${today}T00:00:00Z`) - (6 - i) * 86_400_000).toISOString().slice(0, 10)
+      return { day, played: played.has(day) }
+    })
+    data.streak = { current: run?.current ?? 0, best: run?.days ?? 0, week }
   }
 
   if (wants('finish_rate')) {
     data.finish_rate = { rate: stats.completionRate, completed: stats.completedCount, stopped: stats.completedCount + stats.dnfCount }
   }
-  if (wants('achievements')) data.achievements = { unlocked: stats.achievementsUnlocked, xp: stats.profile.xp ?? 0 }
+  if (wants('achievements')) {
+    data.achievements = { unlocked: stats.achievementsUnlocked, xp: stats.profile.xp ?? 0, total: AVAILABLE_ACHIEVEMENTS.length }
+  }
   if (wants('genres')) data.genres = stats.genreData.slice(0, 3).map(g => ({ name: g.genre, count: g.count }))
   if (wants('platforms')) data.platforms = stats.platformData.slice(0, 3).map(p => ({ name: p.platform, count: p.count }))
   if (wants('completed_this_year')) {
-    const year = Number(londonDay(new Date().toISOString()).slice(0, 4))
-    data.completed_this_year = { year, count: stats.gamesPerYear.find(y => y.year === String(year))?.count ?? 0 }
+    const months = Array.from({ length: 12 }, () => 0)
+    for (const g of thisYearRes.data ?? []) {
+      if (g.completion_date?.startsWith(String(year))) months[Number(g.completion_date.slice(5, 7)) - 1]++
+    }
+    data.completed_this_year = { year, count: months.reduce((a, b) => a + b, 0), months, month: Number(today.slice(5, 7)) - 1 }
   }
   return data
 }

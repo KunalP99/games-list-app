@@ -22,24 +22,79 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="flex flex-1 items-center text-sm text-fg-muted">{children}</p>
 }
 
-/** A big number card in one colour. */
+/**
+ * A big number card in one colour, with a small picture of the number (a
+ * ring, a bar, the week's days, the year's months). A square stacks them; a
+ * half card puts the picture beside the number.
+ */
 function Figure({
-  label, value, note, tone, square,
-}: { label: string; value: string; note?: string; tone: 'ink' | 'amber' | 'orange' | 'plain'; square: boolean }) {
+  label, value, note, tone, square, visual,
+}: {
+  label: string
+  /** Left out when the picture carries the number itself (the finish rate's ring). */
+  value?: string
+  note?: string
+  tone: 'ink' | 'amber' | 'orange' | 'plain'
+  square: boolean
+  visual?: React.ReactNode
+}) {
   const tones = {
     ink: 'bg-zinc-900 text-white dark:bg-zinc-800 border-transparent',
     amber: 'bg-amber-200 text-amber-950 dark:bg-amber-400/15 dark:text-amber-100 border-transparent',
     orange: 'bg-orange-100 text-orange-950 dark:bg-orange-400/15 dark:text-orange-100 border-transparent',
     plain: 'bg-surface-base text-fg-base border-edge-base',
   }
+  const number = value != null && (
+    <p className={`font-display leading-[0.9] tabular-nums ${square ? 'text-4xl sm:text-5xl' : 'text-5xl'}`}>{value}</p>
+  )
   return (
-    <div className={`flex h-full flex-col justify-between gap-2 rounded-2xl border ${square ? 'p-4' : 'min-h-[150px] p-5'} ${tones[tone]}`}>
+    <div className={`flex h-full flex-col gap-3 rounded-2xl border ${square ? 'p-4' : 'min-h-[150px] p-5'} ${tones[tone]}`}>
       <h2 className="text-sm font-medium opacity-80">{label}</h2>
-      <p className={`font-display leading-[0.9] tabular-nums ${square ? 'text-4xl sm:text-5xl' : 'text-5xl'}`}>{value}</p>
-      {note && <p data-note className="mt-1 text-xs opacity-75">{note}</p>}
+      {square ? (
+        <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
+          {number}
+          {visual}
+        </div>
+      ) : (
+        <div className="flex flex-1 items-center justify-between gap-5">
+          {number}
+          {visual && <div className={value != null ? 'w-1/2 max-w-[220px]' : ''}>{visual}</div>}
+        </div>
+      )}
+      {note && <p data-note className="text-xs opacity-75">{note}</p>}
     </div>
   )
 }
+
+/** A ring filled to `percent`, with the figure in the middle. */
+function Ring({ percent, children, size }: { percent: number; children: React.ReactNode; size: number }) {
+  const r = 42
+  const length = 2 * Math.PI * r
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden>
+        <circle cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeOpacity={0.15} strokeWidth="10" />
+        <circle
+          cx="50" cy="50" r={r} fill="none" stroke="currentColor" strokeWidth="10" strokeLinecap="round"
+          strokeDasharray={`${(Math.max(0, Math.min(100, percent)) / 100) * length} ${length}`}
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center font-display text-3xl leading-none tabular-nums">{children}</span>
+    </div>
+  )
+}
+
+/** A bar `share` (0 to 1) full, in the card's own colour. */
+function Bar({ share }: { share: number }) {
+  return (
+    <div className="relative h-2 overflow-hidden rounded-full" aria-hidden>
+      <div className="absolute inset-0 rounded-full" style={{ backgroundColor: 'currentColor', opacity: 0.18 }} />
+      <div className="absolute inset-y-0 left-0 rounded-full" style={{ backgroundColor: 'currentColor', width: `${Math.max(0, Math.min(1, share)) * 100}%` }} />
+    </div>
+  )
+}
+
+const WEEKDAYS = 'SMTWTFS'
 
 function GameRow({ game, aside }: { game: CardGame; aside?: React.ReactNode }) {
   return (
@@ -77,6 +132,7 @@ function PlayingTile({ game, big }: { game: CardGame & { liveSince: string | nul
 }
 
 const MONTHS = 'JFMAMJJASOND'
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 const formatDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null
@@ -174,14 +230,30 @@ export default function CardBody({
           square={square}
           tone="ink"
           label={title}
-          value={f?.rate != null ? `${f.rate}%` : '–'}
+          visual={<Ring percent={f?.rate ?? 0} size={square ? 112 : 96}>{f?.rate != null ? `${f.rate}%` : '–'}</Ring>}
           note={f && f.stopped > 0 ? `${f.completed} of ${f.stopped} finished` : 'Nothing finished or dropped yet'}
         />
       )
     }
     case 'achievements': {
       const a = data.achievements
-      return <Figure square={square} tone="amber" label={title} value={(a?.unlocked ?? 0).toLocaleString()} note={`${(a?.xp ?? 0).toLocaleString()} XP`} />
+      const unlocked = a?.unlocked ?? 0
+      const total = a?.total ?? 0
+      return (
+        <Figure
+          square={square}
+          tone="amber"
+          label={title}
+          value={unlocked.toLocaleString()}
+          visual={total > 0 && (
+            <div className="space-y-1.5">
+              <Bar share={unlocked / total} />
+              <p className="text-xs font-medium opacity-80 tabular-nums">{unlocked} of {total} unlocked</p>
+            </div>
+          )}
+          note={`${(a?.xp ?? 0).toLocaleString()} XP earned`}
+        />
+      )
     }
     case 'streak': {
       const s = data.streak
@@ -191,13 +263,50 @@ export default function CardBody({
           tone="orange"
           label={title}
           value={`${s?.current ?? 0} ${s?.current === 1 ? 'day' : 'days'}`}
+          visual={s && (
+            <div className="flex gap-1.5" role="img" aria-label={`Played on ${s.week.filter(d => d.played).length} of the last 7 days`}>
+              {s.week.map(d => (
+                <div key={d.day} className="flex flex-1 flex-col items-center gap-1">
+                  <span className="h-5 w-full rounded-md" style={{ backgroundColor: 'currentColor', opacity: d.played ? 0.9 : 0.15 }} />
+                  <span className="text-[10px] font-medium opacity-70">{WEEKDAYS[new Date(`${d.day}T12:00:00Z`).getUTCDay()]}</span>
+                </div>
+              ))}
+            </div>
+          )}
           note={s && s.best > 0 ? `Best in the last year: ${s.best} ${s.best === 1 ? 'day' : 'days'}` : 'No tracked play yet'}
         />
       )
     }
     case 'completed_this_year': {
       const c = data.completed_this_year
-      return <Figure square={square} tone="plain" label={title} value={(c?.count ?? 0).toLocaleString()} note={c ? `in ${c.year}` : undefined} />
+      const top = Math.max(1, ...(c?.months ?? [0]))
+      return (
+        <Figure
+          square={square}
+          tone="plain"
+          label={title}
+          value={(c?.count ?? 0).toLocaleString()}
+          visual={c && (
+            <div className="flex h-12 items-end gap-1" role="img" aria-label={`Completions each month of ${c.year}`}>
+              {c.months.map((n, i) => (
+                <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                  <span
+                    className="w-full rounded-sm"
+                    title={`${MONTH_NAMES[i]}: ${n}`}
+                    style={{
+                      height: `${n > 0 ? Math.max(18, (n / top) * 100) : 8}%`,
+                      backgroundColor: n > 0 ? accent : 'currentColor',
+                      opacity: n > 0 ? 1 : i > c.month ? 0.06 : 0.15,
+                    }}
+                  />
+                  <span className="text-[9px] leading-none opacity-60">{MONTHS[i]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          note={c ? `in ${c.year}` : undefined}
+        />
+      )
     }
     case 'genres':
     case 'platforms': {
