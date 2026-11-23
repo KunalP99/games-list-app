@@ -3,6 +3,7 @@ import LiveIndicator from '@/components/games/LiveIndicator'
 import PlayCalendar from './PlayCalendar'
 import GameShelf from './GameShelf'
 import PlatformIcon from '@/components/games/PlatformIcon'
+import RecentTimeline from './RecentTimeline'
 import { PROFILE_CARDS, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
@@ -150,9 +151,6 @@ function PlayingTile({ game, big }: { game: CardGame & { liveSince: string | nul
 const MONTHS = 'JFMAMJJASOND'
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-const formatDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null
-
 export default function CardBody({
   card, size, data, accent, chosen,
 }: {
@@ -190,24 +188,25 @@ export default function CardBody({
         </Frame>
       )
     }
-    case 'recently_completed':
-    case 'up_next': {
-      const games = (card === 'up_next' ? data.up_next : data.recently_completed) ?? []
+    case 'recently_completed': {
+      const games = data.recently_completed ?? []
       return (
         <Frame title={title}>
           {games.length === 0
-            ? <Empty>{card === 'up_next' ? 'The backlog is empty.' : 'No completed games yet.'}</Empty>
+            ? <Empty>No completed games yet.</Empty>
+            : <RecentTimeline games={games} accent={accent} full={full} />}
+        </Frame>
+      )
+    }
+    case 'up_next': {
+      const games = data.up_next ?? []
+      return (
+        <Frame title={title}>
+          {games.length === 0
+            ? <Empty>The backlog is empty.</Empty>
             : (
               <div className={full ? 'grid gap-2 sm:grid-cols-3' : 'space-y-2'}>
-                {games.slice(0, 3).map(g => (
-                  <GameRow
-                    key={g.id}
-                    game={g}
-                    aside={'completedOn' in g
-                      ? [hoursText(g.hours), formatDate((g as { completedOn: string | null }).completedOn)].filter(Boolean).join(' · ')
-                      : null}
-                  />
-                ))}
+                {games.slice(0, 3).map(g => <GameRow key={g.id} game={g} />)}
               </div>
             )}
         </Frame>

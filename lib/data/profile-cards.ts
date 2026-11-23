@@ -6,7 +6,7 @@ import { londonDay } from '@/lib/activity'
 import { playSummary, MAX_PLAY_PERIOD_DAYS } from '@/lib/dashboard'
 import { streaks } from '@/lib/stats-wrapped'
 import { AVAILABLE_ACHIEVEMENTS } from '@/lib/achievements'
-import { SHELF_MAX, calendarDays, shelfGames, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
+import { RECENT_COMPLETED_MAX, SHELF_MAX, calendarDays, shelfGames, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -68,7 +68,7 @@ export async function loadProfileCardData(
       ? supabase.from('games').select(`${GAME_COLUMNS}, completion_date`).eq('user_id', userId).eq('status', 'completed')
         .order('completion_date', { ascending: false, nullsFirst: false })
         .order('updated_at', { ascending: false })
-        .limit(3) as unknown as Promise<{ data: GameRow[] | null }>
+        .limit(RECENT_COMPLETED_MAX) as unknown as Promise<{ data: GameRow[] | null }>
       : Promise.resolve({ data: null }),
     wants('up_next')
       ? supabase.from('games').select(GAME_COLUMNS).eq('user_id', userId).eq('status', 'backlog')

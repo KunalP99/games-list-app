@@ -289,6 +289,19 @@ export function shelfGames<G extends { id: string }>(completed: G[], chosen: str
 // client component, so a card can switch size or be added in edit mode
 // without another trip. Only cards the viewer may see are filled in.
 
+/** How many finishes the Recently completed timeline shows. */
+export const RECENT_COMPLETED_MAX = 4
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** A completion date on the timeline: "30 Sep", with the year when it isn't this year ("30 Sep 2025"). */
+export function timelineDate(iso: string | null, thisYear: number): string | null {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return null
+  const day = `${Number(m[3])} ${SHORT_MONTHS[Number(m[2]) - 1]}`
+  return Number(m[1]) === thisYear ? day : `${day} ${m[1]}`
+}
+
 export type CardGame = {
   id: string
   title: string

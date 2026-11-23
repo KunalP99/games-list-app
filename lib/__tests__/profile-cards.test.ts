@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  timelineDate,
   DEFAULT_LAYOUT,
   MAX_BIO_LENGTH,
   PROFILE_CARD_IDS,
@@ -250,5 +251,17 @@ describe('the Game shelf', () => {
     expect(shelfGames(completed, [id(5), id(99), id(2)]).map(g => g.id)).toEqual([id(5), id(2)])
     expect(shelfGames(completed, undefined)).toHaveLength(SHELF_MAX)
     expect(shelfGames(completed, [])[0].id).toBe(id(1))
+  })
+})
+
+describe('timelineDate', () => {
+  it('shows the day and month, and the year only when it is not this year', () => {
+    expect(timelineDate('2026-09-30', 2026)).toBe('30 Sep')
+    expect(timelineDate('2026-01-05T10:00:00Z', 2026)).toBe('5 Jan')
+    expect(timelineDate('2025-12-31', 2026)).toBe('31 Dec 2025')
+  })
+  it('has nothing to show without a date', () => {
+    expect(timelineDate(null, 2026)).toBeNull()
+    expect(timelineDate('soon', 2026)).toBeNull()
   })
 })
