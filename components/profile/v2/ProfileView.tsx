@@ -5,6 +5,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
   TouchSensor,
   closestCenter,
@@ -14,6 +15,7 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
@@ -26,7 +28,8 @@ import {
   gridEntries,
   isCardItem,
   isProfileCardId,
-  moveCard,
+  dropOnCard,
+  moveToRow,
   moveToSpace,
   removeCard,
   sameLayout,
@@ -59,22 +62,32 @@ const SPAN: Record<CardSize, string> = {
 }
 const SIZE_LABEL: Record<CardSize, string> = { full: 'Full', half: 'Half', small: 'Square' }
 
-// Cards stay where they are while dragging; the layout itself is reordered
-// as the pointer passes over another card, so the grid makes room for real
+// Cards stay where they are while dragging; nothing changes until the drop
 // (cards here aren't all one size, which sliding transforms assume).
 const stayPut = () => null
 
-/** Ids of the empty spaces as drop targets; never a card id. */
+/** Ids of the empty spaces and of the lines between rows as drop targets; never a card id. */
 const SPACE_ID = 'space:'
+const ROW_ID = 'row:'
 
 /**
  * What the dragged card is over: whatever is under the pointer (so a card or
- * a space only counts once you are actually over it), else, for the
- * keyboard, the nearest card's centre.
+ * a space only counts once you are actually over it), a line between rows
+ * first since it overlaps the edges of the cards; else, for the keyboard,
+ * the nearest card's centre.
  */
 const overUnderPointer: CollisionDetection = args => {
   const under = pointerWithin(args)
-  return under.length > 0 ? under : closestCenter(args)
+  const line = under.filter(c => String(c.id).startsWith(ROW_ID))
+  return line.length > 0 ? line : under.length > 0 ? under : closestCenter(args)
+}
+
+// A line between rows spans the whole grid, from inside the row's first
+// card or space: as wide as that element times the columns, plus the gaps.
+const ROW_LINE_WIDTH: Record<CardSize, string> = {
+  full: 'w-full',
+  half: 'w-full sm:w-[calc(200%+1rem)]',
+  small: 'w-[calc(200%+1rem)] sm:w-[calc(400%+3rem)]',
 }
 
 type Props = {
@@ -102,6 +115,8 @@ export default function ProfileView(props: Props) {
   // for the layout they were split on: any change to the cards starts afresh.
   const [splits, setSplits] = useState<{ on: ProfileLayout; keys: ReadonlySet<string> }>({ on: [], keys: new Set() })
   const [dragging, setDragging] = useState<ProfileCardId | null>(null)
+  // What dropping now would do, shown on the dragged card (it covers the target).
+  const [dropHint, setDropHint] = useState<string | null>(null)
   const [choosingShelf, setChoosingShelf] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, startSaving] = useTransition()
@@ -149,6 +164,19 @@ export default function ProfileView(props: Props) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
+  const onDragOver = (e: DragOverEvent) => {
+    const over = e.over?.id
+    const from = e.active.id
+    if (over == null || over === from) return setDropHint(null)
+    if (String(over).startsWith(ROW_ID)) {
+      return setDropHint((e.over?.data.current as { row: number } | undefined)?.row === 0 ? 'Move to the top' : 'Move here')
+    }
+    if (String(over).startsWith(SPACE_ID)) return setDropHint('Put it here')
+    const a = layout.find(item => item.card === from)
+    const b = layout.find(item => item.card === over)
+    setDropHint(a && b && a.size === b.size ? 'Swap' : 'New row above')
+  }
+
   const onDragStart = (e: DragStartEvent) => {
     if (isProfileCardId(e.active.id)) setDragging(e.active.id)
   }
@@ -157,30 +185,40 @@ export default function ProfileView(props: Props) {
   // that card's place and the ones between shift along.
   const onDragEnd = (e: DragEndEvent) => {
     setDragging(null)
+    setDropHint(null)
     const from = e.active.id
     const over = e.over?.id
     if (!isProfileCardId(from) || over == null || over === from) return
     if (String(over).startsWith(SPACE_ID)) {
       const target = e.over?.data.current as SpaceTarget | undefined
       if (target) setDraft(current => moveToSpace(current, from, target))
+    } else if (String(over).startsWith(ROW_ID)) {
+      const row = (e.over?.data.current as { row: number } | undefined)?.row
+      if (row != null) setDraft(current => moveToRow(current, from, row))
     } else if (isProfileCardId(over)) {
-      setDraft(current => moveCard(current, from, over))
+      setDraft(current => dropOnCard(current, from, over))
     }
   }
 
   const closeAdding = useCallback(() => setAdding(null), [])
   const entries = useMemo(() => gridEntries(layout), [layout])
+  const startsRow = (i: number) => i === 0 || entries[i].row !== entries[i - 1].row
   const splitKeys = splits.on === draft ? splits.keys : new Set<string>()
   const split = (key: string) => setSplits({ on: draft, keys: new Set([...splitKeys, key]) })
 
-  function renderSpace(target: SpaceTarget, key: string): React.ReactNode {
+  // While a card is dragged, a line above every row (and below the last) to
+  // drop it on: it gets a row of its own there.
+  const rowLine = (row: number | null, size: CardSize) =>
+    dragging && row != null ? <RowLine key={`line-${row}`} row={row} width={ROW_LINE_WIDTH[size]} accent={accent} /> : null
+
+  function renderSpace(target: SpaceTarget, key: string, line: number | null = null): React.ReactNode {
     const { size } = target
     const smaller = splitSize(size)
     if (smaller && splitKeys.has(key)) {
       const step = CARD_COLUMNS[smaller]
       return (
         <Fragment key={key}>
-          {renderSpace({ ...target, size: smaller }, `${key}.0`)}
+          {renderSpace({ ...target, size: smaller }, `${key}.0`, line)}
           {renderSpace({ ...target, size: smaller, offset: target.offset + step }, `${key}.1`)}
         </Fragment>
       )
@@ -210,6 +248,7 @@ export default function ProfileView(props: Props) {
             {smaller === 'half' ? 'Split into halves' : 'Split into squares'}
           </button>
         )}
+        {rowLine(line, size)}
       </Space>
     )
   }
@@ -300,9 +339,15 @@ export default function ProfileView(props: Props) {
         <DndContext
           sensors={sensors}
           collisionDetection={overUnderPointer}
+          // The lines between rows appear once a drag starts: measure them then.
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={onDragStart}
+          onDragOver={onDragOver}
           onDragEnd={onDragEnd}
-          onDragCancel={() => setDragging(null)}
+          onDragCancel={() => {
+            setDragging(null)
+            setDropHint(null)
+          }}
         >
           <SortableContext items={layout.filter(isCardItem).map(item => item.card)} strategy={stayPut}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -316,9 +361,11 @@ export default function ProfileView(props: Props) {
                   onRemove={() => setDraft(d => removeCard(d, entry.item.card))}
                   onResize={size => setDraft(d => setSize(d, entry.item.card, size))}
                   onChooseGames={entry.item.card === 'shelf' ? () => setChoosingShelf(true) : undefined}
-                />
+                >
+                  {rowLine(startsRow(i) ? entry.row : null, entry.item.size)}
+                </SortableCard>
               ) : editing ? (
-                renderSpace({ at: entry.at, size: entry.size, root: entry.size, offset: 0, slot: entry.slot }, `space-${i}`)
+                renderSpace({ at: entry.at, size: entry.size, root: entry.size, offset: 0, slot: entry.slot }, `space-${i}`, startsRow(i) ? entry.row : null)
               ) : entry.slot != null ? (
                 // A kept empty space: nothing to see, but it holds its place.
                 <div key={`space-${i}`} aria-hidden className={SPAN[entry.size]} />
@@ -327,8 +374,17 @@ export default function ProfileView(props: Props) {
           </SortableContext>
           <DragOverlay>
             {draggingItem && (
-              <div className="h-full rotate-[-1.5deg] cursor-grabbing rounded-2xl shadow-2xl shadow-black/30">
+              <div className="relative h-full rotate-[-1.5deg] cursor-grabbing rounded-2xl shadow-2xl shadow-black/30">
                 <CardBody card={draggingItem.card} size={draggingItem.size} data={data} accent={accent} chosen={draggingItem.games} />
+                {dropHint && (
+                  <span
+                    role="status"
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold text-white shadow-md"
+                    style={{ backgroundColor: accent }}
+                  >
+                    {dropHint}
+                  </span>
+                )}
               </div>
             )}
           </DragOverlay>
@@ -378,8 +434,26 @@ function Space({ id, target, children }: { id: string; target: SpaceTarget; chil
   )
 }
 
+/** The line above a row to drop a card on, lit in the accent when over it (the dragged card says what dropping does). */
+function RowLine({ row, width, accent }: { row: number; width: string; accent: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `${ROW_ID}${row}`, data: { row } })
+  return (
+    <div
+      ref={setNodeRef}
+      data-row-line={row}
+      data-over={isOver}
+      className={`pointer-events-none absolute -top-5 left-0 z-10 flex h-6 items-center ${width}`}
+    >
+      <span
+        className={`w-full rounded-full transition-all ${isOver ? 'h-1' : 'h-0.5'}`}
+        style={{ backgroundColor: isOver ? accent : 'color-mix(in srgb, currentColor 18%, transparent)' }}
+      />
+    </div>
+  )
+}
+
 function SortableCard({
-  item, editing, data, accent, onRemove, onResize, onChooseGames,
+  item, editing, data, accent, onRemove, onResize, onChooseGames, children,
 }: {
   item: LayoutItem
   editing: boolean
@@ -389,6 +463,8 @@ function SortableCard({
   onResize: (size: CardSize) => void
   /** The Game shelf only: opens the picker for its games. */
   onChooseGames?: () => void
+  /** The line above its row, when it's the first in the row. */
+  children?: React.ReactNode
 }) {
   const card = PROFILE_CARDS[item.card]
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging, isOver } = useSortable({ id: item.card, disabled: !editing })
@@ -479,6 +555,7 @@ function SortableCard({
           </>
         )
       })()}
+      {children}
     </div>
   )
 }

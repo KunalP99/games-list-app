@@ -227,29 +227,36 @@ export function trimEmpties(layout: ProfileLayout): ProfileLayout {
  * as half spaces where one lines up with the halves of the row, else squares.
  */
 export type GridEntry =
-  | { kind: 'card'; index: number; item: LayoutItem }
+  | { kind: 'card'; index: number; item: LayoutItem; row: number }
   /** `slot`: the layout index of a kept empty space (else it's a row's leftover gap). */
-  | { kind: 'space'; at: number; size: CardSize; slot?: number }
+  | { kind: 'space'; at: number; size: CardSize; slot?: number; row: number }
 
 export function gridEntries(layout: ProfileLayout): GridEntry[] {
   const entries: GridEntry[] = []
   let column = 0
+  let row = 0
   const fillRow = (at: number) => {
-    while (column > 0 && column < GRID_COLUMNS) {
+    if (column === 0) return
+    while (column < GRID_COLUMNS) {
       const size: CardSize = column % 2 === 0 ? 'half' : 'small'
-      entries.push({ kind: 'space', at, size })
+      entries.push({ kind: 'space', at, size, row })
       column += CARD_COLUMNS[size]
     }
     column = 0
+    row++
   }
   layout.forEach((item, index) => {
     const width = CARD_COLUMNS[item.size]
     if (column + width > GRID_COLUMNS) fillRow(index)
-    entries.push(isCardItem(item) ? { kind: 'card', index, item } : { kind: 'space', at: index, size: item.size, slot: index })
-    column = (column + width) % GRID_COLUMNS
+    entries.push(isCardItem(item) ? { kind: 'card', index, item, row } : { kind: 'space', at: index, size: item.size, slot: index, row })
+    column += width
+    if (column === GRID_COLUMNS) {
+      column = 0
+      row++
+    }
   })
   fillRow(layout.length)
-  if (cardsToAdd(layout).length > 0) entries.push({ kind: 'space', at: layout.length, size: 'full' })
+  if (cardsToAdd(layout).length > 0) entries.push({ kind: 'space', at: layout.length, size: 'full', row })
   return entries
 }
 
@@ -365,6 +372,64 @@ export function moveToSpace(layout: ProfileLayout, card: ProfileCardId, target: 
   const holed: ProfileLayout = layout.map((entry, i) => (i === from ? { card: 'empty', size: item.size } : entry))
   const placed = fillSpace(holed, target, moved)
   return placed === holed ? layout : trimEmpties(placed)
+}
+
+/** The layout's rows as the grid lays them out: each a list of layout indexes. */
+export function layoutRows(layout: ProfileLayout): number[][] {
+  const rows: number[][] = []
+  let column = GRID_COLUMNS
+  layout.forEach((item, index) => {
+    const width = CARD_COLUMNS[item.size]
+    if (column + width > GRID_COLUMNS) {
+      rows.push([])
+      column = 0
+    }
+    rows[rows.length - 1].push(index)
+    column += width
+  })
+  return rows
+}
+
+/**
+ * Moves `card` into a new row of its own, before row `row` (or after the
+ * last). Every other row keeps exactly its cards: the place the card left
+ * becomes an empty space (and its row goes if that leaves it without a card),
+ * and the new row is closed off with empty spaces so nothing joins it.
+ */
+export function moveToRow(layout: ProfileLayout, card: ProfileCardId, row: number): ProfileLayout {
+  const from = layout.findIndex(item => item.card === card)
+  const item = layout[from]
+  if (!item || !isCardItem(item)) return layout
+  const holed: ProfileLayout = layout.map((entry, i) => (i === from ? { card: 'empty', size: item.size } : entry))
+  const rows = layoutRows(holed)
+  const at = Math.max(0, Math.min(row, rows.length))
+  const start = at < rows.length ? rows[at][0] : holed.length
+  const width = CARD_COLUMNS[item.size]
+  // The row before keeps its gap: the card would otherwise fit in it.
+  const before = rows[at - 1]
+  const used = before ? before.reduce((sum, i) => sum + CARD_COLUMNS[holed[i].size], 0) : GRID_COLUMNS
+  const padBefore = used + width <= GRID_COLUMNS ? emptiesFor(GRID_COLUMNS - used, used) : []
+  const padAfter = at < rows.length ? emptiesFor(GRID_COLUMNS - width, width) : []
+  const next = trimEmpties([...holed.slice(0, start), ...padBefore, item, ...padAfter, ...holed.slice(start)])
+  return sameLayout(next, layout) ? layout : next
+}
+
+/**
+ * A card dropped on another: the same size, they swap places; otherwise the
+ * dragged card takes a new row just before the other card's row. Either way
+ * no row loses or gains any other card.
+ */
+export function dropOnCard(layout: ProfileLayout, card: ProfileCardId, target: ProfileCardId): ProfileLayout {
+  const from = layout.findIndex(item => item.card === card)
+  const to = layout.findIndex(item => item.card === target)
+  if (from < 0 || to < 0 || from === to) return layout
+  if (layout[from].size === layout[to].size) {
+    const next = [...layout]
+    ;[next[from], next[to]] = [next[to], next[from]]
+    return next
+  }
+  const row = layoutRows(layout).findIndex(indexes => indexes.includes(to))
+  return moveToRow(layout, card, row)
 }
 
 /** Moves a card one place earlier (-1) or later (+1), for the keyboard. */

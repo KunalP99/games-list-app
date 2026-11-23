@@ -90,7 +90,7 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
 
   await page.getByRole('group', { name: 'Achievements size' }).getByRole('button', { name: 'Half' }).click()
 
-  // Drag Platforms (last) onto Currently playing (first).
+  // Drag Platforms (last) onto Currently playing (first): both half, so they swap.
   const handle = page.getByRole('button', { name: 'Move Platforms', exact: true })
   const target = page.locator('[data-card="playing"]')
   const from = (await handle.boundingBox())!
@@ -105,7 +105,7 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
   // also clicked); a person never clicks that fast, a test does.
   await page.waitForTimeout(150)
 
-  const expected = ['platforms', 'playing', 'finish_rate', 'achievements', 'streak', 'genres', 'up_next', 'recently_completed']
+  const expected = ['platforms', 'finish_rate', 'achievements', 'streak', 'genres', 'up_next', 'recently_completed', 'playing']
   await expect.poll(() => cardsOnPage(page)).toEqual(expected)
 
   await toolbar.getByRole('button', { name: 'Done' }).click()
@@ -210,6 +210,48 @@ test('a card dragged onto an empty space (a split one too) moves into it, and no
   await page.reload()
   await expect.poll(() => cardsOnPage(page)).toEqual(['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak'])
   await expect.poll(where).toEqual(before)
+})
+
+test('a full-width card dragged to the line above the first row goes to the top; no row changes', async ({ page }) => {
+  await admin().from('profiles').update({
+    profile_layout: [
+      { card: 'streak', size: 'small' }, { card: 'completed_this_year', size: 'small' }, { card: 'finish_rate', size: 'small' }, { card: 'achievements', size: 'small' },
+      { card: 'recently_completed', size: 'half' }, { card: 'playing', size: 'half' },
+      { card: 'calendar', size: 'full' },
+    ],
+  }).eq('id', alexId)
+  await login(page, TEST_USER)
+  await page.setViewportSize({ width: 1280, height: 1600 })
+  await openOwnProfile(page)
+  await page.getByRole('button', { name: 'Edit profile' }).click()
+
+  const handle = page.getByRole('button', { name: 'Move Play calendar', exact: true })
+  const from = (await handle.boundingBox())!
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(from.x + from.width / 2, from.y - 20, { steps: 5 })
+  // The line appears above the first row once dragging starts.
+  const line = page.locator('[data-row-line="0"]')
+  await expect(line).toHaveCount(1)
+  const box = (await line.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 25 })
+  await expect(line).toHaveAttribute('data-over', 'true')
+  await expect(page.getByRole('status').filter({ hasText: 'Move to the top' })).toBeVisible()
+  await page.mouse.up()
+  await page.waitForTimeout(150)
+  await expect(page.locator('[data-row-line]')).toHaveCount(0)
+
+  await expect.poll(() => cardsOnPage(page))
+    .toEqual(['calendar', 'streak', 'completed_this_year', 'finish_rate', 'achievements', 'recently_completed', 'playing'])
+  // Each row kept its cards: the four squares share a top, as do the two halves.
+  const top = (card: string) => page.locator(`[data-card="${card}"]`).boundingBox().then(b => Math.round(b!.y))
+  const squares = await Promise.all(['streak', 'completed_this_year', 'finish_rate', 'achievements'].map(top))
+  expect(new Set(squares).size).toBe(1)
+  expect(await top('recently_completed')).toBe(await top('playing'))
+  expect(squares[0]).toBeGreaterThan(await top('calendar'))
+
+  await page.getByRole('toolbar', { name: 'Editing your profile' }).getByRole('button', { name: 'Done' }).click()
+  await expect.poll(async () => (await storedLayout()).profile_layout?.[0]).toEqual({ card: 'calendar', size: 'full' })
 })
 
 test('Cancel throws the changes away', async ({ page }) => {

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
+  dropOnCard,
+  layoutRows,
+  moveToRow,
   addToSpace,
   moveToSpace,
   trimEmpties,
@@ -121,7 +124,7 @@ describe('gridEntries', () => {
   })
 
   it('is just a full space for an empty profile', () => {
-    expect(gridEntries([])).toEqual([{ kind: 'space', at: 0, size: 'full' }])
+    expect(gridEntries([])).toEqual([{ kind: 'space', at: 0, size: 'full', row: 0 }])
   })
 
   it('has no full space once every card is on', () => {
@@ -369,7 +372,7 @@ describe('empty spaces kept in the layout', () => {
 
   it('shows a kept empty space as a space in the grid, and drops empty spaces at the end', () => {
     const holed = moveToSpace(layout, 'streak', { ...rowGap, size: 'small' })
-    expect(gridEntries(holed)[1]).toEqual({ kind: 'space', at: 1, size: 'small', slot: 1 })
+    expect(gridEntries(holed)[1]).toEqual({ kind: 'space', at: 1, size: 'small', slot: 1, row: 0 })
     expect(show(trimEmpties([...holed, { card: 'empty', size: 'half' }]))).toEqual(show(holed))
   })
 
@@ -433,5 +436,60 @@ describe('no row without a card', () => {
     const layout: ProfileLayout = [{ card: 'playing', size: 'half' }, E('half'), E('small'), { card: 'streak', size: 'small' }]
     expect(show(removeCard(layout, 'streak'))).toEqual(['playing:half'])
     expect(show(normaliseLayout([E('full'), { card: 'streak', size: 'small' }]))).toEqual(['streak:small'])
+  })
+})
+
+describe('moving a card to a row of its own', () => {
+  const show = (l: ProfileLayout) => l.map(i => `${i.card}:${i.size}`)
+  // The cards in each row, ignoring empty spaces.
+  const rows = (l: ProfileLayout) => layoutRows(l).map(r => r.map(i => l[i].card).filter(c => c !== 'empty')).filter(r => r.length > 0)
+  // Row 1: four squares. Row 2: two halves. Row 3: Play calendar. Row 4: Game shelf.
+  const layout: ProfileLayout = [
+    { card: 'streak', size: 'small' }, { card: 'completed_this_year', size: 'small' }, { card: 'finish_rate', size: 'small' }, { card: 'achievements', size: 'small' },
+    { card: 'recently_completed', size: 'half' }, { card: 'playing', size: 'half' },
+    { card: 'calendar', size: 'full' },
+    { card: 'shelf', size: 'full' },
+  ]
+
+  it('puts a full-width card at the very top, every other row unchanged', () => {
+    expect(rows(moveToRow(layout, 'shelf', 0))).toEqual([
+      ['shelf'], ['streak', 'completed_this_year', 'finish_rate', 'achievements'], ['recently_completed', 'playing'], ['calendar'],
+    ])
+  })
+
+  it('gives a smaller card a row of its own, closed off so the next row stays apart', () => {
+    const moved = moveToRow(layout, 'playing', 0)
+    expect(rows(moved)).toEqual([
+      ['playing'], ['streak', 'completed_this_year', 'finish_rate', 'achievements'], ['recently_completed'], ['calendar'], ['shelf'],
+    ])
+    expect(show(moved).slice(0, 2)).toEqual(['playing:half', 'empty:half'])
+  })
+
+  it('in the middle or at the end too, and the row before keeps its gap', () => {
+    // Play streak out of row 1 to between the halves and the calendar.
+    expect(rows(moveToRow(layout, 'streak', 2))).toEqual([
+      ['completed_this_year', 'finish_rate', 'achievements'], ['recently_completed', 'playing'], ['streak'], ['calendar'], ['shelf'],
+    ])
+    expect(rows(moveToRow(layout, 'calendar', 9))).toEqual([
+      ['streak', 'completed_this_year', 'finish_rate', 'achievements'], ['recently_completed', 'playing'], ['shelf'], ['calendar'],
+    ])
+    // A square after a row with room left would join it, so that row is closed off.
+    const short: ProfileLayout = [{ card: 'playing', size: 'half' }, { card: 'year', size: 'full' }, { card: 'streak', size: 'small' }]
+    expect(rows(moveToRow(short, 'streak', 1))).toEqual([['playing'], ['streak'], ['year']])
+  })
+
+  it('changes nothing when the card is already alone in that place', () => {
+    expect(moveToRow(layout, 'calendar', 2)).toBe(layout)
+    expect(moveToRow(layout, 'genres', 0)).toBe(layout)
+  })
+
+  it('dropped on a card of the same size they swap; a different size takes a row before it', () => {
+    expect(show(dropOnCard(layout, 'shelf', 'calendar')).slice(-2)).toEqual(['shelf:full', 'calendar:full'])
+    expect(show(dropOnCard(layout, 'achievements', 'streak')).slice(0, 4))
+      .toEqual(['achievements:small', 'completed_this_year:small', 'finish_rate:small', 'streak:small'])
+    // Play calendar dropped on Completed this year: a row of its own above row 1.
+    expect(rows(dropOnCard(layout, 'calendar', 'completed_this_year'))).toEqual([
+      ['calendar'], ['streak', 'completed_this_year', 'finish_rate', 'achievements'], ['recently_completed', 'playing'], ['shelf'],
+    ])
   })
 })
