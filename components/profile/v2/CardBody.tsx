@@ -5,7 +5,8 @@ import GameShelf from './GameShelf'
 import PlatformIcon from '@/components/games/PlatformIcon'
 import RecentTimeline from './RecentTimeline'
 import StreakFlame from './StreakFlame'
-import { PROFILE_CARDS, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
+import GenreBlocks from './GenreBlocks'
+import { PROFILE_CARDS, genreColumns, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
 // ProfileCardData (lib/data/profile-cards.ts), so the editor can switch a
@@ -349,25 +350,10 @@ export default function CardBody({
       )
     }
     case 'genres': {
-      const items = data.genres ?? []
-      const top = Math.max(1, ...items.map(i => i.count))
+      const columns = genreColumns(data.genres ?? [])
       return (
         <Frame title={title}>
-          {items.length === 0 ? <Empty>Nothing to show yet.</Empty> : (
-            <ul className="space-y-2.5">
-              {items.map(item => (
-                <li key={item.name} className="text-sm">
-                  <div className="flex justify-between gap-3">
-                    <span className="truncate text-fg-base">{item.name}</span>
-                    <span className="tabular-nums text-fg-muted">{item.count}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 rounded-full bg-surface-sunken" aria-hidden>
-                    <div className="h-full rounded-full" style={{ width: `${(item.count / top) * 100}%`, backgroundColor: accent }} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          {columns.length === 0 ? <Empty>Nothing to show yet.</Empty> : <GenreBlocks columns={columns} accent={accent} />}
         </Frame>
       )
     }

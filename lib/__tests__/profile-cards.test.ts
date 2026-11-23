@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
+  genreColumns,
+  shortGenre,
   streakFlame,
   timelineDate,
   DEFAULT_LAYOUT,
@@ -278,5 +280,34 @@ describe('streakFlame', () => {
     expect([...sizes].sort((a, b) => a - b)).toEqual(sizes)
     expect(streakFlame(30)).toEqual({ size: 1, glow: 1 })
     expect(streakFlame(200)).toEqual({ size: 1, glow: 1 })
+  })
+})
+
+describe('the Favourite genres blocks', () => {
+  it('drops the bracketed abbreviation from a genre name', () => {
+    expect(shortGenre('Role-playing (RPG)')).toBe('Role-playing')
+    expect(shortGenre('Turn-based strategy (TBS)')).toBe('Turn-based strategy')
+    expect(shortGenre("Hack and slash/Beat 'em up")).toBe("Hack and slash/Beat 'em up")
+  })
+
+  it('gives the top two a column each and stacks the third and fourth', () => {
+    const cols = genreColumns([
+      { name: 'Adventure', count: 10 }, { name: 'RPG', count: 7 }, { name: 'Indie', count: 5 }, { name: 'Platform', count: 4 }, { name: 'Puzzle', count: 4 },
+    ])
+    expect(cols.map(c => c.blocks.map(b => b.name))).toEqual([['Adventure'], ['RPG'], ['Indie', 'Platform']])
+    expect(cols.map(c => c.weight)).toEqual([10 / 26, 7 / 26, 9 / 26])
+    expect(cols[2].blocks.map(b => b.weight)).toEqual([5 / 9, 4 / 9])
+  })
+
+  it('uses a column per genre when there are three or fewer, and none when there are none', () => {
+    expect(genreColumns([{ name: 'A', count: 2 }, { name: 'B', count: 1 }]).map(c => c.blocks.length)).toEqual([1, 1])
+    expect(genreColumns([])).toEqual([])
+    expect(genreColumns([{ name: 'A', count: 0 }])).toEqual([])
+  })
+
+  it('keeps a small genre big enough for its name', () => {
+    const cols = genreColumns([{ name: 'A', count: 50 }, { name: 'B', count: 1 }, { name: 'C', count: 30 }, { name: 'D', count: 1 }])
+    expect(cols[1].weight).toBe(0.18)
+    expect(cols[2].blocks[1].weight).toBe(0.18)
   })
 })

@@ -6,7 +6,7 @@ import { londonDay } from '@/lib/activity'
 import { playSummary, MAX_PLAY_PERIOD_DAYS } from '@/lib/dashboard'
 import { streaks } from '@/lib/stats-wrapped'
 import { AVAILABLE_ACHIEVEMENTS } from '@/lib/achievements'
-import { RECENT_COMPLETED_MAX, SHELF_MAX, calendarDays, shelfGames, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
+import { GENRE_BLOCKS_MAX, RECENT_COMPLETED_MAX, SHELF_MAX, calendarDays, shelfGames, type CardGame, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -142,7 +142,7 @@ export async function loadProfileCardData(
   if (wants('achievements')) {
     data.achievements = { unlocked: stats.achievementsUnlocked, xp: stats.profile.xp ?? 0, total: AVAILABLE_ACHIEVEMENTS.length }
   }
-  if (wants('genres')) data.genres = stats.genreData.slice(0, 3).map(g => ({ name: g.genre, count: g.count }))
+  if (wants('genres')) data.genres = stats.genreData.slice(0, GENRE_BLOCKS_MAX).map(g => ({ name: g.genre, count: g.count }))
   if (wants('platforms')) {
     data.platforms = {
       top: stats.platformData.slice(0, 4).map(p => ({ name: p.platform, count: p.count })),

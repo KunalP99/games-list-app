@@ -300,6 +300,39 @@ export function streakFlame(days: number): { size: number; glow: number } {
   return { size: 0.6 + 0.4 * grown, glow: Math.min(1, Math.log(days + 1) / Math.log(31)) }
 }
 
+/** How many genres the Favourite genres card shows. */
+export const GENRE_BLOCKS_MAX = 4
+
+/** IGDB's genre names without their bracketed abbreviation: "Role-playing (RPG)" → "Role-playing". */
+export function shortGenre(name: string): string {
+  return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name
+}
+
+export type GenreBlock = { name: string; count: number }
+export type GenreColumn = { weight: number; blocks: (GenreBlock & { weight: number })[] }
+
+/**
+ * The Favourite genres card's blocks, as columns (widths) of stacked blocks
+ * (heights), so each block's area follows its game count: the top two genres
+ * get a full-height column each, and the third and fourth share the last
+ * column. No block shrinks below `MIN_SHARE` of its direction, so a genre
+ * with one game still has room for its name.
+ */
+export function genreColumns(items: GenreBlock[]): GenreColumn[] {
+  const top = items.filter(i => i.count > 0).slice(0, GENRE_BLOCKS_MAX)
+  const MIN_SHARE = 0.18
+  const floor = (weights: number[]) => {
+    const total = weights.reduce((a, b) => a + b, 0) || 1
+    return weights.map(w => Math.max(MIN_SHARE, w / total))
+  }
+  const groups = top.length <= 3 ? top.map(i => [i]) : [[top[0]], [top[1]], top.slice(2)]
+  const widths = floor(groups.map(g => g.reduce((sum, i) => sum + i.count, 0)))
+  return groups.map((group, c) => {
+    const heights = floor(group.map(i => i.count))
+    return { weight: widths[c], blocks: group.map((i, r) => ({ ...i, weight: heights[r] })) }
+  })
+}
+
 /** How many finishes the Recently completed timeline shows. */
 export const RECENT_COMPLETED_MAX = 4
 
