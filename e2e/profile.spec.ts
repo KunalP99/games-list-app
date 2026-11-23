@@ -126,6 +126,8 @@ test('a card moves with the keyboard', async ({ page }) => {
   await page.getByRole('button', { name: 'Move Achievements', exact: true }).focus()
   await page.keyboard.press('Space')
   await page.keyboard.press('ArrowLeft')
+  // Nothing moves until it's put down; Finish rate lights up as the target.
+  await expect(page.locator('[data-card="finish_rate"]')).toHaveAttribute('data-over', 'true')
   await page.keyboard.press('Space')
   await expect.poll(() => cardsOnPage(page))
     .toEqual(['playing', 'achievements', 'finish_rate', 'streak', 'completed_this_year', 'genres', 'recently_completed', 'platforms'])
@@ -156,7 +158,7 @@ test('an empty space splits into halves, then squares, and a card goes in a squa
   await expect.poll(async () => (await storedLayout()).profile_layout?.at(-1)).toEqual({ card: 'streak', size: 'small' })
 })
 
-test('a card dragged onto an empty space (a split one too) moves into it', async ({ page }) => {
+test('a card dragged onto an empty space (a split one too) moves into it, and no other card moves', async ({ page }) => {
   // Row 1: Currently playing, Play streak, Achievements. Row 2: two squares
   // and an empty half, which is split into squares and gets Play streak.
   await admin().from('profiles').update({
@@ -172,6 +174,17 @@ test('a card dragged onto an empty space (a split one too) moves into it', async
   await page.getByRole('button', { name: 'Split into squares' }).first().click()
   const square = page.locator('[data-space="small"]').first()
   await expect(square).toBeVisible()
+  // Where the other cards sit, measured from Currently playing (the edit bar
+  // above the grid comes and goes).
+  const others = ['achievements', 'completed_this_year', 'finish_rate']
+  const where = async () => {
+    const origin = (await page.locator('[data-card="playing"]').boundingBox())!
+    return Promise.all(others.map(async card => {
+      const box = (await page.locator(`[data-card="${card}"]`).boundingBox())!
+      return [Math.round(box.x - origin.x), Math.round(box.y - origin.y)]
+    }))
+  }
+  const before = await where()
 
   const handle = page.getByRole('button', { name: 'Move Play streak', exact: true })
   const from = (await handle.boundingBox())!
@@ -184,10 +197,18 @@ test('a card dragged onto an empty space (a split one too) moves into it', async
   await page.mouse.up()
   await page.waitForTimeout(150)
 
-  const expected = ['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak']
-  await expect.poll(() => cardsOnPage(page)).toEqual(expected)
+  await expect.poll(() => cardsOnPage(page)).toEqual(['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak'])
+  // Play streak's old place is kept as an empty space, so nothing else moved.
+  expect(await where()).toEqual(before)
+  await expect(page.locator('[data-space="small"]').first()).toBeVisible()
+
   await page.getByRole('toolbar', { name: 'Editing your profile' }).getByRole('button', { name: 'Done' }).click()
-  await expect.poll(async () => (await storedLayout()).profile_layout?.map(i => i.card)).toEqual(expected)
+  await expect.poll(async () => (await storedLayout()).profile_layout?.map(i => i.card))
+    .toEqual(['playing', 'empty', 'achievements', 'completed_this_year', 'finish_rate', 'streak'])
+  // And for everyone else too: the empty space holds its place on the page.
+  await page.reload()
+  await expect.poll(() => cardsOnPage(page)).toEqual(['playing', 'achievements', 'completed_this_year', 'finish_rate', 'streak'])
+  expect(await where()).toEqual(before)
 })
 
 test('Cancel throws the changes away', async ({ page }) => {

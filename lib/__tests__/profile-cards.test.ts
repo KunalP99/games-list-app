@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
+  addToSpace,
   moveToSpace,
+  trimEmpties,
   spotlightOrder,
   genreColumns,
   shortGenre,
@@ -328,33 +330,61 @@ describe('spotlightOrder', () => {
   })
 })
 
-describe('moveToSpace', () => {
+describe('empty spaces kept in the layout', () => {
+  // Row 1: Currently playing (half), Play streak, Achievements. Row 2: two
+  // squares and a half-size gap.
   const layout = L(['playing', 'half'], ['streak', 'small'], ['achievements', 'small'], ['completed_this_year', 'small'], ['finish_rate', 'small'])
-  const show = (l: ReturnType<typeof L>) => l.map(i => `${i.card}:${i.size}`)
+  const show = (l: ProfileLayout) => l.map(i => `${i.card}:${i.size}`)
+  const rowGap = { at: 5, size: 'half', root: 'half', offset: 0 } as const
 
-  it('moves a card into a space later on, where Add a card would put one', () => {
-    // A space at the end (at = length): Play streak goes last.
-    expect(show(moveToSpace(layout, 'streak', 5, 'small')))
-      .toEqual(['playing:half', 'achievements:small', 'completed_this_year:small', 'finish_rate:small', 'streak:small'])
-    // A space before Finish rate (at = 4).
-    expect(show(moveToSpace(layout, 'streak', 4, 'small')))
-      .toEqual(['playing:half', 'achievements:small', 'completed_this_year:small', 'streak:small', 'finish_rate:small'])
+  it('moves a card into a gap and leaves an empty space where it was, so nothing else moves', () => {
+    expect(show(moveToSpace(layout, 'streak', { ...rowGap, size: 'small' })))
+      .toEqual(['playing:half', 'empty:small', 'achievements:small', 'completed_this_year:small', 'finish_rate:small', 'streak:small'])
   })
 
-  it('moves a card into a space earlier on', () => {
-    expect(show(moveToSpace(layout, 'finish_rate', 1, 'small')))
-      .toEqual(['playing:half', 'finish_rate:small', 'streak:small', 'achievements:small', 'completed_this_year:small'])
+  it('puts it in the second square of a split gap, with an empty square before it', () => {
+    expect(show(moveToSpace(layout, 'streak', { ...rowGap, size: 'small', offset: 1 })))
+      .toEqual(['playing:half', 'empty:small', 'achievements:small', 'completed_this_year:small', 'finish_rate:small', 'empty:small', 'streak:small'])
   })
 
-  it('takes the space size when the card comes in it, else keeps its own', () => {
-    expect(moveToSpace(layout, 'streak', 5, 'half').at(-1)).toEqual({ card: 'streak', size: 'half' })
-    // Finish rate is square only; Currently playing half only.
-    expect(moveToSpace(layout, 'finish_rate', 0, 'half')[0]).toEqual({ card: 'finish_rate', size: 'small' })
-    expect(moveToSpace(layout, 'playing', 5, 'small').at(-1)).toEqual({ card: 'playing', size: 'half' })
+  it('takes the space size when the card comes in it', () => {
+    expect(moveToSpace(layout, 'streak', rowGap).at(-1)).toEqual({ card: 'streak', size: 'half' })
   })
 
-  it('changes nothing for a card not on the profile, or a drop where it already is', () => {
-    expect(moveToSpace(layout, 'genres', 2, 'half')).toBe(layout)
-    expect(moveToSpace(layout, 'streak', 2, 'small')).toBe(layout)
+  it('fills a kept empty space in place, leaving the rest of it empty', () => {
+    const holed = moveToSpace(layout, 'streak', { ...rowGap, size: 'small' })
+    // Achievements into the empty square Play streak left.
+    expect(show(moveToSpace(holed, 'achievements', { at: 1, size: 'small', root: 'small', offset: 0, slot: 1 })))
+      .toEqual(['playing:half', 'achievements:small', 'empty:small', 'completed_this_year:small', 'finish_rate:small', 'streak:small'])
+    // A full-width kept space: a square in its third column.
+    const wide: ProfileLayout = [{ card: 'empty', size: 'full' }, { card: 'genres', size: 'half' }]
+    expect(show(addToSpace(wide, { at: 0, size: 'small', root: 'full', offset: 2, slot: 0 }, 'streak', 'small')))
+      .toEqual(['empty:half', 'streak:small', 'empty:small', 'genres:half'])
+  })
+
+  it('leaves a card that does not fit where it was', () => {
+    expect(moveToSpace(layout, 'playing', { ...rowGap, size: 'small', offset: 1 })).toBe(layout)
+    expect(moveToSpace(layout, 'genres', rowGap)).toBe(layout)
+  })
+
+  it('shows a kept empty space as a space in the grid, and drops empty spaces at the end', () => {
+    const holed = moveToSpace(layout, 'streak', { ...rowGap, size: 'small' })
+    expect(gridEntries(holed)[1]).toEqual({ kind: 'space', at: 1, size: 'small', slot: 1 })
+    expect(show(trimEmpties([...holed, { card: 'empty', size: 'half' }]))).toEqual(show(holed))
+  })
+
+  it('keeps empty spaces through normalising, and drops ones at the end', () => {
+    expect(show(normaliseLayout([{ card: 'empty', size: 'small' }, { card: 'streak', size: 'small' }, { card: 'empty', size: 'half' }])))
+      .toEqual(['empty:small', 'streak:small'])
+    expect(normaliseLayout([{ card: 'empty', size: 'huge' }, { card: 'streak', size: 'small' }])).toEqual(L(['streak', 'small']))
+  })
+
+  it('adds a card in a gap at the spot clicked; one too big goes in before it', () => {
+    expect(show(addToSpace(layout, { ...rowGap, size: 'small', offset: 1 }, 'up_next', 'half')))
+      .toEqual([...show(layout), 'up_next:half'])
+    expect(show(addToSpace(layout, { ...rowGap, size: 'small', offset: 1 }, 'year', 'full')))
+      .toEqual([...show(layout), 'year:full'])
+    expect(show(addToSpace(layout, { ...rowGap, size: 'small', offset: 1 }, 'genres', 'half')).slice(-2))
+      .toEqual(['finish_rate:small', 'genres:half'])
   })
 })

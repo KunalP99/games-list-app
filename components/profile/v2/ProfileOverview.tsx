@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { computeUserStats, type UserStats } from '@/lib/user-stats'
 import { loadProfileCardData } from '@/lib/data/profile-cards'
-import { PROFILE_CARDS, PROFILE_CARD_IDS, normaliseLayout, type ProfileCardId } from '@/lib/profile-cards'
+import { PROFILE_CARDS, PROFILE_CARD_IDS, isCardItem, normaliseLayout, trimEmpties, type ProfileCardId } from '@/lib/profile-cards'
 import type { PrivacyKey } from '@/lib/friends'
 import ProfileView from './ProfileView'
 import type { ProfileFigures } from './ProfileCard'
@@ -42,10 +42,13 @@ export default async function ProfileOverview({
   const stats = await computeUserStats(supabase, profile.id)
 
   const stored = normaliseLayout(profile.profile_layout)
-  const layout = isOwner ? stored : stored.filter(item => allows(PROFILE_CARDS[item.card].privacy))
-  const cards = new Set<ProfileCardId>(isOwner ? PROFILE_CARD_IDS : layout.map(item => item.card))
+  // A visitor doesn't get the cards their privacy hides (the rest close up);
+  // kept empty spaces stay, so the cards around them sit where the owner put them.
+  const layout = isOwner ? stored : trimEmpties(stored.filter(item => !isCardItem(item) || allows(PROFILE_CARDS[item.card].privacy)))
+  const placed = layout.filter(isCardItem)
+  const cards = new Set<ProfileCardId>(isOwner ? PROFILE_CARD_IDS : placed.map(item => item.card))
   // The owner may change the shelf while editing, so gets every completed game.
-  const shelfChosen = isOwner ? undefined : (layout.find(item => item.card === 'shelf')?.games ?? [])
+  const shelfChosen = isOwner ? undefined : (placed.find(item => item.card === 'shelf')?.games ?? [])
   const data = await loadProfileCardData(supabase, profile.id, cards, stats, shelfChosen)
   const seesGames = allows('privacy_games')
 

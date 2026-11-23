@@ -14,7 +14,6 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
-  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
@@ -22,8 +21,10 @@ import { saveProfile } from '@/app/(app)/users/[username]/actions'
 import {
   MAX_BIO_LENGTH,
   PROFILE_CARDS,
-  addCard,
+  CARD_COLUMNS,
+  addToSpace,
   gridEntries,
+  isCardItem,
   isProfileCardId,
   moveCard,
   moveToSpace,
@@ -34,6 +35,7 @@ import {
   sizeForSpace,
   splitSize,
   type CardSize,
+  type SpaceTarget,
   type LayoutItem,
   type ProfileCardData,
   type ProfileCardId,
@@ -95,7 +97,7 @@ export default function ProfileView(props: Props) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<ProfileLayout>(props.layout)
   const [draftBio, setDraftBio] = useState(props.bio ?? '')
-  const [adding, setAdding] = useState<{ at: number; size: CardSize } | null>(null)
+  const [adding, setAdding] = useState<SpaceTarget | null>(null)
   // Empty spaces the owner has split (full → halves → squares), by key. Only
   // for the layout they were split on: any change to the cards starts afresh.
   const [splits, setSplits] = useState<{ on: ProfileLayout; keys: ReadonlySet<string> }>({ on: [], keys: new Set() })
@@ -150,20 +152,20 @@ export default function ProfileView(props: Props) {
   const onDragStart = (e: DragStartEvent) => {
     if (isProfileCardId(e.active.id)) setDragging(e.active.id)
   }
-  const onDragOver = (e: DragOverEvent) => {
-    const from = e.active.id
-    const to = e.over?.id
-    if (!isProfileCardId(from) || !isProfileCardId(to) || from === to) return
-    setDraft(current => moveCard(current, from, to))
-  }
+  // Nothing moves until the card is dropped. On an empty space it goes
+  // exactly there and every other card stays put; on another card it takes
+  // that card's place and the ones between shift along.
   const onDragEnd = (e: DragEndEvent) => {
     setDragging(null)
-    // Dropped on an empty space: the card moves into it. (Over a card, the
-    // layout already reordered while dragging.)
     const from = e.active.id
-    const space = e.over?.data.current as { at: number; size: CardSize } | undefined
-    if (!isProfileCardId(from) || !String(e.over?.id ?? '').startsWith(SPACE_ID) || !space) return
-    setDraft(current => moveToSpace(current, from, space.at, space.size))
+    const over = e.over?.id
+    if (!isProfileCardId(from) || over == null || over === from) return
+    if (String(over).startsWith(SPACE_ID)) {
+      const target = e.over?.data.current as SpaceTarget | undefined
+      if (target) setDraft(current => moveToSpace(current, from, target))
+    } else if (isProfileCardId(over)) {
+      setDraft(current => moveCard(current, from, over))
+    }
   }
 
   const closeAdding = useCallback(() => setAdding(null), [])
@@ -171,22 +173,24 @@ export default function ProfileView(props: Props) {
   const splitKeys = splits.on === draft ? splits.keys : new Set<string>()
   const split = (key: string) => setSplits({ on: draft, keys: new Set([...splitKeys, key]) })
 
-  function renderSpace(at: number, size: CardSize, key: string): React.ReactNode {
+  function renderSpace(target: SpaceTarget, key: string): React.ReactNode {
+    const { size } = target
     const smaller = splitSize(size)
     if (smaller && splitKeys.has(key)) {
+      const step = CARD_COLUMNS[smaller]
       return (
         <Fragment key={key}>
-          {renderSpace(at, smaller, `${key}.0`)}
-          {renderSpace(at, smaller, `${key}.1`)}
+          {renderSpace({ ...target, size: smaller }, `${key}.0`)}
+          {renderSpace({ ...target, size: smaller, offset: target.offset + step }, `${key}.1`)}
         </Fragment>
       )
     }
     const label = size === 'half' ? 'Half-size space' : size === 'small' ? 'Square space' : null
     return (
-      <Space key={key} id={`${SPACE_ID}${key}`} at={at} size={size}>
+      <Space key={key} id={`${SPACE_ID}${key}`} target={target}>
         <button
           type="button"
-          onClick={() => setAdding({ at, size })}
+          onClick={() => setAdding(target)}
           aria-label={label ? `Add a card (${label.toLowerCase()})` : 'Add a card'}
           className="flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-edge-input p-2 text-center text-fg-secondary transition-colors hover:border-fg-muted hover:bg-surface-hover group-data-[over=true]/space:border-fg-base group-data-[over=true]/space:bg-surface-hover"
         >
@@ -209,7 +213,7 @@ export default function ProfileView(props: Props) {
       </Space>
     )
   }
-  const draggingItem = dragging ? layout.find(item => item.card === dragging) : undefined
+  const draggingItem = dragging ? layout.filter(isCardItem).find(item => item.card === dragging) : undefined
 
   const bio = editing ? (
     <label className="block">
@@ -297,11 +301,10 @@ export default function ProfileView(props: Props) {
           sensors={sensors}
           collisionDetection={overUnderPointer}
           onDragStart={onDragStart}
-          onDragOver={onDragOver}
           onDragEnd={onDragEnd}
           onDragCancel={() => setDragging(null)}
         >
-          <SortableContext items={layout.map(item => item.card)} strategy={stayPut}>
+          <SortableContext items={layout.filter(isCardItem).map(item => item.card)} strategy={stayPut}>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {entries.map((entry, i) => entry.kind === 'card' ? (
                 <SortableCard
@@ -315,13 +318,16 @@ export default function ProfileView(props: Props) {
                   onChooseGames={entry.item.card === 'shelf' ? () => setChoosingShelf(true) : undefined}
                 />
               ) : editing ? (
-                renderSpace(entry.at, entry.size, `space-${i}`)
+                renderSpace({ at: entry.at, size: entry.size, root: entry.size, offset: 0, slot: entry.slot }, `space-${i}`)
+              ) : entry.slot != null ? (
+                // A kept empty space: nothing to see, but it holds its place.
+                <div key={`space-${i}`} aria-hidden className={SPAN[entry.size]} />
               ) : null)}
             </div>
           </SortableContext>
           <DragOverlay>
             {draggingItem && (
-              <div className="rotate-[-1.5deg] cursor-grabbing rounded-2xl shadow-2xl shadow-black/30">
+              <div className="h-full rotate-[-1.5deg] cursor-grabbing rounded-2xl shadow-2xl shadow-black/30">
                 <CardBody card={draggingItem.card} size={draggingItem.size} data={data} accent={accent} chosen={draggingItem.games} />
               </div>
             )}
@@ -332,7 +338,7 @@ export default function ProfileView(props: Props) {
       {choosingShelf && (
         <ShelfPicker
           games={data.shelf ?? []}
-          initial={draft.find(item => item.card === 'shelf')?.games ?? []}
+          initial={draft.filter(isCardItem).find(item => item.card === 'shelf')?.games ?? []}
           onClose={() => setChoosingShelf(false)}
           onDone={games => {
             setDraft(d => setShelfGames(d, games))
@@ -344,10 +350,10 @@ export default function ProfileView(props: Props) {
       {adding && (
         <AddCardDialog
           space={adding.size}
-          used={new Set(draft.map(item => item.card))}
+          used={new Set(draft.filter(isCardItem).map(item => item.card))}
           onClose={closeAdding}
           onAdd={card => {
-            setDraft(d => addCard(d, adding.at, card, sizeForSpace(card, adding.size)))
+            setDraft(d => addToSpace(d, adding, card, sizeForSpace(card, adding.size)))
             setAdding(null)
           }}
         />
@@ -357,8 +363,9 @@ export default function ProfileView(props: Props) {
 }
 
 /** An empty space in the editor: click it to add a card, or drop one on it. */
-function Space({ id, at, size, children }: { id: string; at: number; size: CardSize; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id, data: { at, size } })
+function Space({ id, target, children }: { id: string; target: SpaceTarget; children: React.ReactNode }) {
+  const { size } = target
+  const { setNodeRef, isOver } = useDroppable({ id, data: target })
   return (
     <div
       ref={setNodeRef}
@@ -384,20 +391,27 @@ function SortableCard({
   onChooseGames?: () => void
 }) {
   const card = PROFILE_CARDS[item.card]
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useSortable({ id: item.card, disabled: !editing })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging, isOver } = useSortable({ id: item.card, disabled: !editing })
   return (
-    <div ref={setNodeRef} data-card={item.card} className={`relative ${SPAN[item.size]}`}>
+    <div
+      ref={setNodeRef}
+      data-card={item.card}
+      data-over={isOver && !isDragging}
+      // The card a dragged one would take the place of, if dropped now.
+      className={`relative rounded-2xl ${SPAN[item.size]} ${isOver && !isDragging ? 'ring-2 ring-offset-2 ring-offset-surface-page' : ''}`}
+      style={isOver && !isDragging ? { ['--tw-ring-color' as string]: accent } : undefined}
+    >
       {/* While editing, a square's bottom line is where its controls go. */}
       <div className={`h-full ${isDragging ? 'invisible' : ''} ${editing && item.size === 'small' ? '[&_[data-note]]:invisible' : ''}`}>
         <CardBody card={item.card} size={item.size} data={data} accent={accent} chosen={item.games} />
       </div>
+      {/* Where the dragged card came from, until it's dropped somewhere. */}
       {isDragging && (
         <div
-          className="absolute inset-0 flex items-center justify-center rounded-2xl border-2 border-dashed text-sm font-semibold"
-          style={{ borderColor: accent, color: accent, backgroundColor: `${accent}14` }}
-        >
-          Drop here
-        </div>
+          aria-hidden
+          className="absolute inset-0 rounded-2xl border-2 border-dashed"
+          style={{ borderColor: accent, backgroundColor: `${accent}14` }}
+        />
       )}
       {editing && !isDragging && (() => {
         const square = item.size === 'small'

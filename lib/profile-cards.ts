@@ -111,10 +111,21 @@ export function normaliseShelfGames(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return Array.from(new Set(raw.filter((id): id is string => typeof id === 'string' && UUID.test(id)))).slice(0, SHELF_MAX)
 }
-export type ProfileLayout = LayoutItem[]
+/**
+ * An empty space kept in the layout, so the cards after it stay where they
+ * are: what a card leaves behind when it's dragged into another space. Shown
+ * as a space in edit mode and as nothing (but still taking its room) to
+ * everyone else.
+ */
+export type EmptySlot = { card: 'empty'; size: CardSize }
+export type ProfileLayout = (LayoutItem | EmptySlot)[]
 
-/** Every card at most once, so the list can never be longer than this. */
-export const MAX_PROFILE_CARDS = PROFILE_CARD_IDS.length
+export function isCardItem(item: LayoutItem | EmptySlot): item is LayoutItem {
+  return item.card !== 'empty'
+}
+
+/** Every card at most once, plus empty spaces between them. */
+export const MAX_LAYOUT_ENTRIES = 40
 
 /** What a profile shows until its owner changes it. */
 export const DEFAULT_LAYOUT: ProfileLayout = [
@@ -148,11 +159,15 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
   const seen = new Set<ProfileCardId>()
   const layout: ProfileLayout = []
   for (const entry of raw) {
-    if (layout.length >= MAX_PROFILE_CARDS) break
+    if (layout.length >= MAX_LAYOUT_ENTRIES) break
     if (!entry || typeof entry !== 'object') continue
     const { card, size } = entry as { card?: unknown; size?: unknown }
-    if (!isProfileCardId(card) || seen.has(card)) continue
     if (!SIZES.includes(size as CardSize)) continue
+    if (card === 'empty') {
+      layout.push({ card, size: size as CardSize })
+      continue
+    }
+    if (!isProfileCardId(card) || seen.has(card)) continue
     seen.add(card)
     const item: LayoutItem = { card, size: canBe(card, size as CardSize) ? size as CardSize : PROFILE_CARDS[card].sizes[0] }
     if (card === 'shelf') {
@@ -161,7 +176,14 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
     }
     layout.push(item)
   }
-  return layout
+  return trimEmpties(layout)
+}
+
+/** Empty spaces at the very end hold nothing in place, so they go. */
+export function trimEmpties(layout: ProfileLayout): ProfileLayout {
+  let end = layout.length
+  while (end > 0 && layout[end - 1].card === 'empty') end--
+  return end === layout.length ? layout : layout.slice(0, end)
 }
 
 /**
@@ -177,7 +199,8 @@ export function normaliseLayout(raw: unknown): ProfileLayout {
  */
 export type GridEntry =
   | { kind: 'card'; index: number; item: LayoutItem }
-  | { kind: 'space'; at: number; size: CardSize }
+  /** `slot`: the layout index of a kept empty space (else it's a row's leftover gap). */
+  | { kind: 'space'; at: number; size: CardSize; slot?: number }
 
 export function gridEntries(layout: ProfileLayout): GridEntry[] {
   const entries: GridEntry[] = []
@@ -193,7 +216,7 @@ export function gridEntries(layout: ProfileLayout): GridEntry[] {
   layout.forEach((item, index) => {
     const width = CARD_COLUMNS[item.size]
     if (column + width > GRID_COLUMNS) fillRow(index)
-    entries.push({ kind: 'card', index, item })
+    entries.push(isCardItem(item) ? { kind: 'card', index, item } : { kind: 'space', at: index, size: item.size, slot: index })
     column = (column + width) % GRID_COLUMNS
   })
   fillRow(layout.length)
@@ -224,6 +247,55 @@ export function sizeForSpace(card: ProfileCardId, space: CardSize): CardSize {
   return canBe(card, space) ? space : PROFILE_CARDS[card].sizes[0]
 }
 
+/**
+ * A place to put a card: an empty space in the editor, or one of its halves
+ * or squares once split. `root` is the space's own size and `offset` how many
+ * columns into it this part starts; `size` is the part's size. `slot` is set
+ * for a kept empty space (it's replaced), else the card goes in at `at`.
+ */
+export type SpaceTarget = { at: number; size: CardSize; root: CardSize; offset: number; slot?: number }
+
+/** Empty spaces filling `columns` columns from `start`: halves where they line up, else squares. */
+function emptiesFor(columns: number, start: number): EmptySlot[] {
+  const out: EmptySlot[] = []
+  for (let col = start, left = columns; left > 0;) {
+    const size: CardSize = col % 2 === 0 && left >= 2 ? 'half' : 'small'
+    out.push({ card: 'empty', size })
+    col += CARD_COLUMNS[size]
+    left -= CARD_COLUMNS[size]
+  }
+  return out
+}
+
+/**
+ * Puts `item` exactly where `target` is, leaving every other card where it
+ * was: the space before it in that spot becomes empty spaces, and so does
+ * what's left after it in a kept space. Unchanged if it doesn't fit.
+ */
+function fillSpace(layout: ProfileLayout, target: SpaceTarget, item: LayoutItem): ProfileLayout {
+  const width = CARD_COLUMNS[item.size]
+  const room = CARD_COLUMNS[target.root]
+  if (target.offset + width > room) return layout
+  const before = emptiesFor(target.offset, 0)
+  if (target.slot != null) {
+    if (layout[target.slot]?.card !== 'empty') return layout
+    const after = emptiesFor(room - target.offset - width, target.offset + width)
+    return trimEmpties([...layout.slice(0, target.slot), ...before, item, ...after, ...layout.slice(target.slot + 1)])
+  }
+  const index = Math.max(0, Math.min(target.at, layout.length))
+  return [...layout.slice(0, index), ...before, item, ...layout.slice(index)]
+}
+
+/**
+ * Adds a card in an empty space (or part of one), in place. A card too big
+ * for it goes in before it instead, and the cards after it move along.
+ */
+export function addToSpace(layout: ProfileLayout, target: SpaceTarget, card: ProfileCardId, size: CardSize): ProfileLayout {
+  if (layout.some(item => item.card === card) || !canBe(card, size)) return layout
+  const placed = fillSpace(layout, target, { card, size })
+  return placed !== layout ? placed : addCard(layout, target.at, card, size)
+}
+
 export function addCard(layout: ProfileLayout, at: number, card: ProfileCardId, size: CardSize): ProfileLayout {
   if (layout.some(item => item.card === card) || !canBe(card, size)) return layout
   const index = Math.max(0, Math.min(at, layout.length))
@@ -251,20 +323,19 @@ export function moveCard(layout: ProfileLayout, card: ProfileCardId, target: Pro
 }
 
 /**
- * Moves `card` into an empty space (dropped there in the editor). The space
- * sits before the card at `at` (or at the end), the same place "Add a card"
- * would put one. The card takes the space's size when it comes in it, and
- * keeps its own otherwise.
+ * Moves `card` into an empty space (dropped there in the editor) without
+ * moving any other card: the card takes the space's size when it comes in
+ * it, and the place it left becomes an empty space of its old size. A card
+ * too big for the space stays where it was.
  */
-export function moveToSpace(layout: ProfileLayout, card: ProfileCardId, at: number, space: CardSize): ProfileLayout {
+export function moveToSpace(layout: ProfileLayout, card: ProfileCardId, target: SpaceTarget): ProfileLayout {
   const from = layout.findIndex(item => item.card === card)
-  if (from < 0) return layout
   const item = layout[from]
-  const moved = canBe(card, space) ? { ...item, size: space } : item
-  const next = layout.filter((_, i) => i !== from)
-  const index = Math.max(0, Math.min(from < at ? at - 1 : at, next.length))
-  next.splice(index, 0, moved)
-  return sameLayout(next, layout) ? layout : next
+  if (!item || !isCardItem(item)) return layout
+  const moved: LayoutItem = canBe(card, target.size) ? { ...item, size: target.size } : item
+  const holed: ProfileLayout = layout.map((entry, i) => (i === from ? { card: 'empty', size: item.size } : entry))
+  const placed = fillSpace(holed, target, moved)
+  return placed === holed ? layout : trimEmpties(placed)
 }
 
 /** Moves a card one place earlier (-1) or later (+1), for the keyboard. */
@@ -272,19 +343,22 @@ export function nudgeCard(layout: ProfileLayout, card: ProfileCardId, by: -1 | 1
   const from = layout.findIndex(item => item.card === card)
   const to = from + by
   if (from < 0 || to < 0 || to >= layout.length) return layout
-  return moveCard(layout, card, layout[to].card)
+  const next = [...layout]
+  ;[next[from], next[to]] = [next[to], next[from]]
+  return trimEmpties(next)
 }
 
 export function sameLayout(a: ProfileLayout, b: ProfileLayout): boolean {
+  const games = (item: LayoutItem | EmptySlot) => (isCardItem(item) ? item.games ?? [] : []).join()
   return a.length === b.length && a.every((item, i) =>
-    item.card === b[i].card && item.size === b[i].size && (item.games ?? []).join() === (b[i].games ?? []).join())
+    item.card === b[i].card && item.size === b[i].size && games(item) === games(b[i]))
 }
 
 /** Sets the Game shelf's games (an empty list goes back to the latest completions). */
 export function setShelfGames(layout: ProfileLayout, games: string[]): ProfileLayout {
   const chosen = normaliseShelfGames(games)
   return layout.map(item => {
-    if (item.card !== 'shelf') return item
+    if (item.card !== 'shelf' || !isCardItem(item)) return item
     const { games: _old, ...rest } = item
     return chosen.length > 0 ? { ...rest, games: chosen } : rest
   })
