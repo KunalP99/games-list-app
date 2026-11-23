@@ -90,10 +90,89 @@ function renderPlaying(games) {
     pill.className = `pill ${game.linked ? 'linked' : 'unlinked'}`
     pill.textContent = game.linked ? 'Linked' : 'Not linked'
 
-    li.append(title, hours, pill)
+    // Right-click (or the ⋯ button, for the keyboard) to change which
+    // program is this game, in case the one linked is wrong.
+    const more = document.createElement('button')
+    more.type = 'button'
+    more.className = 'ghost row-more'
+    more.textContent = '⋯'
+    more.setAttribute('aria-label', `Options for ${game.title}`)
+    more.setAttribute('aria-haspopup', 'menu')
+    more.addEventListener('click', event => {
+      const box = more.getBoundingClientRect()
+      openGameMenu(game, box.left, box.bottom + 4)
+      event.stopPropagation()
+    })
+    li.addEventListener('contextmenu', event => {
+      event.preventDefault()
+      openGameMenu(game, event.clientX, event.clientY)
+    })
+
+    li.append(title, hours, pill, more)
     list.appendChild(li)
   }
 }
+
+// ── A game's menu (right-click on the Playing list) ───────────────────────────
+/** The last status read, so the menu knows each game's linked programs. */
+let lastStatus = null
+const gameMenu = document.createElement('div')
+gameMenu.className = 'context-menu'
+gameMenu.setAttribute('role', 'menu')
+gameMenu.hidden = true
+document.body.appendChild(gameMenu)
+
+function linksFor(gameId) {
+  return (lastStatus?.exe_links ?? []).filter(l => l.gameId === gameId)
+}
+
+function closeGameMenu() {
+  gameMenu.hidden = true
+}
+
+function menuItem(label, onClick) {
+  const item = document.createElement('button')
+  item.type = 'button'
+  item.setAttribute('role', 'menuitem')
+  item.textContent = label
+  item.addEventListener('click', () => {
+    closeGameMenu()
+    onClick()
+  })
+  return item
+}
+
+function openGameMenu(game, x, y) {
+  const links = linksFor(game.id)
+  gameMenu.replaceChildren(
+    menuItem(links.length ? 'Change linked program…' : 'Link a program…', () => openLinkPanel(null, game)),
+    ...(links.length
+      ? [menuItem(links.length === 1 ? `Remove ${links[0].exeName}` : 'Remove linked programs', () => removeLinks(game, links))]
+      : []),
+  )
+  gameMenu.hidden = false
+  // Kept inside the window.
+  const { width, height } = gameMenu.getBoundingClientRect()
+  gameMenu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - width - 8))}px`
+  gameMenu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - height - 8))}px`
+  gameMenu.querySelector('button')?.focus()
+}
+
+async function removeLinks(game, links) {
+  for (const link of links) {
+    await invoke('unlink_executable', { exeName: link.exeName, gameId: game.id }).catch(() => {})
+  }
+  refresh()
+}
+
+document.addEventListener('click', event => {
+  if (!gameMenu.hidden && !gameMenu.contains(event.target)) closeGameMenu()
+})
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeGameMenu()
+})
+window.addEventListener('blur', closeGameMenu)
+window.addEventListener('scroll', closeGameMenu, true)
 
 /** The prompt currently shown here, so the buttons know what they're answering. */
 let currentPrompt = null
@@ -272,6 +351,7 @@ async function refresh() {
   startedAtMs = tracking ? Date.parse(tracking.started_at) : null
   tickElapsed()
 
+  lastStatus = status
   renderPlaying(status.playing ?? [])
   renderPrompt(status.pending_prompt)
   renderPlatformPrompt(status.pending_platform_prompt)
@@ -494,10 +574,28 @@ el('device-token-copy').addEventListener('click', () => {
  * explanation. Everything needed is already here: the running programs come
  * from the watcher, the games from the status it already holds.
  */
-async function openLinkPanel(preselectExe = null) {
+/**
+ * The game "Change linked program" opened the panel for, and the programs
+ * linked to it then: saving replaces those with the one picked.
+ */
+let linkForGame = null
+
+async function openLinkPanel(preselectExe = null, forGame = null) {
   const panel = el('link-panel')
   const exeSelect = el('link-exe')
   el('link-msg').hidden = true
+  linkForGame = forGame ? { id: forGame.id, title: forGame.title, exes: linksFor(forGame.id).map(l => l.exeName) } : null
+  if (linkForGame) {
+    el('link-title').textContent = linkForGame.exes.length
+      ? `Change the program for ${forGame.title}`
+      : `Link a program to ${forGame.title}`
+    el('link-help').textContent = linkForGame.exes.length
+      ? `Now linked: ${linkForGame.exes.join(', ')}. Start the game, then pick its program.`
+      : 'Start the game, then pick its program.'
+  } else {
+    el('link-title').textContent = 'Link a game'
+    el('link-help').textContent = 'Pick the program you are playing, then the game it is.'
+  }
 
   const [programs, status] = await Promise.all([
     invoke('running_programs').catch(() => []),
@@ -562,8 +660,20 @@ async function openLinkPanel(preselectExe = null) {
   populatePlatformSelect(el('link-platform'), 'PC (Windows)')
 
   renderLinked(status)
+  if (linkForGame) {
+    gameSelect.value = linkForGame.id
+    // The running program that looks like this game, as picking it would.
+    const exe = await invoke('suggest_program', { title: linkForGame.title }).catch(() => null)
+    if (exe && [...exeSelect.options].some(o => o.value === exe)) exeSelect.value = exe
+    const game = lastLinkPlaying.find(g => g.id === linkForGame.id)
+    if (game?.platform) populatePlatformSelect(el('link-platform'), game.platform)
+  }
   showExeWarning()
   panel.hidden = false
+  if (linkForGame) {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    exeSelect.focus()
+  }
 }
 
 /** The games list from the most recent `openLinkPanel` call — see above. */
@@ -589,7 +699,8 @@ function showExeWarning() {
 function renderLinked(status) {
   const wrap = el('linked-list-wrap')
   const list = el('linked-list')
-  const entries = Object.entries(status?.executables ?? {})
+  // From exe_links: every link, with the game it's for.
+  const entries = (status?.exe_links ?? []).map(l => [l.exeName, l.gameId])
   list.innerHTML = ''
   wrap.hidden = entries.length === 0
 
@@ -608,7 +719,7 @@ function renderLinked(status) {
       remove.disabled = true
       remove.textContent = 'Removing…'
       try {
-        await invoke('unlink_executable', { exeName: exe })
+        await invoke('unlink_executable', { exeName: exe, gameId })
         li.remove()
         if (!list.children.length) wrap.hidden = true
         refresh()
@@ -786,7 +897,10 @@ el('link-add-new').addEventListener('click', () => {
   openSearchPanel(exe, guessTitleFromExe(exe))
 })
 
-el('link-cancel').addEventListener('click', () => { el('link-panel').hidden = true })
+el('link-cancel').addEventListener('click', () => {
+  el('link-panel').hidden = true
+  linkForGame = null
+})
 
 el('link-save').addEventListener('click', async () => {
   const exe = el('link-exe').value
@@ -803,7 +917,16 @@ el('link-save').addEventListener('click', async () => {
   el('link-save').disabled = true
   try {
     await invoke('link_executable', { exeName: exe, gameId, platform, currentPlatform })
-    msg.textContent = `Linked. ${exe} will be tracked from now on.`
+    // Changing a game's program: the old one stops being this game. Only
+    // after the new link is in, so a failure never leaves it with none.
+    const replaced = linkForGame?.id === gameId ? linkForGame.exes.filter(old => old !== exe) : []
+    for (const old of replaced) {
+      await invoke('unlink_executable', { exeName: old, gameId }).catch(() => {})
+    }
+    linkForGame = null
+    msg.textContent = replaced.length
+      ? `Changed. ${exe} is now tracked for this game instead of ${replaced.join(', ')}.`
+      : `Linked. ${exe} will be tracked from now on.`
     msg.className = 'panel-msg ok'
     msg.hidden = false
     setTimeout(() => { el('link-panel').hidden = true }, 1800)

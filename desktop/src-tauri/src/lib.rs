@@ -53,6 +53,9 @@ pub struct StatusView {
     palette: std::collections::HashMap<String, [u8; 3]>,
     tracking: Option<TrackingView>,
     playing: Vec<api::PlayingGame>,
+    /// Every "this program is that game" link, for the link panel's
+    /// "Already linked" list and a game's "Change linked program".
+    exe_links: Vec<api::ExeLink>,
     last_sync: Option<String>,
     queued: usize,
     last_error: Option<String>,
@@ -101,6 +104,7 @@ fn get_status(app: AppHandle) -> StatusView {
                 started_at: s.started_at.to_rfc3339(),
             }),
         playing: shared.state.as_ref().map(|s| s.playing.clone()).unwrap_or_default(),
+        exe_links: shared.state.as_ref().map(exe_links_of).unwrap_or_default(),
         last_sync: shared.last_sync.map(|t| t.to_rfc3339()),
         queued: shared.queued,
         last_error: shared.last_error.clone(),
@@ -194,23 +198,42 @@ fn running_programs() -> Vec<String> {
 /// it as play time with no way to stop short of editing the database. That is
 /// not a hypothetical: it happened during testing.
 #[tauri::command]
-async fn unlink_executable(app: AppHandle, exe_name: String) -> Result<(), String> {
+async fn unlink_executable(app: AppHandle, exe_name: String, game_id: Option<String>) -> Result<(), String> {
     let (base, token) = {
         let config = app.state::<Tracker>().snapshot_config();
         (config.base(), config.token.clone().unwrap_or_default())
     };
-    // No folder to hand here, so every link for this exe goes, as before.
-    api::post_unlink(&base, &token, &exe_name, None).await?;
+    // No folder to hand here. With a game, only that game's link to the exe
+    // goes (another game may run an exe of the same name); without one,
+    // every link for this exe, as before.
+    api::post_unlink(&base, &token, &exe_name, None, game_id.as_deref()).await?;
 
     let tracker = app.state::<Tracker>();
     let mut shared = tracker.shared.lock().unwrap();
     shared.force_refresh = true;
     // Stop timing it immediately; otherwise the session keeps running against
     // a game the user has just said this program is not.
-    if shared.session.as_ref().and_then(|s| s.exe_name.clone()).as_deref() == Some(exe_name.as_str()) {
+    let same_exe = shared.session.as_ref().and_then(|s| s.exe_name.clone()).as_deref() == Some(exe_name.as_str());
+    let same_game = game_id.is_none() || shared.session.as_ref().map(|s| &s.game_id) == game_id.as_ref();
+    if same_exe && same_game {
         shared.session = None;
     }
     Ok(())
+}
+
+/// The links an `AgentState` holds: with folders from a site that sends
+/// them, else one per exe name from the older map.
+fn exe_links_of(state: &api::AgentState) -> Vec<api::ExeLink> {
+    if !state.exe_links.is_empty() {
+        return state.exe_links.clone();
+    }
+    let mut links: Vec<api::ExeLink> = state
+        .executables
+        .iter()
+        .map(|(exe, game)| api::ExeLink { exe_name: exe.clone(), path_suffix: None, game_id: game.clone() })
+        .collect();
+    links.sort_by(|a, b| a.exe_name.cmp(&b.exe_name));
+    links
 }
 
 /// The running program most likely to be this game.

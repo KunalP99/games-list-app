@@ -195,12 +195,20 @@ pub async fn post_link(
 }
 
 /// Forget that an executable is a game.
-pub async fn post_unlink(base: &str, token: &str, exe_name: &str, path_suffix: Option<&str>) -> Result<(), String> {
+/// `game_id`: only that game's link to the exe (a site from v0.3.0 on);
+/// without it, every link for the exe goes.
+pub async fn post_unlink(
+    base: &str,
+    token: &str,
+    exe_name: &str,
+    path_suffix: Option<&str>,
+    game_id: Option<&str>,
+) -> Result<(), String> {
     let res = client()
         .map_err(|e| e.to_string())?
         .post(format!("{base}/api/agent/unlink"))
         .bearer_auth(token)
-        .json(&serde_json::json!({ "exeName": exe_name, "pathSuffix": path_suffix }))
+        .json(&serde_json::json!({ "exeName": exe_name, "pathSuffix": path_suffix, "gameId": game_id }))
         .send()
         .await
         .map_err(|e| e.to_string())?;
