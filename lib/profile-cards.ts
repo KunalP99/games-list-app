@@ -312,7 +312,8 @@ export type ProfileCardData = {
   /** `total`: every achievement there is in this edition. */
   achievements?: { unlocked: number; xp: number; total: number }
   genres?: { name: string; count: number }[]
-  platforms?: { name: string; count: number }[]
+  /** The top few platforms, and how many games have a platform at all (for each one's share). */
+  platforms?: { top: { name: string; count: number }[]; total: number }
   /** `week`: the last 7 UK days, oldest first, whether each had play. */
   streak?: { current: number; best: number; week: { day: string; played: boolean }[] }
   /** `months`: completions in each month of the year, January first. */

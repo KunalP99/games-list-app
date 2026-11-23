@@ -148,7 +148,12 @@ export async function loadProfileCardData(
     data.achievements = { unlocked: stats.achievementsUnlocked, xp: stats.profile.xp ?? 0, total: AVAILABLE_ACHIEVEMENTS.length }
   }
   if (wants('genres')) data.genres = stats.genreData.slice(0, 3).map(g => ({ name: g.genre, count: g.count }))
-  if (wants('platforms')) data.platforms = stats.platformData.slice(0, 3).map(p => ({ name: p.platform, count: p.count }))
+  if (wants('platforms')) {
+    data.platforms = {
+      top: stats.platformData.slice(0, 4).map(p => ({ name: p.platform, count: p.count })),
+      total: stats.platformData.reduce((sum, p) => sum + p.count, 0),
+    }
+  }
   if (wants('completed_this_year')) {
     const months = Array.from({ length: 12 }, () => 0)
     for (const g of thisYearRes.data ?? []) {

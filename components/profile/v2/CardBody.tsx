@@ -2,6 +2,7 @@ import Link from 'next/link'
 import LiveIndicator from '@/components/games/LiveIndicator'
 import PlayCalendar from './PlayCalendar'
 import GameShelf from './GameShelf'
+import PlatformIcon from '@/components/games/PlatformIcon'
 import { PROFILE_CARDS, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
@@ -331,9 +332,44 @@ export default function CardBody({
         />
       )
     }
-    case 'genres':
     case 'platforms': {
-      const items = (card === 'genres' ? data.genres : data.platforms) ?? []
+      const p = data.platforms
+      const items = p?.top ?? []
+      const total = Math.max(1, p?.total ?? 0)
+      const others = Math.max(0, (p?.total ?? 0) - items.reduce((sum, i) => sum + i.count, 0))
+      // The top platform in the accent, the rest in lighter steps of it.
+      const shade = [1, 0.7, 0.45, 0.28]
+      return (
+        <Frame title={title}>
+          {items.length === 0 ? <Empty>Add a platform to your games to see them here.</Empty> : (
+            <div className="flex flex-1 flex-col gap-3.5">
+              <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label={items.map(i => `${i.name} ${Math.round((i.count / total) * 100)}%`).join(', ')}>
+                {items.map((item, i) => (
+                  <span key={item.name} style={{ width: `${(item.count / total) * 100}%`, backgroundColor: accent, opacity: shade[i] }} />
+                ))}
+                {others > 0 && <span className="bg-surface-sunken" style={{ width: `${(others / total) * 100}%` }} />}
+              </div>
+              <ul className="space-y-2">
+                {items.map((item, i) => (
+                  <li key={item.name} className="flex items-center gap-3 text-sm">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-sunken text-fg-base">
+                      <PlatformIcon platform={item.name} />
+                    </span>
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent, opacity: shade[i] }} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate font-medium text-fg-base">{item.name}</span>
+                    <span className="tabular-nums text-fg-base">{item.count}</span>
+                    <span className="w-10 text-right text-xs tabular-nums text-fg-muted">{Math.round((item.count / total) * 100)}%</span>
+                  </li>
+                ))}
+              </ul>
+              {others > 0 && <p className="mt-auto text-xs text-fg-muted">+{others} {others === 1 ? 'game' : 'games'} on other platforms</p>}
+            </div>
+          )}
+        </Frame>
+      )
+    }
+    case 'genres': {
+      const items = data.genres ?? []
       const top = Math.max(1, ...items.map(i => i.count))
       return (
         <Frame title={title}>
