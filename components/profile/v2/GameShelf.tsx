@@ -1,3 +1,6 @@
+'use client'
+
+import { useState } from 'react'
 import Link from 'next/link'
 import type { CardGame } from '@/lib/profile-cards'
 
@@ -13,6 +16,9 @@ const finished = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : null
 
 export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chosen: boolean }) {
+  // The game being hovered or focused: it lifts off the glass, and its
+  // reflection drops by as much, as a real one would.
+  const [lifted, setLifted] = useState<string | null>(null)
   const columns = `repeat(${Math.max(games.length, 1)}, minmax(0, 132px))`
 
   return (
@@ -43,13 +49,17 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
                   key={g.id}
                   href={`/games/${g.id}`}
                   title={[g.title, finished(g.completedOn) && `finished ${finished(g.completedOn)}`].filter(Boolean).join(' · ')}
-                  className="group block"
+                  className="block"
+                  onMouseEnter={() => setLifted(g.id)}
+                  onMouseLeave={() => setLifted(l => (l === g.id ? null : l))}
+                  onFocus={() => setLifted(g.id)}
+                  onBlur={() => setLifted(l => (l === g.id ? null : l))}
                 >
                   {g.cover ? (
                     <img
                       src={g.cover}
                       alt={g.title}
-                      className="aspect-[3/4] w-full rounded-md object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_30px_rgba(0,0,0,0.6)] transition-transform duration-200 group-hover:-translate-y-1.5"
+                      className={`aspect-[3/4] w-full rounded-md object-cover shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_14px_30px_rgba(0,0,0,0.6)] transition-transform duration-200 ${lifted === g.id ? '-translate-y-1.5' : ''}`}
                     />
                   ) : (
                     <span className="flex aspect-[3/4] w-full items-center justify-center rounded-md bg-zinc-800 p-2 text-center text-xs font-semibold">{g.title}</span>
@@ -66,7 +76,11 @@ export default function GameShelf({ games, chosen }: { games: ShelfGame[]; chose
                 <div key={g.id} className="flex flex-col items-center">
                   <div aria-hidden className="h-10 w-full overflow-hidden opacity-25 [mask-image:linear-gradient(180deg,#000,transparent)]">
                     {g.cover && (
-                      <img src={g.cover} alt="" className="aspect-[3/4] w-full -scale-y-100 rounded-md object-cover object-bottom" />
+                      <img
+                        src={g.cover}
+                        alt=""
+                        className={`aspect-[3/4] w-full -scale-y-100 rounded-md object-cover object-bottom transition-transform duration-200 ${lifted === g.id ? 'translate-y-1.5' : ''}`}
+                      />
                     )}
                   </div>
                   {hoursText(g.hours) && (
