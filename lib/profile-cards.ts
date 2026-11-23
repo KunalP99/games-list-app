@@ -289,6 +289,17 @@ export function shelfGames<G extends { id: string }>(completed: G[], chosen: str
 // client component, so a card can switch size or be added in edit mode
 // without another trip. Only cards the viewer may see are filled in.
 
+/**
+ * How big the Play streak's flame is (0 = not lit) and how strongly it glows,
+ * each 0 to 1. It grows quickly over the first days and is full size by 30,
+ * so a week-long streak already looks like something.
+ */
+export function streakFlame(days: number): { size: number; glow: number } {
+  if (!(days >= 1)) return { size: 0, glow: 0 }
+  const grown = Math.min(1, Math.log(days) / Math.log(30))
+  return { size: 0.6 + 0.4 * grown, glow: Math.min(1, Math.log(days + 1) / Math.log(31)) }
+}
+
 /** How many finishes the Recently completed timeline shows. */
 export const RECENT_COMPLETED_MAX = 4
 
@@ -328,7 +339,7 @@ export type ProfileCardData = {
   /** The top few platforms, and how many games have a platform at all (for each one's share). */
   platforms?: { top: { name: string; count: number }[]; total: number }
   /** `week`: the last 7 UK days, oldest first, whether each had play. */
-  streak?: { current: number; best: number; week: { day: string; played: boolean }[] }
+  streak?: { current: number; best: number }
   /** `months`: completions in each month of the year, January first. */
   completed_this_year?: { year: number; count: number; months: number[]; month: number }
 }

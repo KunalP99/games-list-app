@@ -4,6 +4,7 @@ import PlayCalendar from './PlayCalendar'
 import GameShelf from './GameShelf'
 import PlatformIcon from '@/components/games/PlatformIcon'
 import RecentTimeline from './RecentTimeline'
+import StreakFlame from './StreakFlame'
 import { PROFILE_CARDS, shelfGames, type CardGame, type CardSize, type ProfileCardData, type ProfileCardId } from '@/lib/profile-cards'
 
 // What each profile card shows, at either size. Plain components fed by
@@ -110,8 +111,6 @@ function Ring({ percent, children }: { percent: number; children: React.ReactNod
     </div>
   )
 }
-
-const WEEKDAYS = 'SMTWTFS'
 
 function GameRow({ game, aside }: { game: CardGame; aside?: React.ReactNode }) {
   return (
@@ -280,25 +279,7 @@ export default function CardBody({
     }
     case 'streak': {
       const s = data.streak
-      return (
-        <Figure
-          square={square}
-          tone="orange"
-          label={title}
-          value={`${s?.current ?? 0} ${s?.current === 1 ? 'day' : 'days'}`}
-          visual={s && (
-            <div className="flex gap-1.5" role="img" aria-label={`Played on ${s.week.filter(d => d.played).length} of the last 7 days`}>
-              {s.week.map(d => (
-                <div key={d.day} className="flex flex-1 flex-col items-center gap-1">
-                  <span className="h-5 w-full rounded-md" style={{ backgroundColor: 'currentColor', opacity: d.played ? 0.9 : 0.15 }} />
-                  <span className="text-[10px] font-medium opacity-70">{WEEKDAYS[new Date(`${d.day}T12:00:00Z`).getUTCDay()]}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          note={s && s.best > 0 ? `Best in the last year: ${s.best} ${s.best === 1 ? 'day' : 'days'}` : 'No tracked play yet'}
-        />
-      )
+      return <StreakFlame label={title} current={s?.current ?? 0} best={s?.best ?? 0} square={square} />
     }
     case 'completed_this_year': {
       const c = data.completed_this_year

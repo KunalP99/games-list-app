@@ -133,12 +133,7 @@ export async function loadProfileCardData(
     // A session under a minute isn't play, the same rule as the Stats page.
     const days = sessions.filter(s => (s.minutes ?? 0) >= 1).map(s => londonDay(s.started_at))
     const run = streaks(days)
-    const played = new Set(days)
-    const week = Array.from({ length: 7 }, (_, i) => {
-      const day = new Date(Date.parse(`${today}T00:00:00Z`) - (6 - i) * 86_400_000).toISOString().slice(0, 10)
-      return { day, played: played.has(day) }
-    })
-    data.streak = { current: run?.current ?? 0, best: run?.days ?? 0, week }
+    data.streak = { current: run?.current ?? 0, best: run?.days ?? 0 }
   }
 
   if (wants('finish_rate')) {

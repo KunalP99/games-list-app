@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  streakFlame,
   timelineDate,
   DEFAULT_LAYOUT,
   MAX_BIO_LENGTH,
@@ -263,5 +264,19 @@ describe('timelineDate', () => {
   it('has nothing to show without a date', () => {
     expect(timelineDate(null, 2026)).toBeNull()
     expect(timelineDate('soon', 2026)).toBeNull()
+  })
+})
+
+describe('streakFlame', () => {
+  it('is out with no streak', () => {
+    expect(streakFlame(0)).toEqual({ size: 0, glow: 0 })
+    expect(streakFlame(NaN)).toEqual({ size: 0, glow: 0 })
+  })
+  it('starts small, grows with the streak and is full size from 30 days', () => {
+    expect(streakFlame(1).size).toBeCloseTo(0.6)
+    const sizes = [1, 3, 7, 14, 30].map(d => streakFlame(d).size)
+    expect([...sizes].sort((a, b) => a - b)).toEqual(sizes)
+    expect(streakFlame(30)).toEqual({ size: 1, glow: 1 })
+    expect(streakFlame(200)).toEqual({ size: 1, glow: 1 })
   })
 })
