@@ -55,8 +55,8 @@ describe('normaliseLayout', () => {
 
   it('returns a copy, so editing it never changes the default', () => {
     const layout = normaliseLayout(null)
-    layout[0].size = 'half'
-    expect(DEFAULT_LAYOUT[0].size).toBe('full')
+    layout[0].size = 'small'
+    expect(DEFAULT_LAYOUT[0].size).toBe('half')
   })
 
   it('keeps an empty layout: no cards is a choice', () => {
@@ -77,6 +77,8 @@ describe('normaliseLayout', () => {
     ])).toEqual(L(['playing', 'half'], ['year', 'full'], ['genres', 'half'], ['streak', 'half']))
     // Finish rate was once half or square; a saved half becomes a square.
     expect(normaliseLayout([{ card: 'finish_rate', size: 'half' }])).toEqual(L(['finish_rate', 'small']))
+    // Currently playing was once full or half; a saved full one becomes half.
+    expect(normaliseLayout([{ card: 'playing', size: 'full' }])).toEqual(L(['playing', 'half']))
   })
 
   it('caps the list', () => {

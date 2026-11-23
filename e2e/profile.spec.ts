@@ -64,7 +64,7 @@ test('the nav’s Profile opens your profile: the profile card and the default c
   await expect(card.getByText('Hours played')).toBeVisible()
   await expect(card.getByText('Games', { exact: true })).toBeVisible()
   await expect.poll(() => cardsOnPage(page))
-    .toEqual(['playing', 'finish_rate', 'achievements', 'streak', 'completed_this_year', 'recently_completed', 'genres', 'platforms'])
+    .toEqual(['playing', 'finish_rate', 'achievements', 'streak', 'completed_this_year', 'genres', 'recently_completed', 'platforms'])
 })
 
 test('editing: remove, add in a square space, resize and drag, then Done keeps it', async ({ page }) => {
@@ -76,8 +76,9 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
   const toolbar = page.getByRole('toolbar', { name: 'Editing your profile' })
   await expect(toolbar).toBeVisible()
 
-  // The row of four squares loses its last: a square space opens there. Up
-  // next doesn't come as a square, so it goes in full width on the next row.
+  // The second row (two squares and Favourite genres) loses a square: a square
+  // space opens at its end. Up next doesn't come as a square, so it goes in
+  // full width on the next row.
   await page.getByRole('button', { name: 'Remove Completed this year' }).click()
   await page.getByRole('button', { name: /Add a card/ }).first().click()
   const dialog = page.getByRole('dialog', { name: 'Add a card' })
@@ -88,7 +89,6 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
   await expect(dialog).toHaveCount(0)
 
   await page.getByRole('group', { name: 'Achievements size' }).getByRole('button', { name: 'Half' }).click()
-  await page.getByRole('group', { name: 'Currently playing size' }).getByRole('button', { name: 'Half' }).click()
 
   // Drag Platforms (last) onto Currently playing (first).
   const handle = page.getByRole('button', { name: 'Move Platforms', exact: true })
@@ -105,7 +105,7 @@ test('editing: remove, add in a square space, resize and drag, then Done keeps i
   // also clicked); a person never clicks that fast, a test does.
   await page.waitForTimeout(150)
 
-  const expected = ['platforms', 'playing', 'finish_rate', 'achievements', 'streak', 'up_next', 'recently_completed', 'genres']
+  const expected = ['platforms', 'playing', 'finish_rate', 'achievements', 'streak', 'genres', 'up_next', 'recently_completed']
   await expect.poll(() => cardsOnPage(page)).toEqual(expected)
 
   await toolbar.getByRole('button', { name: 'Done' }).click()
@@ -128,7 +128,7 @@ test('a card moves with the keyboard', async ({ page }) => {
   await page.keyboard.press('ArrowLeft')
   await page.keyboard.press('Space')
   await expect.poll(() => cardsOnPage(page))
-    .toEqual(['playing', 'achievements', 'finish_rate', 'streak', 'completed_this_year', 'recently_completed', 'genres', 'platforms'])
+    .toEqual(['playing', 'achievements', 'finish_rate', 'streak', 'completed_this_year', 'genres', 'recently_completed', 'platforms'])
 })
 
 test('an empty space splits into halves, then squares, and a card goes in a square', async ({ page }) => {
@@ -191,12 +191,12 @@ test('someone else sees the layout without edit controls, minus what privacy hid
     await expect(sam.page.getByRole('button', { name: /Move / })).toHaveCount(0)
     // By default activity is friends-only, and Sam isn't a friend.
     await expect.poll(() => cardsOnPage(sam.page))
-      .toEqual(['finish_rate', 'achievements', 'completed_this_year', 'recently_completed', 'genres', 'platforms'])
+      .toEqual(['finish_rate', 'achievements', 'completed_this_year', 'genres', 'recently_completed', 'platforms'])
 
     await setPrivacy(alexId, { ...DEFAULT_PRIVACY, privacy_activity: 'everyone', privacy_achievements: 'only_me' })
     await sam.page.reload()
     await expect.poll(() => cardsOnPage(sam.page))
-      .toEqual(['playing', 'finish_rate', 'streak', 'completed_this_year', 'recently_completed', 'genres', 'platforms'])
+      .toEqual(['playing', 'finish_rate', 'streak', 'completed_this_year', 'genres', 'recently_completed', 'platforms'])
   } finally {
     await sam.close()
   }

@@ -48,7 +48,7 @@ export type ProfileCardDef = {
 export const PROFILE_CARDS: Record<ProfileCardId, ProfileCardDef> = {
   playing: {
     id: 'playing', name: 'Currently playing', description: 'The games you’re playing, and what’s on right now.',
-    sizes: ['full', 'half'], privacy: 'privacy_activity',
+    sizes: ['half'], privacy: 'privacy_activity',
   },
   recently_completed: {
     id: 'recently_completed', name: 'Recently completed', description: 'The last games you finished.',
@@ -118,13 +118,13 @@ export const MAX_PROFILE_CARDS = PROFILE_CARD_IDS.length
 
 /** What a profile shows until its owner changes it. */
 export const DEFAULT_LAYOUT: ProfileLayout = [
-  { card: 'playing', size: 'full' },
+  { card: 'playing', size: 'half' },
   { card: 'finish_rate', size: 'small' },
   { card: 'achievements', size: 'small' },
   { card: 'streak', size: 'small' },
   { card: 'completed_this_year', size: 'small' },
-  { card: 'recently_completed', size: 'full' },
   { card: 'genres', size: 'half' },
+  { card: 'recently_completed', size: 'half' },
   { card: 'platforms', size: 'half' },
 ]
 
