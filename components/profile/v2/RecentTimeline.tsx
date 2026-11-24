@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { RECENT_COMPLETED_MAX, timelineDate, type CardGame } from '@/lib/profile-cards'
+import { RECENT_COMPLETED_HALF, RECENT_COMPLETED_MAX, timelineDate, type CardGame } from '@/lib/profile-cards'
 
-// The Recently completed card: the last four finishes hanging off a line,
+// The Recently completed card: the last finishes (eight at full width, four
+// on a half card or a phone) hanging off a line,
 // newest on the left, each with its completion date and hours. The line and
 // the newest dot are in the person's accent, fading along the older ones.
 // The covers take whatever height the card has (a half card stretches to the
@@ -10,8 +11,9 @@ import { RECENT_COMPLETED_MAX, timelineDate, type CardGame } from '@/lib/profile
 const hours = (h: number | null) =>
   h == null ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 0 })}h`
 
-// How strongly each step of the line shows the accent, newest first.
-const STRENGTH = [100, 55, 35, 22, 12]
+// How strongly the line shows the accent at game `i` of `n`, newest first:
+// full at the newest, fading along the older ones.
+const strength = (i: number, n: number) => Math.max(10, Math.round(100 * (1 - i / n) ** 1.5))
 const mix = (accent: string, pct: number) => `color-mix(in srgb, ${accent} ${pct}%, transparent)`
 
 export default function RecentTimeline({
@@ -22,12 +24,15 @@ export default function RecentTimeline({
   full: boolean
 }) {
   const thisYear = new Date().getFullYear()
+  const shown = games.slice(0, full ? RECENT_COMPLETED_MAX : RECENT_COMPLETED_HALF)
+  const n = shown.length
   return (
-    <ol className="grid min-h-0 flex-1 grid-cols-4" aria-label="Recently completed, newest first">
-      {games.slice(0, RECENT_COMPLETED_MAX).map((g, i) => {
+    <ol className={`grid min-h-0 flex-1 grid-cols-4 ${full ? 'sm:grid-cols-8' : ''}`} aria-label="Recently completed, newest first">
+      {shown.map((g, i) => {
         const date = timelineDate(g.completedOn, thisYear)
         return (
-          <li key={g.id} className="flex min-h-0 min-w-0">
+          // A phone has room for four, even at full width.
+          <li key={g.id} className={`min-h-0 min-w-0 ${i >= RECENT_COMPLETED_HALF ? 'hidden sm:flex' : 'flex'}`}>
             <Link href={`/games/${g.id}`} title={g.title} className="group flex w-full flex-col items-center px-1.5 text-center">
               {/* The cover is as tall as this space (it never sets the space's
                   height itself): its usual size, or more when the card is stretched. */}
@@ -41,7 +46,7 @@ export default function RecentTimeline({
               <span className="relative -mx-1.5 flex h-3 items-center justify-center self-stretch" aria-hidden>
                 <span
                   className="absolute inset-x-0 h-0.5"
-                  style={{ background: `linear-gradient(90deg, ${mix(accent, STRENGTH[i])}, ${mix(accent, STRENGTH[i + 1])})` }}
+                  style={{ background: `linear-gradient(90deg, ${mix(accent, strength(i, n))}, ${mix(accent, strength(i + 1, n))})` }}
                 />
                 <span
                   className="relative h-3 w-3 rounded-full ring-4 ring-surface-base"

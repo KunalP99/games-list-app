@@ -531,8 +531,9 @@ export function genreColumns(items: GenreBlock[]): GenreColumn[] {
   })
 }
 
-/** How many finishes the Recently completed timeline shows. */
-export const RECENT_COMPLETED_MAX = 4
+/** How many finishes the Recently completed timeline shows: full width, and half (or on a phone). */
+export const RECENT_COMPLETED_MAX = 8
+export const RECENT_COMPLETED_HALF = 4
 
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
