@@ -657,9 +657,9 @@ describe('groupActivityItems: backlog adds', () => {
     expect(out[0].date).toBe('2024-03-15T18:00:00Z')
   })
 
-  it('carries no icon for games, unlike achievements', () => {
+  it('carries no icon for games, unlike achievements, and a link to the game', () => {
     const out = groupActivityItems([backlogAdd()])
-    expect(out[0].batch).toEqual([{ id: 'g1', label: 'Hades', icon: undefined }])
+    expect(out[0].batch).toEqual([{ id: 'g1', label: 'Hades', href: '/games/g1' }])
   })
 
   it('keeps backlog adds and achievement unlocks in separate groups', () => {

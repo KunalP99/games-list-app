@@ -18,6 +18,8 @@ export default function ActivityRow({ item, batchShown = 3 }: { item: ActivityIt
   // Your own name goes to My Games, which carries your profile
   // banner and stats; a friend's goes to their profile page.
   const profileHref = item.isSelf ? '/games' : `/users/${encodeURIComponent(item.username)}`
+  // The game's own page, from its cover and its title.
+  const gameHref = item.gameId ? `/games/${item.gameId}` : null
 
   return (
     <div className="flex items-center gap-3 px-4 py-3.5">
@@ -34,11 +36,17 @@ export default function ActivityRow({ item, batchShown = 3 }: { item: ActivityIt
 
       {/* Game thumbnail — portrait box art (falls back to the banner) */}
       {(item.gameCoverUrl ?? item.gameImageUrl) && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && item.type !== 'achievement_unlock' && (
-        <img
-          src={item.gameCoverUrl ?? item.gameImageUrl}
-          alt={item.gameTitle}
-          className="w-9 h-12 rounded object-cover shrink-0"
-        />
+        gameHref ? (
+          <Link href={gameHref} aria-label={item.gameTitle} className="shrink-0 rounded hover:opacity-90 transition-opacity">
+            <img src={item.gameCoverUrl ?? item.gameImageUrl} alt="" className="w-9 h-12 rounded object-cover" />
+          </Link>
+        ) : (
+          <img
+            src={item.gameCoverUrl ?? item.gameImageUrl}
+            alt={item.gameTitle}
+            className="w-9 h-12 rounded object-cover shrink-0"
+          />
+        )
       )}
 
       {/* Text */}
@@ -56,7 +64,9 @@ export default function ActivityRow({ item, batchShown = 3 }: { item: ActivityIt
             {isBatch && item.type === 'backlog' ? 'added' : activityVerb(item)}
           </span>
           {item.gameTitle && !isBatch && item.type !== 'wheel_spin' && item.type !== 'game_chosen' && item.type !== 'choose_skip' && (
-            <>{' '}<span className="font-medium">{item.gameTitle}</span>{activitySuffix(item)}<PlaySessionsToggle />{activityLiveTag(item)}</>
+            <>{' '}{gameHref
+              ? <Link href={gameHref} className="font-medium hover:underline">{item.gameTitle}</Link>
+              : <span className="font-medium">{item.gameTitle}</span>}{activitySuffix(item)}<PlaySessionsToggle />{activityLiveTag(item)}</>
           )}
           {isBatch && (
             <>

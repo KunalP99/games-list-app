@@ -1,6 +1,7 @@
 'use client'
 
 import { useLayoutEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import type { ActivityBatchEntry } from '@/lib/activity'
 import { chipsThatFit } from '@/lib/activity-chips'
 
@@ -13,12 +14,16 @@ const chipClass = 'inline-flex shrink-0 items-center gap-1 max-w-[11rem] px-1.5 
 const moreClass = 'shrink-0 px-1.5 py-0.5 rounded-md text-xs font-medium text-fg-muted hover:text-fg-secondary hover:bg-surface-active focus:outline-none focus:ring-2 focus:ring-brand-500 transition-colors'
 
 function Chip({ entry }: { entry: ActivityBatchEntry }) {
-  return (
-    <span title={entry.label} className={chipClass}>
+  const inner = (
+    <>
       {entry.icon && <span aria-hidden="true">{entry.icon}</span>}
       <span className="truncate">{entry.label}</span>
-    </span>
+    </>
   )
+  // A game's chip opens its page.
+  return entry.href
+    ? <Link href={entry.href} title={entry.label} className={`${chipClass} hover:bg-surface-hover hover:text-fg-base transition-colors`}>{inner}</Link>
+    : <span title={entry.label} className={chipClass}>{inner}</span>
 }
 
 /**

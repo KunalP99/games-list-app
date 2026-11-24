@@ -1,5 +1,6 @@
 /** One member of a stacked row — an achievement, or a game added to backlog. */
-export type ActivityBatchEntry = { id: string; label: string; icon?: string }
+/** One member of a batched row; `href` makes its chip a link (a backlog add's game). */
+export type ActivityBatchEntry = { id: string; label: string; icon?: string; href?: string }
 
 /** One play session inside a day's combined `play_session` row. `endedAt` null = still playing. */
 export type PlaySessionEntry = { startedAt: string; endedAt: string | null; minutes: number }
@@ -438,7 +439,7 @@ const GROUPABLE: Partial<Record<ActivityItem['type'], (item: ActivityItem) => Ac
     label: item.achievementName ?? '',
     icon: item.achievementIcon,
   }),
-  backlog: item => ({ id: item.gameId ?? '', label: item.gameTitle ?? '' }),
+  backlog: item => ({ id: item.gameId ?? '', label: item.gameTitle ?? '', href: item.gameId ? `/games/${item.gameId}` : undefined }),
 }
 
 /**

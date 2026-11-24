@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Games in the activity feed open their page.** On Recent activity and the dashboard's Activity card, a game's cover and title (and each game in a "added 4 games to backlog" row) now link to that game's page, in both editions.
 - **The dashboard's streak has a living flame.** The streak pill beside the date now shows the same flickering orange flame as the profile's Play streak card, in both editions (still for reduced motion).
 - **Games lists keep your place.** Changing the tab, the sort, the view or the search on My Games or on a profile no longer jumps back to the top of the page, in both editions.
 - **Accent colours from a set (public edition).** Settings → Appearance offers twelve colours (orange, red, rose, pink, fuchsia, violet, indigo, blue, sky, teal, green, lime) instead of a free colour picker, each chosen to read well in light and dark mode, behind white text and on a dark page. A colour picked freely before shows as the closest one until you choose. The friends edition keeps its colour picker. (`lib/accent-choices.ts`.)
