@@ -1,67 +1,46 @@
 import Link from 'next/link'
 import LiveIndicator from '@/components/games/LiveIndicator'
-import { spotlightOrder, type PlayingGame } from '@/lib/profile-cards'
+import { spotlightOrder, timelineDate, type PlayingGame } from '@/lib/profile-cards'
 
-// The Currently playing card: the game being played right now (else the
-// latest started) big, in its own art, and the rest listed beside it (under
-// it on a half card or a phone).
+// The Currently playing card, as a poster: one game (the one running now,
+// else the latest started) with its art filling the card, the title big at
+// the bottom with its hours, platform and start date, and the live timer
+// top-right while it runs. Its height comes from its row (a half card beside
+// squares is square-high), so nothing here sets one beyond a sensible minimum.
 
 const hoursText = (h: number | null) =>
-  h == null || h <= 0 ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 0 })}h`
+  h == null || h <= 0 ? null : `${h.toLocaleString(undefined, { maximumFractionDigits: 0 })}h played`
 
-function Spotlight({ game, full }: { game: PlayingGame; full: boolean }) {
-  const details = [hoursText(game.hours) && `${hoursText(game.hours)} played`, game.platform].filter(Boolean).join(' · ')
+export default function PlayingSpotlight({ games, title }: { games: PlayingGame[]; title: string }) {
+  const [game] = spotlightOrder(games)
+  if (!game) return null
+  const since = timelineDate(game.startedOn, new Date().getFullYear())
+  const details = [hoursText(game.hours), game.platform, since && `since ${since}`].filter(Boolean).join(' · ')
   return (
     <Link
       href={`/games/${game.id}`}
-      className={`group relative flex min-w-0 flex-1 flex-col justify-end overflow-hidden rounded-xl bg-zinc-800 p-4 text-white ${full ? 'min-h-[200px]' : 'min-h-[160px]'}`}
+      className="group relative isolate flex h-full min-h-[220px] flex-col justify-between overflow-hidden rounded-2xl bg-zinc-900 p-5 text-white"
     >
-      {game.wide && (
-        <img src={game.wide} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+      {(game.wide ?? game.cover) && (
+        <img
+          src={game.wide ?? game.cover ?? undefined}
+          alt=""
+          className="absolute inset-0 -z-10 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
       )}
-      <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" aria-hidden />
-      {game.liveSince && (
-        <span className="absolute left-3 top-3 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold">
-          <LiveIndicator startedAt={game.liveSince} dark />
-        </span>
-      )}
-      <span className={`relative block truncate font-display leading-tight ${full ? 'text-3xl' : 'text-2xl'}`}>{game.title}</span>
-      {details && <span className="relative mt-1 block truncate text-xs text-white/85">{details}</span>}
-    </Link>
-  )
-}
-
-function Row({ game }: { game: PlayingGame }) {
-  const details = [game.liveSince ? null : hoursText(game.hours), game.platform].filter(Boolean).join(' · ')
-  return (
-    <Link href={`/games/${game.id}`} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-1 transition-colors hover:bg-surface-hover">
-      {game.cover
-        ? <img src={game.cover} alt="" className="h-12 w-9 shrink-0 rounded-md object-cover" />
-        : <span className="h-12 w-9 shrink-0 rounded-md bg-surface-sunken" aria-hidden />}
-      <span className="min-w-0">
-        <span className="block truncate text-xs font-semibold text-fg-base">{game.title}</span>
-        {game.liveSince
-          ? <span className="block truncate text-[11px] text-emerald-600 dark:text-emerald-400"><LiveIndicator startedAt={game.liveSince} /></span>
-          : details && <span className="block truncate text-[11px] text-fg-muted">{details}</span>}
-      </span>
-    </Link>
-  )
-}
-
-export default function PlayingSpotlight({ games, full }: { games: PlayingGame[]; full: boolean }) {
-  const [first, ...rest] = spotlightOrder(games)
-  const shown = rest.slice(0, full ? 3 : 2)
-  const more = rest.length - shown.length
-  if (!first) return null
-  if (shown.length === 0) return <div className="flex flex-1"><Spotlight game={first} full={full} /></div>
-  return (
-    <div className={`flex flex-1 flex-col gap-3 ${full ? 'sm:flex-row sm:gap-4' : ''}`}>
-      <Spotlight game={first} full={full} />
-      <div className={full ? 'flex flex-col justify-center gap-1.5 sm:w-56 sm:shrink-0' : 'flex gap-2'}>
-        {full && <p className="px-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">Also playing</p>}
-        {shown.map(g => <Row key={g.id} game={g} />)}
-        {full && more > 0 && <p className="px-1 text-[11px] text-fg-muted">+{more} more</p>}
+      <span className="absolute inset-0 -z-10 bg-gradient-to-t from-black/90 via-black/20 to-black/55" aria-hidden />
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {game.liveSince && (
+          <span className="shrink-0 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold">
+            <LiveIndicator startedAt={game.liveSince} dark />
+          </span>
+        )}
       </div>
-    </div>
+      <div className="min-w-0">
+        <p className="line-clamp-2 font-display text-4xl leading-tight">{game.title}</p>
+        {details && <p className="mt-1.5 truncate text-xs text-white/80">{details}</p>}
+      </div>
+    </Link>
   )
 }

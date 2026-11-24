@@ -485,7 +485,7 @@ export function streakFlame(days: number): { size: number; glow: number } {
   return { size: 0.6 + 0.4 * grown, glow: Math.min(1, Math.log(days + 1) / Math.log(31)) }
 }
 
-export type PlayingGame = CardGame & { liveSince: string | null; platform: string | null }
+export type PlayingGame = CardGame & { liveSince: string | null; platform: string | null; startedOn: string | null }
 
 /**
  * The Currently playing card's games in the order it shows them: the

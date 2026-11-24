@@ -144,11 +144,9 @@ export default function CardBody({
   switch (card) {
     case 'playing': {
       const games = data.playing ?? []
-      return (
-        <Frame title={title}>
-          {games.length === 0 ? <Empty>Nothing in Playing right now.</Empty> : <PlayingSpotlight games={games} full={full} />}
-        </Frame>
-      )
+      return games.length === 0
+        ? <Frame title={title}><Empty>Nothing in Playing right now.</Empty></Frame>
+        : <PlayingSpotlight games={games} title={title} />
     }
     case 'recently_completed': {
       const games = data.recently_completed ?? []
