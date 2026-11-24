@@ -82,6 +82,23 @@ test('a tab clicked as soon as the page opens sticks', async () => {
   expect(page.url()).toMatch(/status=backlog/)
 })
 
+test('changing tab keeps the page where it is', async () => {
+  // A short window, so the page scrolls even with a small library.
+  await page.setViewportSize({ width: 1280, height: 420 })
+  try {
+    await page.goto('/games?status=all')
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => window.scrollTo(0, 120))
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(120)
+    await backlogTab().click()
+    await expect(page).toHaveURL(/status=backlog/)
+    await expect(card()).toBeVisible()
+    expect(await page.evaluate(() => window.scrollY)).toBe(120)
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 720 })
+  }
+})
+
 test('search on a profile copes with a comma too', async () => {
   await page.goto(`/users/test-sam?status=all&q=${encodeURIComponent('40,000')}`)
   await expect(card()).toBeVisible()
