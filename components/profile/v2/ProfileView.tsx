@@ -55,10 +55,13 @@ import ShelfPicker from './ShelfPicker'
 // one, and edit the bio. Nothing is saved until Done.
 
 /** Grid columns a card or space takes: four on wider screens, two on phones. */
+// A square is at least as tall as it is wide (aspect-square sets the row's
+// height when it's all squares) and stretches to a taller card beside it
+// (self-stretch), so a row's cards always line up.
 const SPAN: Record<CardSize, string> = {
   full: 'col-span-2 sm:col-span-4',
   half: 'col-span-2',
-  small: 'col-span-1 aspect-square',
+  small: 'col-span-1 aspect-square w-full self-stretch',
 }
 const SIZE_LABEL: Record<CardSize, string> = { full: 'Full', half: 'Half', small: 'Square' }
 
