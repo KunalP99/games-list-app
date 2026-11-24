@@ -158,7 +158,7 @@ export default async function GamesPage(
       <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner />
 
       <Suspense>
-        <GameFilters keepScroll />
+        <GameFilters />
       </Suspense>
 
       {games && games.length > 0 ? (

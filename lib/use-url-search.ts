@@ -22,7 +22,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
  * what this hook just sent there), and the box only follows the URL when `q`
  * itself changes from elsewhere (Back/Forward, a link that clears it).
  */
-export function useUrlSearch(delayMs = 300, keepScroll = false) {
+export function useUrlSearch(delayMs = 300) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -50,13 +50,14 @@ export function useUrlSearch(delayMs = 300, keepScroll = false) {
       if (wanted) params.set('q', wanted)
       else params.delete('q')
       sent.current = wanted
-      router.push(`${pathname}?${params.toString()}`, { scroll: !keepScroll })
+      // Typing never moves the page.
+      router.push(`${pathname}?${params.toString()}`, { scroll: false })
     }, delayMs)
     return () => {
       if (timer.current) clearTimeout(timer.current)
       timer.current = null
     }
-  }, [search, urlQuery, searchParams, pathname, router, delayMs, keepScroll])
+  }, [search, urlQuery, searchParams, pathname, router, delayMs])
 
   /** Puts the box's current text into `params` for a navigation of the caller's own, and cancels the pending update. */
   const applyTo = useCallback((params: URLSearchParams) => {

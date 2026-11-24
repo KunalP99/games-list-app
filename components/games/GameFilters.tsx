@@ -35,11 +35,11 @@ const SORT_OPTIONS = [
 ]
 
 /**
- * `keepScroll`: changing a tab, the sort, the view or the search leaves the
- * page where it is instead of jumping to the top (the profile, where the list
- * sits under the cards).
+ * Changing a tab, the sort, the view or the search leaves the page where it
+ * is (`scroll: false`) instead of jumping to the top: on a profile the list
+ * sits well down the page.
  */
-export default function GameFilters({ keepScroll = false }: { keepScroll?: boolean } = {}) {
+export default function GameFilters() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -55,8 +55,8 @@ export default function GameFilters({ keepScroll = false }: { keepScroll?: boole
     (searchParams.get('view') as 'grid' | 'table' | 'cover') ?? 'cover'
   )
   // The search box ↔ ?q= (lib/use-url-search.ts).
-  const { search, setSearch, applyTo } = useUrlSearch(300, keepScroll)
-  const navigation = { scroll: !keepScroll }
+  const { search, setSearch, applyTo } = useUrlSearch()
+  const navigation = { scroll: false }
 
   // On mount: if no ?view= in URL, read cookie and update both the icon and
   // the URL so subsequent filter changes continue to preserve the view param.
