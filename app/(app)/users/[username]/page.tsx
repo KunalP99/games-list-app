@@ -4,17 +4,14 @@ import ProfileOverview from '@/components/profile/v2/ProfileOverview'
 import ProfileGames from '@/components/profile/v2/ProfileGames'
 import { computeUserStats } from '@/lib/user-stats'
 import { resolveBannerImage } from '@/lib/hero-banner'
-import { buildActivityItems, suppressRepeatedStarts, type RawAchievementUnlock, type RawPlaySession } from '@/lib/activity'
-import { ACHIEVEMENTS } from '@/lib/achievements'
 import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
 import ProfileHero from '@/components/profile/ProfileHero'
-import ProfileStatCards from '@/components/profile/ProfileStatCards'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
-import { getLiveSessions, settleSession } from '@/lib/presence'
+import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { ilikeAnyFilter } from '@/lib/query-escape'
@@ -98,7 +95,7 @@ export default async function UserProfilePage(
   }
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(ilikeAnyFilter(['title', 'developer'], searchParams.q.trim()))
 
-  const [gamesRes, playingGamesRes, recentGamesRes, recentSpinsRes, recentUnlocksRes, recentSessionsRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
+  const [gamesRes, playingGamesRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
     gamesQuery,
     supabase
       .from('games')
@@ -111,31 +108,6 @@ export default async function UserProfilePage(
       // games with no start date, which sort last.
       .order('start_date', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false }),
-    // For the Recent Activity card — same shape lib/activity.ts's shared
-    // buildActivityItems() expects, mirroring app/(app)/activity/page.tsx.
-    supabase
-      .from('games')
-      .select('id, user_id, title, status, image_url, cover_image_url, completion_date, created_at, updated_at, hours_played, achievement_progress')
-      .eq('user_id', profile.id)
-      .order('updated_at', { ascending: false })
-      .limit(20),
-    supabase
-      .from('wheel_spins')
-      .select('id, user_id, spin_type, result_name, created_at')
-      .eq('user_id', profile.id)
-      .order('created_at', { ascending: false })
-      .limit(10),
-    (supabase.from('user_achievements') as any)
-      .select('achievement_id, unlocked_at')
-      .eq('user_id', profile.id)
-      .order('unlocked_at', { ascending: false })
-      .limit(10),
-    supabase
-      .from('play_sessions')
-      .select('user_id, game_id, started_at, ended_at, last_checkpoint_at, minutes')
-      .eq('user_id', profile.id)
-      .order('started_at', { ascending: false })
-      .limit(25),
     computeUserStats(supabase, profile.id),
     getRecentlyPlayed(supabase, profile.id),
     getLiveSessions(supabase, [profile.id]),
@@ -144,57 +116,10 @@ export default async function UserProfilePage(
   const games = gamesRes.data as Game[] | null
   const playingGames = (playingGamesRes.data ?? []) as Game[]
 
-  type RecentGameRow = { id: string; user_id: string; title: string; status: string; image_url: string | null; cover_image_url: string | null; completion_date: string | null; created_at: string; updated_at: string; hours_played: number | null; achievement_progress: number | null }
-  const recentGames = (recentGamesRes.data ?? []) as RecentGameRow[]
-  const completedIds = recentGames.filter(g => g.status === 'completed').map(g => g.id)
-
-  // A session the tracker never closed ended at its last checkpoint
-  // (settleSession), or it would show "– now" forever.
-  // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
-  const nowMs = Date.now()
-  const rawSessions = ((recentSessionsRes.data ?? []) as RawPlaySession[])
-    .map(s => settleSession({ ...s, last_checkpoint_at: s.last_checkpoint_at ?? null }, nowMs))
-  // "Started playing" is only worth saying the first time — see the
-  // same check in app/(app)/activity/page.tsx.
-  const ongoingGameIds = Array.from(new Set(rawSessions.filter(s => !s.ended_at && s.game_id).map(s => s.game_id!)))
-
-  // Depends on stats.heroGame and completedIds, so this second wave can't join
-  // the Promise.all above — bannerImage may fetch the game's screenshots live
-  // (lib/hero-banner.ts), bounded by that call's own timeout.
-  const [bannerImage, ticketRowsRes, sessionHistoryRes] = await Promise.all([
-    stats.heroGame ? resolveBannerImage(stats.heroGame) : Promise.resolve(null),
-    completedIds.length > 0
-      ? supabase.from('ticket_transactions').select('game_id, amount').in('game_id', completedIds).gt('amount', 0)
-      : Promise.resolve({ data: [] as { game_id: string; amount: number }[] }),
-    ongoingGameIds.length > 0
-      ? supabase.from('play_sessions').select('user_id, game_id, started_at').in('game_id', ongoingGameIds)
-      : Promise.resolve({ data: [] as { user_id: string; game_id: string | null; started_at: string }[] }),
-  ])
-  const sessions = suppressRepeatedStarts(rawSessions, (sessionHistoryRes.data ?? []) as { user_id: string; game_id: string | null; started_at: string }[])
-
-  const ticketsByGame = ((ticketRowsRes.data ?? []) as { game_id: string; amount: number }[]).reduce<Record<string, number>>((acc, r) => {
-    acc[r.game_id] = (acc[r.game_id] ?? 0) + r.amount
-    return acc
-  }, {})
-
-  const achievementLookup = new Map(ACHIEVEMENTS.map(a => [a.id, a]))
-  const recentUnlocks = (recentUnlocksRes.data ?? []) as { achievement_id: string; unlocked_at: string }[]
-  const achievementUnlocks: RawAchievementUnlock[] = recentUnlocks.flatMap(r => {
-    const ach = achievementLookup.get(r.achievement_id)
-    if (!ach) return []
-    return [{ user_id: profile.id, achievement_id: r.achievement_id, achievement_name: ach.name, achievement_icon: ach.icon, xp: ach.xp, unlocked_at: r.unlocked_at }]
-  })
-
-  const profileMap = new Map([[profile.id, {
-    displayName: profile.display_name ?? profile.username,
-    username: profile.username,
-    accentColour: profile.accent_colour ?? null,
-  }]])
-  type RecentSpinRow = { id: string; user_id: string; spin_type: string; result_name: string | null; created_at: string }
-  const recentSpins = (recentSpinsRes.data ?? []) as RecentSpinRow[]
-  // A generous buffer — ProfileStatCards decides how many are actually
-  // shown (currently 4, to sit level with the genre card next to it).
-  const activityItems = buildActivityItems(recentGames, recentSpins, profileMap, ticketsByGame, user?.id ?? '', achievementUnlocks, sessions).slice(0, 12)
+  // Depends on stats.heroGame, so it can't join the Promise.all above; it may
+  // fetch the game's screenshots live (lib/hero-banner.ts), bounded by that
+  // call's own timeout.
+  const bannerImage = stats.heroGame ? await resolveBannerImage(stats.heroGame) : null
 
   const rawView = searchParams.view ?? (await cookies()).get('gameView')?.value
   // Box Art (portrait) is the default view; explicit grid/table choices are honoured.
@@ -226,8 +151,6 @@ export default async function UserProfilePage(
       {FEATURES.ambient && <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />}
 
       {allows('privacy_activity') && <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner={isOwner} />}
-
-      <ProfileStatCards genreData={stats.genreData} accent={accent} activityItems={activityItems} />
 
       {!allows('privacy_games') ? (
         <div className="rounded-2xl border border-edge-base bg-surface-base px-6 py-10 text-center">

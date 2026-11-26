@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Friends edition profiles drop "What they play" and "Recent activity".** The profile now goes from the banner and Now playing / Recently played straight to the games list. (The Activity page and the dashboard's Activity card are unchanged.)
 - **Playthroughs are numbered in the order you played them.** A game's page says "Playthrough N of M" by when each run was finished (else started), not by when it was added, which had numbered imported replays as the first playthrough. Both editions.
 - **Finishing a game a second time marks it as a replay.** When you mark a game Completed and you'd already finished another copy of it, that copy gets the replay tag automatically (and counts towards the replay achievements), however it was being tracked before, Ambient included. Both editions.
 - **Playing a game from your backlog starts that copy.** When the desktop app sees you playing a game you have in your Backlog, it now asks about that copy ("set it to Playing or Ambient?"; in the public edition it simply starts it as Playing), even if you also have it Completed from an earlier playthrough. Before, it could ask "is this a replay?" of the old Completed copy instead and add another one, so the game page counted an extra playthrough.
