@@ -5,6 +5,7 @@ import { cleanEmulatorTitle, EMULATOR_PLATFORMS, type EmulatorRequest } from './
 import { pickRow, resolveRow, isTrackable, type LibraryRow } from './trackable-row'
 import { fileTrackerGame } from './agent-file-game'
 import { editionStatus } from './edition'
+import { startBacklogCopy } from './agent-start-backlog'
 
 /**
  * A game running in an emulator: what `/api/agent/identify` (emulator mode)
@@ -34,7 +35,7 @@ export type EmulatorAnswer =
 
 async function library(sb: Sb, userId: string): Promise<LibraryRow[]> {
   const { data } = await (sb.from('games') as any)
-    .select('id, title, status, igdb_id, rawg_id, steam_appid')
+    .select('id, title, status, igdb_id, rawg_id, steam_appid, start_date')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
   return (data ?? []) as LibraryRow[]
@@ -48,8 +49,13 @@ async function remember(sb: Sb, userId: string, req: EmulatorRequest, gameId: st
   if (error) console.error(`emulator: could not remember ${req.key}: ${error.message}`)
 }
 
-/** The answer for a library row, marking it Emulated when its hours will be tracked. */
-async function answerFor(sb: Sb, row: LibraryRow): Promise<EmulatorAnswer> {
+/**
+ * The answer for a library row, marking it Emulated when its hours will be
+ * tracked. A Backlog copy of an otherwise untrackable game is started first
+ * (lib/agent-start-backlog.ts), as for any other running game.
+ */
+async function answerFor(sb: Sb, owned: LibraryRow, rows: LibraryRow[]): Promise<EmulatorAnswer> {
+  const row = await startBacklogCopy(sb, owned, rows)
   const trackable = isTrackable(row)
   if (trackable) {
     await (sb.from('games') as any).update({ is_emulated: true }).eq('id', row.id).eq('is_emulated', false)
@@ -84,7 +90,7 @@ export async function identifyEmulated(sb: Sb, userId: string, req: EmulatorRequ
     if (saved.game_id == null) return { result: 'ignored' }
     const rows = await library(sb, userId)
     const row = rows.find(r => r.id === saved.game_id)
-    if (row) return answerFor(sb, resolveRow(row, rows))
+    if (row) return answerFor(sb, resolveRow(row, rows), rows)
   }
 
   // 2. IGDB, on that console only. A serial alone can't be searched.
@@ -101,7 +107,7 @@ export async function identifyEmulated(sb: Sb, userId: string, req: EmulatorRequ
     if (row) {
       // Certain on both sides, so remembered: the next launch needs no IGDB.
       await remember(sb, userId, req, row.id)
-      return answerFor(sb, row)
+      return answerFor(sb, row, rows)
     }
     return { result: 'add', candidates: [toCandidate(exact)] }
   }
@@ -127,7 +133,7 @@ export async function chooseEmulated(
   const row = ownedRow(rows, choice.igdbId)
   if (row) {
     await remember(sb, userId, req, row.id)
-    return answerFor(sb, row)
+    return answerFor(sb, row, rows)
   }
   const status = editionStatus('playing')
   const created = await fileTrackerGame(sb, {

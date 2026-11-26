@@ -108,6 +108,29 @@ test('identify: with only the completed game, it still offers a replay (untracke
   expect(body).toMatchObject({ result: 'untracked', gameId: done, resumable: 'completed' })
 })
 
+// Completed years ago, then put in the Backlog to replay: starting it again
+// moves the Backlog copy to Playing and tracks it, even when the Completed
+// copy was touched more recently (so no "replay?" prompt, and no third row).
+test('identify: a Backlog copy beside a Completed one is moved to Playing and tracked', async () => {
+  const title = 'ZZ E2E Bannerlord'
+  const backlog = await games.add({ title, status: 'backlog', igdb_id: 9608 })
+  const done = await games.add({ title, status: 'completed', igdb_id: 9608, completion_date: '2021-01-01', hours_played: 47.8 })
+  await admin().from('games').update({ notes: 'touched last' }).eq('id', done)
+
+  const body = await (await device.post('/api/agent/identify', { igdbId: 9608, title, exeName: 'Bannerlord.exe' })).json()
+  expect(body).toMatchObject({ result: 'tracked', gameId: backlog, status: 'playing' })
+
+  const { data } = await admin().from('games').select('id, status, start_date, completion_date').eq('user_id', uid).eq('title', title)
+  expect(data, 'no new copy was added').toHaveLength(2)
+  const started = data!.find(g => g.id === backlog)!
+  expect(started.status).toBe('playing')
+  expect(started.start_date).toBe(new Date().toISOString().slice(0, 10))
+  expect(data!.find(g => g.id === done)!.status, 'the 2021 run is left alone').toBe('completed')
+  const { data: link } = await admin().from('game_executables').select('game_id').eq('user_id', uid).eq('exe_name', 'bannerlord.exe')
+  expect(link!.map(l => l.game_id)).toEqual([backlog])
+  await admin().from('game_executables').delete().eq('user_id', uid).eq('exe_name', 'bannerlord.exe')
+})
+
 // The Witcher 3 (Steam 292030 → base game 1942 on IGDB): an edition two
 // steps away (10th Anniversary Edition, a version of the Complete Edition,
 // itself a version of 1942) still counts; a DLC never takes the base game's

@@ -82,3 +82,17 @@ export function rowsWithIgdbIds<R extends LibraryRow>(library: R[], ids: number[
   const wanted = new Set(ids)
   return library.filter(r => r.igdb_id != null && wanted.has(r.igdb_id))
 }
+
+/**
+ * The Backlog copy to start, when a running game has no Playing or Ambient
+ * row: the most recently touched Backlog row of the same game in `library`
+ * (most recently touched first), or none. Someone who puts a game in their
+ * backlog and then plays it is playing that copy, so the tracker moves it to
+ * Playing rather than asking "is this a replay?" of an older Completed copy
+ * and adding another row beside it.
+ */
+export function backlogCopy<R extends LibraryRow>(row: R, library: R[]): R | undefined {
+  if (isTrackable(row)) return undefined
+  if (row.status === 'backlog') return row
+  return library.find(r => r.status === 'backlog' && sameGame(r, row))
+}

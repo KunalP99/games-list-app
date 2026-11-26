@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Playing a game from your backlog starts that copy.** When the desktop app sees you playing a game you have in your Backlog, it now moves that copy to Playing and tracks it, even if you also have it Completed from an earlier playthrough. Before, it could ask "is this a replay?" of the old Completed copy instead and add another one, so the game page counted an extra playthrough. Both editions.
 - **Games in the activity feed open their page.** On Recent activity and the dashboard's Activity card, a game's cover and title (and each game in a "added 4 games to backlog" row) now link to that game's page, in both editions.
 - **The dashboard's streak has a living flame.** The streak pill beside the date now shows the same flickering orange flame as the profile's Play streak card, in both editions (still for reduced motion).
 - **Games lists keep your place.** Changing the tab, the sort, the view or the search on My Games or on a profile no longer jumps back to the top of the page, in both editions.

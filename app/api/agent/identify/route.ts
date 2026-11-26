@@ -13,6 +13,7 @@ import { identifyEmulated } from '@/lib/agent-emulator'
 import { pickRow, resolveRow, rowsWithIgdbIds, isTrackable, type LibraryRow } from '@/lib/trackable-row'
 import { writeExeLink } from '@/lib/exe-links'
 import { editionStatus } from '@/lib/edition'
+import { startBacklogCopy } from '@/lib/agent-start-backlog'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,16 +82,18 @@ function escapeLike(s: string): string {
  *                ordinary heuristic prompt — never cached, never remembered,
  *                because a search miss is not proof of anything.
  *   tracked    — already in the library as Playing or Ambient. Just track it.
- *   untracked  — in the library, but completed, dropped or still in the
- *                backlog. Never moved without being asked — a background
- *                program silently deciding "this counts as Playing now"
- *                would be the wrong kind of automatic. Instead carries a
- *                `resumable` flag (`'completed'` | `'dnf'` | `'backlog'` |
- *                `null`) naming exactly which of the three it is, and the
+ *   tracked    — also when a copy of the game was in the Backlog: playing a
+ *                game you put in your backlog is starting it, so that copy
+ *                is moved to Playing and tracked (lib/agent-start-backlog.ts),
+ *                rather than asking "is this a replay?" of an older Completed
+ *                copy and adding yet another row beside it.
+ *   untracked  — in the library, but only completed or dropped. Never moved
+ *                without being asked. Carries a `resumable` flag
+ *                (`'completed'` | `'dnf'` | `null`; `'backlog'` from trackers
+ *                that answer before this rule) naming which it is, and the
  *                agent turns that into the matching prompt: "replay?" /
- *                "resuming?" / "set to Playing or Ambient?". Accepting any
- *                of them calls `/api/agent/resume`, which is what actually
- *                acts on it.
+ *                "resuming?". Accepting calls `/api/agent/resume`, which is
+ *                what actually acts on it.
  *   added      — not in the library at all, so an Ambient row was created and
  *                tracking can start immediately.
  *
@@ -256,10 +259,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // over, and what sends multiplayer back to the Ambient row once the replay
   // is Completed, instead of re-raising the "is this a replay?" prompt.
   const { data: libraryData } = await (sb.from('games') as any)
-    .select('id, title, status, igdb_id, rawg_id, steam_appid')
+    .select('id, title, status, igdb_id, rawg_id, steam_appid, start_date')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
-  const library = (libraryData ?? []) as LibraryRow[]
+  const library = (libraryData ?? []) as (LibraryRow & { start_date: string | null })[]
   const owned = library.filter(g => g.igdb_id === igdbId || (steamAppId != null && g.steam_appid === steamAppId))
   const firstMatch = pickRow(owned)
   let existing = firstMatch ? resolveRow(firstMatch, library) : undefined
@@ -291,6 +294,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       existing = edition
       if (steamAppId != null) editionSteamAppId = steamAppId
     }
+  }
+
+  // Nothing trackable, but a copy in the Backlog? That copy is the one being
+  // played now: move it to Playing and track it.
+  if (existing && !isTrackable(existing)) {
+    existing = await startBacklogCopy(sb, existing, library, steamAppId)
   }
 
   if (existing) {

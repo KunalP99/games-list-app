@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { pickRow, resolveRow, sameGame, rowsWithIgdbIds, type LibraryRow } from '../trackable-row'
+import { pickRow, resolveRow, sameGame, rowsWithIgdbIds, type LibraryRow, backlogCopy } from '../trackable-row'
 
 const row = (id: string, status: string, extra: Partial<LibraryRow> = {}): LibraryRow =>
   ({ id, title: 'Mortal Kombat 1', status, igdb_id: 1, steam_appid: 1971870, ...extra })
@@ -72,5 +72,36 @@ describe('rowsWithIgdbIds: another edition of the running game', () => {
   it('prefers a Playing row of the family, as pickRow always does', () => {
     const library = [edition('ce-done', 27912, 'completed'), edition('ce-replay', 27912, 'playing')]
     expect(pickRow(rowsWithIgdbIds(library, [27912]))?.id).toBe('ce-replay')
+  })
+})
+
+describe('backlogCopy: the copy a running game starts from', () => {
+  const row = (id: string, status: string, igdb_id: number | null = 9608, title = 'Mount & Blade II: Bannerlord') => ({ id, status, igdb_id, title })
+  // Ramin's case: the 2021 run Completed, a Backlog copy added to replay it.
+  const done = row('done', 'completed')
+  const backlog = row('backlog', 'backlog')
+
+  it('finds the Backlog copy beside a Completed one, whichever was touched last', () => {
+    expect(backlogCopy(done, [done, backlog])).toBe(backlog)
+    expect(backlogCopy(done, [backlog, done])).toBe(backlog)
+  })
+
+  it('is the row itself when that is the Backlog copy', () => {
+    expect(backlogCopy(backlog, [backlog, done])).toBe(backlog)
+  })
+
+  it('takes the most recently touched of two Backlog copies', () => {
+    const older = row('older', 'backlog')
+    expect(backlogCopy(done, [backlog, done, older])).toBe(backlog)
+  })
+
+  it('finds nothing when a copy is already trackable, or no copy is in the Backlog', () => {
+    expect(backlogCopy(row('p', 'playing'), [row('p', 'playing'), backlog])).toBeUndefined()
+    expect(backlogCopy(done, [done, row('dnf', 'dnf')])).toBeUndefined()
+  })
+
+  it("never takes a different game's Backlog copy", () => {
+    const other = row('other', 'backlog', 1234, 'Another Game')
+    expect(backlogCopy(done, [done, other])).toBeUndefined()
   })
 })
