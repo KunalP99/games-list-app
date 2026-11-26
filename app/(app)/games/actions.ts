@@ -17,6 +17,7 @@ import {
   COMPLETION_TICKET_REASONS, DNF_TICKET_REASONS, type DeleteImpact,
 } from '@/lib/game-quick-actions'
 import { editionStatus, FEATURES } from '@/lib/edition'
+import { tagReplayIfFinishedBefore } from '@/lib/data/replays'
 import {
   parseHours, parseAchievementProgress, parseDlc, parseYoutubeVideos, parseStringList, type GameVideo,
 } from '@/lib/game-input'
@@ -281,6 +282,7 @@ export async function createGame(formData: FormData) {
 
   if (status === 'completed') {
     await grantCompletionRewards(user.id, game.id)
+    await tagReplayIfFinishedBefore(supabase, user.id, game.id)
     await checkAndAwardAchievements(supabase, user.id)
   } else if (status === 'dnf') {
     await applyDnfPenalty(supabase, user.id, game.id)
@@ -441,6 +443,7 @@ export async function updateGame(id: string, formData: FormData) {
     // Newly completed — award tickets and XP; also reverse any DNF penalty if coming from DNF
     if (wasDnf) await reverseDnfPenalty(supabase, user.id, id)
     await grantCompletionRewards(user.id, id)
+    await tagReplayIfFinishedBefore(supabase, user.id, id)
     await checkAndAwardAchievements(supabase, user.id)
   } else if (wasCompleted && !isCompleted) {
     // Un-completing — reverse completion awards; apply DNF penalty if moving to DNF
@@ -568,6 +571,7 @@ export async function markAsCompleted(
 
   if (before.status === 'dnf') await reverseDnfPenalty(supabase, user.id, id)
   await grantCompletionRewards(user.id, id)
+  await tagReplayIfFinishedBefore(supabase, user.id, id)
   await checkAndAwardAchievements(supabase, user.id)
 
   // Completing the game the wheel gave you consumes its pending pointer, so a

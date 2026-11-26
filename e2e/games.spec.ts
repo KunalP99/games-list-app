@@ -150,3 +150,23 @@ test(`completing from the game page (${EDITION} rules)`, async () => {
   await expect.poll(async () => (await admin().from('completion_rewards').select('tickets, why').eq('game_id', gameId).maybeSingle()).data)
     .toEqual(EDITION === 'public' ? { tickets: 0, why: 'not_linked' } : { tickets: 1, why: 'full' })
 })
+
+// Finished once (2021), then finished again: the second finish is certainly a
+// replay, so it's tagged, whatever the copy was before (here Ambient in the
+// friends edition, Playing in public, which has no Ambient).
+test('finishing a game a second time tags that copy as a replay', async () => {
+  const title = 'ZZ E2E Second Finish'
+  await games.add({ title, status: 'completed', completion_date: '2021-01-01', hours_played: 47.8 })
+  const status = EDITION === 'friends' ? 'ambient' : 'playing'
+  const again = await games.add({ title, status, hours_played: 27.2 })
+  // From its ⋯ menu (right-click), the way an Ambient game is completed.
+  await page.goto(`/games?status=${status}&q=${encodeURIComponent(title)}`)
+  await page.waitForLoadState('networkidle')
+  await page.getByRole('heading', { name: title }).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Mark as Completed…' }).click()
+  await page.getByRole('button', { name: 'Mark as Completed', exact: true }).last().click()
+  await expect.poll(async () => (await admin().from('games').select('status, is_replay').eq('id', again).single()).data)
+    .toEqual({ status: 'completed', is_replay: true })
+  await page.goto(`/games/${again}`)
+  await expect(page.getByText('Playthrough 2 of 2').first()).toBeVisible()
+})

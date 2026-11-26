@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **Finishing a game a second time marks it as a replay.** When you mark a game Completed and you'd already finished another copy of it, that copy gets the replay tag automatically (and counts towards the replay achievements), however it was being tracked before, Ambient included. Both editions.
 - **Playing a game from your backlog starts that copy.** When the desktop app sees you playing a game you have in your Backlog, it now asks about that copy ("set it to Playing or Ambient?"; in the public edition it simply starts it as Playing), even if you also have it Completed from an earlier playthrough. Before, it could ask "is this a replay?" of the old Completed copy instead and add another one, so the game page counted an extra playthrough.
 - **Games in the activity feed open their page.** On Recent activity and the dashboard's Activity card, a game's cover and title (and each game in a "added 4 games to backlog" row) now link to that game's page, in both editions.
 - **The dashboard's streak has a living flame.** The streak pill beside the date now shows the same flickering orange flame as the profile's Play streak card, in both editions (still for reduced motion).
