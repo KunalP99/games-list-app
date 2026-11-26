@@ -50,7 +50,8 @@ export function useUrlSearch(delayMs = 300) {
       if (wanted) params.set('q', wanted)
       else params.delete('q')
       sent.current = wanted
-      router.push(`${pathname}?${params.toString()}`)
+      // Typing never moves the page.
+      router.push(`${pathname}?${params.toString()}`, { scroll: false })
     }, delayMs)
     return () => {
       if (timer.current) clearTimeout(timer.current)

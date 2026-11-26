@@ -89,6 +89,19 @@ export function featuresFor(edition: Edition) {
      * it, add to your library). The friends edition has neither.
      */
     gameStore: edition === 'public',
+    /**
+     * The profile you make your own (lib/profile-cards.ts): the profile card
+     * at the top, then cards you pick, size and drag into place, with the
+     * games list under them, and Profile first in the nav. The
+     * friends edition keeps its profile page as it was.
+     */
+    newProfile: edition === 'public',
+    /**
+     * The accent colour is picked from a set (lib/accent-choices.ts) that
+     * works in light and dark mode, not a free colour picker. The friends
+     * edition keeps its picker.
+     */
+    presetAccents: edition === 'public',
   }
 }
 

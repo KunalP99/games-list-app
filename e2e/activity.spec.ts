@@ -36,3 +36,26 @@ test('an unclosed session ends at its last check-in; a live one is still running
 
   await expect(page.getByText(/started playing ZZ E2E Live Session/).filter({ visible: true }).first(), 'a live session still counts as running').toBeVisible()
 })
+
+test('a game in the feed opens its page, from its title and its cover', async ({ page }) => {
+  const uid = await userId(TEST_USER.email)
+  if (!games.add) Object.assign(games, tempGames(uid))
+  const id = await games.add({ title: 'ZZ E2E Feed Link', status: 'playing', cover_image_url: 'https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.jpg' })
+  await admin().from('play_sessions').insert({ user_id: uid, game_id: id, client_session_id: 'e2e-link-' + id, minutes: 30, started_at: minutesAgo(90), ended_at: minutesAgo(60), last_checkpoint_at: minutesAgo(60), applied_hours: 0.5 })
+
+  await login(page, TEST_USER)
+  await page.goto('/activity')
+  // Every row naming the game links its cover and its title there (it shows
+  // twice: put in Playing, then the session).
+  const links = page.getByRole('link', { name: 'ZZ E2E Feed Link', exact: true }).filter({ visible: true })
+  const title = links.filter({ hasText: 'ZZ E2E Feed Link' })
+  const cover = links.filter({ has: page.locator('img') })
+  await expect(title.first()).toBeVisible()
+  await expect(cover.first()).toBeVisible()
+  for (const href of [...await title.evaluateAll(a => a.map(x => x.getAttribute('href'))), ...await cover.evaluateAll(a => a.map(x => x.getAttribute('href')))]) {
+    expect(href).toBe(`/games/${id}`)
+  }
+  await title.first().click()
+  await expect(page).toHaveURL(new RegExp(`/games/${id}$`))
+  await expect(page.getByRole('heading', { name: 'ZZ E2E Feed Link' }).first()).toBeVisible()
+})

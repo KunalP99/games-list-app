@@ -77,6 +77,11 @@ begin
     grant update (privacy_profile, privacy_games, privacy_achievements, privacy_activity, privacy_tickets)
       on public.profiles to authenticated;
   end if;
+  -- Profile cards and bio (db/profile-cards.sql), where that database has them.
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'profiles' and column_name = 'profile_layout') then
+    grant update (profile_layout, bio) on public.profiles to authenticated;
+  end if;
 end $$;
 
 -- ── Ticket ledger: no direct inserts ────────────────────────────────────────
