@@ -212,19 +212,10 @@
 
         <ul class="list" id="device-list"></ul>
 
-        <label class="field-label" for="device-label">Pair a new PC</label>
-        <div class="device-add-row">
-          <input class="field" id="device-label" type="text" placeholder="e.g. Work laptop" autocomplete="off" />
-          <button class="primary" id="device-create">Add</button>
-        </div>
-
-        <div id="device-token-wrap" hidden>
-          <p class="field-hint">Copy this now — it won't be shown again.</p>
-          <div class="device-token-row">
-            <code class="field" id="device-token-value"></code>
-            <button class="ghost" id="device-token-copy">Copy</button>
-          </div>
-        </div>
+        <!-- Pairing from here (this PC issuing a token for another) went: the
+             site refuses it (POST /api/agent/devices answers 410), since a
+             stolen token could keep itself alive that way. -->
+        <p class="field-hint">To add another PC, install the app on it and sign in there.</p>
 
         <p class="panel-msg" id="device-msg" hidden></p>
       </section>

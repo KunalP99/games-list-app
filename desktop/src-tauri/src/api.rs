@@ -436,29 +436,6 @@ pub async fn list_devices(base: &str, token: &str) -> Result<Vec<DeviceInfo>, St
     Ok(res.json::<DevicesResponse>().await.map_err(|e| e.to_string())?.devices)
 }
 
-#[derive(Debug, Deserialize)]
-struct NewDeviceResponse {
-    token: String,
-}
-
-/// Issue a token for pairing a *different* PC, from this already-paired one.
-pub async fn create_device_token(base: &str, token: &str, label: &str) -> Result<String, String> {
-    let res = client()
-        .map_err(|e| e.to_string())?
-        .post(format!("{base}/api/agent/devices"))
-        .bearer_auth(token)
-        .json(&serde_json::json!({ "label": label }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !res.status().is_success() {
-        let body = res.text().await.unwrap_or_default();
-        return Err(format!("could not create device: {body}"));
-    }
-    Ok(res.json::<NewDeviceResponse>().await.map_err(|e| e.to_string())?.token)
-}
-
 
 /// Record that an executable should never be auto-tracked — the toast's
 /// "Not a game" answer, mirrored to the server so it shows up in Settings

@@ -569,31 +569,6 @@ async function loadDevices() {
   }
 }
 
-el('device-create').addEventListener('click', async () => {
-  const input = el('device-label')
-  const label = input.value.trim()
-  if (!label) return
-  el('device-msg').hidden = true
-  el('device-token-wrap').hidden = true
-  const button = el('device-create')
-  button.disabled = true
-  try {
-    const token = await invoke('create_device_token', { label })
-    el('device-token-value').textContent = token
-    el('device-token-wrap').hidden = false
-    input.value = ''
-    showDeviceMsg('Device added. Copy the token now — it is not shown again.', true)
-    loadDevices()
-  } catch (err) {
-    showDeviceMsg(String(err), false)
-  } finally {
-    button.disabled = false
-  }
-})
-
-el('device-token-copy').addEventListener('click', () => {
-  navigator.clipboard?.writeText(el('device-token-value').textContent ?? '')
-})
 /**
  * Linking, in this window.
  *

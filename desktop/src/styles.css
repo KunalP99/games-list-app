@@ -451,16 +451,6 @@ button { font: inherit; cursor: pointer; border-radius: 8px; transition: backgro
   overflow-y: auto;
   padding: 14px;
 }
-.device-add-row { display: flex; gap: 8px; margin-top: 4px; }
-.device-add-row .field { flex: 1; }
-.device-token-row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-.device-token-row code {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
-  font-size: 12px;
-}
 #device-list .pill { margin-left: auto; }
 
 /* ── Update modal ────────────────────────────────────────────────────────── */

@@ -353,16 +353,6 @@ async fn list_devices(app: AppHandle) -> Result<Vec<api::DeviceInfo>, String> {
     api::list_devices(&base, &token).await
 }
 
-/// Issue a token for pairing a different PC, from this one's Devices panel.
-#[tauri::command]
-async fn create_device_token(app: AppHandle, label: String) -> Result<String, String> {
-    let (base, token) = {
-        let config = app.state::<Tracker>().snapshot_config();
-        (config.base(), config.token.clone().unwrap_or_default())
-    };
-    api::create_device_token(&base, &token, &label).await
-}
-
 /// Revoke a paired PC from the native Devices panel.
 #[tauri::command]
 async fn revoke_device(app: AppHandle, device_id: String) -> Result<(), String> {
@@ -740,7 +730,6 @@ pub fn run() {
             search_games,
             add_searched_game,
             list_devices,
-            create_device_token,
             revoke_device,
             sign_out,
             set_api_base,
