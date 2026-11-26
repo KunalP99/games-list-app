@@ -23,6 +23,8 @@ import { escapeLike } from '@/lib/query-escape'
 import { FEATURES } from '@/lib/edition'
 import { withOwnerNotes } from '@/lib/data/private-notes'
 import { rewardExplanation, type RewardWhy } from '@/lib/completion-rewards'
+import { playthroughOrder, type PlaythroughCopy } from '@/lib/replays'
+
 
 export default async function GameDetailPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -61,11 +63,10 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
   const [{ data: sameGames }, screenshots, achievements, extras, developerGames, { data: otherPlayers }] = await Promise.all([
     supabase
       .from('games')
-      .select('id, created_at')
+      .select('id, status, completion_date, start_date, created_at')
       .eq('user_id', game.user_id)
       // Escaped so a title's own `_` or `%` isn't read as a wildcard.
-      .ilike('title', escapeLike(game.title))
-      .order('created_at', { ascending: true }) as unknown as Promise<{ data: { id: string; created_at: string }[] | null }>,
+      .ilike('title', escapeLike(game.title)) as unknown as Promise<{ data: PlaythroughCopy[] | null }>,
     providerIdOf(game) ? getRawgScreenshots(providerIdOf(game)!) : Promise.resolve([] as RawgScreenshot[]),
     providerIdOf(game) ? getRawgAchievements(providerIdOf(game)!) : Promise.resolve([] as RawgAchievement[]),
     providerIdOf(game) ? getGameExtras(providerIdOf(game)!) : Promise.resolve(EMPTY_GAME_EXTRAS),
@@ -90,8 +91,10 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
   // eslint-disable-next-line react-hooks/purity -- server component: runs once per request
   const trackedSessions = toTrackedSessions(sessionRows ?? [], Date.now())
 
-  const totalPlaythroughs = sameGames?.length ?? 1
-  const playthroughNumber = (sameGames?.findIndex(g => g.id === game.id) ?? 0) + 1
+  // Numbered in the order they were played (lib/replays.ts), not added.
+  const playthroughs = playthroughOrder(sameGames ?? [])
+  const totalPlaythroughs = playthroughs.length || 1
+  const playthroughNumber = Math.max(0, playthroughs.findIndex(g => g.id === game.id)) + 1
 
   const gameVideos = mapGameVideos(game.youtube_videos ?? [])
 

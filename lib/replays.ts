@@ -18,3 +18,32 @@ export function finishedBefore(game: ReplayCandidate, library: ReplayCandidate[]
     && sameGame(other, game)
     && (other.completion_date == null || game.completion_date == null || other.completion_date <= game.completion_date))
 }
+
+export type PlaythroughCopy = {
+  id: string
+  status: string
+  completion_date: string | null
+  start_date: string | null
+  created_at: string
+}
+
+/**
+ * One person's copies of a game in the order they were played, for the game
+ * page's "Playthrough N of M". Finished runs (Completed or Dropped, with a
+ * date) come first, by that date; then the rest (being played, in the
+ * Backlog, or finished with no date), by when they were started, else when
+ * they were added. Not simply by when each copy was added: an import can add
+ * a newer run a few seconds before an older one, which numbered a 2025 replay
+ * "Playthrough 1" and the 2020 original "Playthrough 2".
+ */
+export function playthroughOrder<C extends PlaythroughCopy>(copies: C[]): C[] {
+  const finished = (c: C) => (c.status === 'completed' || c.status === 'dnf') && c.completion_date != null
+  const key = (c: C): [number, string, string] => finished(c)
+    ? [0, c.completion_date!, c.created_at]
+    : [1, c.start_date ?? '9999-12-31', c.created_at]
+  return [...copies].sort((a, b) => {
+    const [ga, da, ca] = key(a)
+    const [gb, db, cb] = key(b)
+    return ga - gb || da.localeCompare(db) || ca.localeCompare(cb)
+  })
+}

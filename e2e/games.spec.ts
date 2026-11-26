@@ -170,3 +170,15 @@ test('finishing a game a second time tags that copy as a replay', async () => {
   await page.goto(`/games/${again}`)
   await expect(page.getByText('Playthrough 2 of 2').first()).toBeVisible()
 })
+
+// The May import added each game's newer run a few seconds before the older
+// one; playthroughs are numbered by when they were played, not added.
+test('playthroughs are numbered by when they were played, not when added', async () => {
+  const title = 'ZZ E2E Numbered Runs'
+  const replay = await games.add({ title, status: 'completed', completion_date: '2025-09-15', is_replay: true })
+  const original = await games.add({ title, status: 'completed', completion_date: '2020-06-14' })
+  await page.goto(`/games/${original}`)
+  await expect(page.getByText('Playthrough 1 of 2').first()).toBeVisible()
+  await page.goto(`/games/${replay}`)
+  await expect(page.getByText('Playthrough 2 of 2').first()).toBeVisible()
+})
