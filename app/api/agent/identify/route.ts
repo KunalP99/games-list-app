@@ -13,7 +13,7 @@ import { identifyEmulated } from '@/lib/agent-emulator'
 import { pickRow, resolveRow, rowsWithIgdbIds, isTrackable, type LibraryRow } from '@/lib/trackable-row'
 import { writeExeLink } from '@/lib/exe-links'
 import { editionStatus } from '@/lib/edition'
-import { startBacklogCopy } from '@/lib/agent-start-backlog'
+import { preferBacklogCopy } from '@/lib/agent-start-backlog'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,18 +82,18 @@ function escapeLike(s: string): string {
  *                ordinary heuristic prompt — never cached, never remembered,
  *                because a search miss is not proof of anything.
  *   tracked    — already in the library as Playing or Ambient. Just track it.
- *   tracked    — also when a copy of the game was in the Backlog: playing a
- *                game you put in your backlog is starting it, so that copy
- *                is moved to Playing and tracked (lib/agent-start-backlog.ts),
- *                rather than asking "is this a replay?" of an older Completed
- *                copy and adding yet another row beside it.
- *   untracked  — in the library, but only completed or dropped. Never moved
- *                without being asked. Carries a `resumable` flag
- *                (`'completed'` | `'dnf'` | `null`; `'backlog'` from trackers
- *                that answer before this rule) naming which it is, and the
- *                agent turns that into the matching prompt: "replay?" /
- *                "resuming?". Accepting calls `/api/agent/resume`, which is
- *                what actually acts on it.
+ *   untracked  — in the library, but completed, dropped or in the backlog.
+ *                Carries a `resumable` flag (`'completed'` | `'dnf'` |
+ *                `'backlog'` | `null`) naming which, and the agent turns that
+ *                into the matching prompt: "replay?" / "resuming?" / "set to
+ *                Playing or Ambient?". Accepting calls `/api/agent/resume`,
+ *                which is what actually acts on it. A Backlog copy is always
+ *                the one asked about when there is one, never an older
+ *                Completed copy (lib/agent-start-backlog.ts), so answering
+ *                moves that copy instead of adding another row.
+ *   tracked    — also, in an edition without Ambient, for a Backlog copy:
+ *                with no Playing-or-Ambient choice to make, it's moved to
+ *                Playing and tracked straight away.
  *   added      — not in the library at all, so an Ambient row was created and
  *                tracking can start immediately.
  *
@@ -297,9 +297,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Nothing trackable, but a copy in the Backlog? That copy is the one being
-  // played now: move it to Playing and track it.
+  // played now: ask about it (Playing or Ambient), or where there's no
+  // Ambient, start it as Playing.
   if (existing && !isTrackable(existing)) {
-    existing = await startBacklogCopy(sb, existing, library, steamAppId)
+    existing = await preferBacklogCopy(sb, existing, library, steamAppId)
   }
 
   if (existing) {

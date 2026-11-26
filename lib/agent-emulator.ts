@@ -5,7 +5,7 @@ import { cleanEmulatorTitle, EMULATOR_PLATFORMS, type EmulatorRequest } from './
 import { pickRow, resolveRow, isTrackable, type LibraryRow } from './trackable-row'
 import { fileTrackerGame } from './agent-file-game'
 import { editionStatus } from './edition'
-import { startBacklogCopy } from './agent-start-backlog'
+import { preferBacklogCopy } from './agent-start-backlog'
 
 /**
  * A game running in an emulator: what `/api/agent/identify` (emulator mode)
@@ -51,11 +51,11 @@ async function remember(sb: Sb, userId: string, req: EmulatorRequest, gameId: st
 
 /**
  * The answer for a library row, marking it Emulated when its hours will be
- * tracked. A Backlog copy of an otherwise untrackable game is started first
- * (lib/agent-start-backlog.ts), as for any other running game.
+ * tracked. A Backlog copy of an otherwise untrackable game is the one asked
+ * about, or started (lib/agent-start-backlog.ts), as for any other running game.
  */
 async function answerFor(sb: Sb, owned: LibraryRow, rows: LibraryRow[]): Promise<EmulatorAnswer> {
-  const row = await startBacklogCopy(sb, owned, rows)
+  const row = await preferBacklogCopy(sb, owned, rows)
   const trackable = isTrackable(row)
   if (trackable) {
     await (sb.from('games') as any).update({ is_emulated: true }).eq('id', row.id).eq('is_emulated', false)
