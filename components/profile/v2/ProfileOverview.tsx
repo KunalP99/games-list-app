@@ -4,16 +4,8 @@ import { loadProfileCardData } from '@/lib/data/profile-cards'
 import { PROFILE_CARDS, PROFILE_CARD_IDS, isCardItem, normaliseLayout, trimEmpties, type ProfileCardId } from '@/lib/profile-cards'
 import type { PrivacyKey } from '@/lib/friends'
 import ProfileView from './ProfileView'
-import type { ProfileFigures } from './ProfileCard'
-
-/** The headline numbers on the profile card: every game but Ambient. */
-export function profileFigures(stats: UserStats): ProfileFigures {
-  return {
-    hours: stats.totalHours,
-    games: stats.completedCount + stats.dnfCount + stats.backlogCount + stats.playingCount,
-    completed: stats.completedCount,
-  }
-}
+import { resolveBannerImage } from '@/lib/hero-banner'
+import { getCurrentStreak } from '@/lib/data/current-streak'
 
 /**
  * The public edition's profile Overview. Loads only what the cards need: the
@@ -39,7 +31,10 @@ export default async function ProfileOverview({
   friendButton: React.ReactNode
 }) {
   const supabase = await createClient()
-  const stats = await computeUserStats(supabase, profile.id)
+  const [stats, streak] = await Promise.all([
+    computeUserStats(supabase, profile.id),
+    allows('privacy_activity') ? getCurrentStreak(supabase, profile.id) : Promise.resolve(0),
+  ])
 
   const stored = normaliseLayout(profile.profile_layout)
   // A visitor doesn't get the cards their privacy hides (the rest close up);
@@ -51,6 +46,11 @@ export default async function ProfileOverview({
   const shelfChosen = isOwner ? undefined : (placed.find(item => item.card === 'shelf')?.games ?? [])
   const data = await loadProfileCardData(supabase, profile.id, cards, stats, shelfChosen)
   const seesGames = allows('privacy_games')
+  // The banner (the Cinematic one, as on the friends edition): this week's
+  // game's picture, then only what this viewer may see. Its long lists aren't
+  // needed by the banner, so they don't go to the browser.
+  const bannerImage = stats.heroGame ? await resolveBannerImage(stats.heroGame) : null
+  const heroStats: UserStats = { ...stats, genreData: [], platformData: [], gamesPerYear: [] }
 
   return (
     <ProfileView
@@ -58,8 +58,7 @@ export default async function ProfileOverview({
       username={profile.username}
       initials={initials}
       accent={accent}
-      xp={profile.xp ?? 0}
-      figures={seesGames ? profileFigures(stats) : null}
+      hero={{ stats: heroStats, bannerImage, streak, showTickets: allows('privacy_tickets'), showFigures: seesGames }}
       layout={layout}
       bio={profile.bio}
       data={data}

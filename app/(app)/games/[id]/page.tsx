@@ -516,7 +516,7 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
 
       {isOwner ? (
         <Link href="/games" className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">
-          ← Back to {FEATURES.newProfile ? 'My Games' : 'Profile'}
+          ← Back to Profile
         </Link>
       ) : ownerProfile ? (
         <Link href={`/users/${encodeURIComponent(ownerProfile.username)}`} className="inline-block text-sm text-fg-subtle hover:text-fg-secondary transition-colors">

@@ -63,16 +63,17 @@ export function featuresFor(edition: Edition) {
     /**
      * The "Cinematic" banner on My Games and profiles (components/profile/
      * ProfileHero.tsx): this week's game sharp and drifting, the name in huge
-     * type. The public edition keeps the earlier blurred banner on My Games.
+     * type. Both editions (the public profile shows it above its cards); off,
+     * the earlier blurred banner (ClassicHero).
      */
-    cinematicBanner: edition === 'friends',
+    cinematicBanner: true,
     /**
      * Level tiers (lib/level-tiers.ts): the banner's level badge and the frame
      * round people's avatars (components/profile/TierFrame.tsx: banner, nav,
      * dashboard Friends card, Activity, a game's "Played by"). Off, avatars
-     * are plain circles as before.
+     * are plain circles as before. Both editions.
      */
-    levelTiers: edition === 'friends',
+    levelTiers: true,
     /**
      * Sign-up fit for strangers: chosen usernames (lib/username.ts, changeable
      * every 30 days), stronger passwords, Turnstile bot checks, Google and

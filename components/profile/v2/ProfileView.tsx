@@ -28,6 +28,7 @@ import {
   gridEntries,
   isCardItem,
   isProfileCardId,
+  cardDrop,
   dropOnCard,
   moveToRow,
   moveToSpace,
@@ -44,7 +45,8 @@ import {
   type ProfileCardId,
   type ProfileLayout,
 } from '@/lib/profile-cards'
-import ProfileCard, { type ProfileFigures } from './ProfileCard'
+import ProfileHero from '@/components/profile/ProfileHero'
+import type { UserStats } from '@/lib/user-stats'
 import CardBody from './CardBody'
 import AddCardDialog from './AddCardDialog'
 import ShelfPicker from './ShelfPicker'
@@ -95,8 +97,8 @@ type Props = {
   username: string
   initials: string
   accent: string
-  xp: number
-  figures: ProfileFigures | null
+  /** The Cinematic banner at the top (components/profile/ProfileHero.tsx). */
+  hero: { stats: UserStats; bannerImage: string | null; streak: number; showTickets: boolean; showFigures: boolean }
   layout: ProfileLayout
   bio: string | null
   data: ProfileCardData
@@ -172,9 +174,9 @@ export default function ProfileView(props: Props) {
       return setDropHint((e.over?.data.current as { row: number } | undefined)?.row === 0 ? 'Move to the top' : 'Move here')
     }
     if (String(over).startsWith(SPACE_ID)) return setDropHint('Put it here')
-    const a = layout.find(item => item.card === from)
-    const b = layout.find(item => item.card === over)
-    setDropHint(a && b && a.size === b.size ? 'Swap' : 'New row above')
+    if (!isProfileCardId(from) || !isProfileCardId(over)) return setDropHint(null)
+    const drop = cardDrop(layout, from, over)
+    setDropHint(drop === 'swap' ? 'Swap' : drop === 'swap-pair' ? 'Swap with these two' : 'New row above')
   }
 
   const onDragStart = (e: DragStartEvent) => {
@@ -287,14 +289,16 @@ export default function ProfileView(props: Props) {
 
   return (
     <div className="space-y-5">
-      <ProfileCard
-        name={props.name}
-        username={props.username}
+      <ProfileHero
+        stats={props.hero.stats}
+        bannerImage={props.hero.bannerImage}
         initials={props.initials}
         accent={accent}
-        xp={props.xp}
+        wheelTurn={null}
+        showTickets={props.hero.showTickets}
+        showFigures={props.hero.showFigures}
+        streak={props.hero.streak}
         bio={bio}
-        figures={props.figures}
         action={action || undefined}
       />
 

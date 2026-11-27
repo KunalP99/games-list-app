@@ -61,8 +61,8 @@ test('the nav’s Profile opens your profile: the profile card and the default c
   await page.getByRole('link', { name: 'Profile', exact: true }).first().click()
   await expect(page).toHaveURL(/\/users\/test-alex$/)
   const card = page.getByRole('region', { name: 'Alex (test)' })
-  await expect(card.getByText('Hours played')).toBeVisible()
-  await expect(card.getByText('Games', { exact: true })).toBeVisible()
+  await expect(card.getByText('played', { exact: true })).toBeVisible()
+  await expect(card.getByText('completed', { exact: true })).toBeVisible()
   await expect.poll(() => cardsOnPage(page))
     .toEqual(['playing', 'finish_rate', 'achievements', 'streak', 'completed_this_year', 'genres', 'recently_completed', 'platforms'])
 })
@@ -303,7 +303,7 @@ test('someone else sees the layout without edit controls, minus what privacy hid
 test('the games list sits under the cards and its filters work', async ({ page }) => {
   await login(page, TEST_USER)
   await openOwnProfile(page)
-  const games = page.getByRole('region', { name: 'Games' })
+  const games = page.getByRole('region', { name: 'My Games' })
   await expect(games.getByText('Persona 5 Royal').first()).toBeVisible()
   // Below the last card.
   const lastCard = (await page.locator('[data-card]').last().boundingBox())!

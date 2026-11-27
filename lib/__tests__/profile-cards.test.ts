@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  cardDrop,
   dropOnCard,
   layoutRows,
   moveToRow,
@@ -491,5 +492,80 @@ describe('moving a card to a row of its own', () => {
     expect(rows(dropOnCard(layout, 'calendar', 'completed_this_year'))).toEqual([
       ['calendar'], ['streak', 'completed_this_year', 'finish_rate', 'achievements'], ['recently_completed', 'playing'], ['shelf'],
     ])
+  })
+})
+
+describe('swapping a half card and a square', () => {
+  const show = (l: ProfileLayout) => l.map(i => `${i.card}:${i.size}`)
+  // The cards and spaces in each row, as the grid lays them out.
+  const rows = (l: ProfileLayout) => layoutRows(l).map(r => r.map(i => l[i].card))
+  const E = 'empty'
+
+  it('a half dropped on two squares swaps with the pair; nothing else moves', () => {
+    const layout: ProfileLayout = [
+      { card: 'playing', size: 'half' }, { card: 'streak', size: 'small' }, { card: 'achievements', size: 'small' },
+      { card: 'finish_rate', size: 'small' }, { card: 'completed_this_year', size: 'small' }, { card: 'genres', size: 'half' },
+      { card: 'calendar', size: 'full' },
+    ]
+    expect(cardDrop(layout, 'playing', 'finish_rate')).toBe('swap-pair')
+    expect(rows(dropOnCard(layout, 'playing', 'finish_rate'))).toEqual([
+      ['finish_rate', 'completed_this_year', 'streak', 'achievements'], ['playing', 'genres'], ['calendar'],
+    ])
+    // The same pair dropped on the half, either square: the same swap.
+    expect(rows(dropOnCard(layout, 'completed_this_year', 'playing'))).toEqual(rows(dropOnCard(layout, 'playing', 'finish_rate')))
+  })
+
+  it('a square with an empty space beside it swaps with a half, leaving the space where the half was', () => {
+    const layout: ProfileLayout = [
+      { card: 'playing', size: 'half' }, { card: 'genres', size: 'half' },
+      { card: 'streak', size: 'small' }, { card: 'empty', size: 'small' }, { card: 'platforms', size: 'half' },
+    ]
+    expect(cardDrop(layout, 'streak', 'playing')).toBe('swap')
+    expect(rows(dropOnCard(layout, 'streak', 'playing'))).toEqual([['streak', E, 'genres'], ['playing', 'platforms']])
+    expect(rows(dropOnCard(layout, 'playing', 'streak'))).toEqual([['streak', E, 'genres'], ['playing', 'platforms']])
+  })
+
+  it('uses the square to the left when there is none to the right', () => {
+    const layout: ProfileLayout = [
+      { card: 'playing', size: 'half' }, { card: 'streak', size: 'small' }, { card: 'achievements', size: 'small' },
+      { card: 'genres', size: 'half' },
+    ]
+    expect(rows(dropOnCard(layout, 'genres', 'achievements'))).toEqual([['playing', 'genres'], ['streak', 'achievements']])
+  })
+
+  it('counts the unfilled end of a row as the space beside the square', () => {
+    const layout: ProfileLayout = [
+      { card: 'playing', size: 'half' }, { card: 'streak', size: 'small' },
+      { card: 'genres', size: 'half' }, { card: 'platforms', size: 'half' },
+    ]
+    expect(rows(dropOnCard(layout, 'genres', 'streak'))).toEqual([['playing', 'genres'], ['streak', E, 'platforms']])
+  })
+
+  it('a square between two halves has no half-width space: a new row instead', () => {
+    const layout: ProfileLayout = [
+      { card: 'streak', size: 'small' }, { card: 'playing', size: 'half' }, { card: 'achievements', size: 'small' },
+      { card: 'genres', size: 'half' }, { card: 'platforms', size: 'half' },
+    ]
+    expect(cardDrop(layout, 'genres', 'streak')).toBe('new-row')
+    expect(cardDrop(layout, 'streak', 'genres')).toBe('new-row')
+  })
+
+  it('every row keeps its width, so nothing slides between rows', () => {
+    const layout: ProfileLayout = [
+      { card: 'playing', size: 'half' }, { card: 'streak', size: 'small' }, { card: 'achievements', size: 'small' },
+      { card: 'finish_rate', size: 'small' }, { card: 'empty', size: 'small' }, { card: 'genres', size: 'half' },
+      { card: 'calendar', size: 'full' },
+    ]
+    const before = rows(layout).length
+    for (const [a, b] of [['playing', 'finish_rate'], ['finish_rate', 'genres'], ['streak', 'genres']] as const) {
+      const after = dropOnCard(layout, a, b)
+      expect(rows(after).length).toBe(before)
+      expect(show(after).filter(x => !x.startsWith('empty'))).toHaveLength(6)
+    }
+  })
+
+  it('a full card still takes a new row', () => {
+    const layout: ProfileLayout = [{ card: 'streak', size: 'small' }, { card: 'calendar', size: 'full' }]
+    expect(cardDrop(layout, 'calendar', 'streak')).toBe('new-row')
   })
 })

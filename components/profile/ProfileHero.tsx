@@ -1,4 +1,4 @@
-import { levelProgress } from '@/lib/achievements'
+import { levelProgress } from '@/lib/levels'
 import type { UserStats } from '@/lib/user-stats'
 import { FEATURES } from '@/lib/edition'
 import ClassicHero from '@/components/profile/ClassicHero'
@@ -81,7 +81,10 @@ export default function ProfileHero({
   accent,
   wheelTurn,
   showTickets = true,
+  showFigures = true,
   streak = 0,
+  bio,
+  action,
 }: {
   stats: UserStats
   /** Resolved by the page (lib/hero-banner.ts) — a live screenshot of this
@@ -94,6 +97,12 @@ export default function ProfileHero({
   showTickets?: boolean
   /** Their current play streak in days (lib/data/current-streak.ts); 0 hides the flame. */
   streak?: number
+  /** False when the viewer may not see their games (public edition's privacy): no figures. */
+  showFigures?: boolean
+  /** The public profile's bio (or its editor while editing), under the name. */
+  bio?: React.ReactNode
+  /** The public profile's Edit profile button, or the friend button for a visitor; top right. */
+  action?: React.ReactNode
 }) {
   if (!FEATURES.cinematicBanner) {
     return <ClassicHero stats={stats} bannerImage={bannerImage} initials={initials} accent={accent} wheelTurn={wheelTurn} showTickets={showTickets} />
@@ -117,7 +126,8 @@ export default function ProfileHero({
     // name and figures read over it. The accent fills the card from the first
     // paint (so it looks finished while the image downloads) and runs along
     // the bottom edge as a line.
-    <div
+    <section
+      aria-label={name}
       className="relative rounded-xl border border-edge-base overflow-hidden"
       style={{ backgroundColor: accent }}
     >
@@ -157,8 +167,10 @@ export default function ProfileHero({
       <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ backgroundColor: accent }} />
 
       <div className="relative flex flex-col justify-between gap-6 min-h-[300px] sm:min-h-[380px] px-5 sm:px-10 pt-6 sm:pt-8 pb-6 sm:pb-8">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+        {/* Wraps on narrow screens: the streak, wheel pill and Edit profile /
+            friend button drop under the name rather than squeezing it. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-1 basis-[220px] items-center gap-3 min-w-0">
             {/* Framed in the level's tier, like the badge beside it. */}
             <TierFrame level={level}>
               <span
@@ -204,6 +216,7 @@ export default function ProfileHero({
                 <span className="font-display text-2xl sm:text-[32px] leading-none text-white tabular-nums drop-shadow">{streak}</span>
               </span>
             )}
+            {action}
             {wheelTurn && (
               <span className="shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-black/40 text-white border border-white/25 backdrop-blur-sm">
                 🎡 {wheelTurn === 'spin' ? 'Spin turn' : wheelTurn === 'spin_reroll' ? 'Spin + Reroll turn' : 'Choose turn'}
@@ -215,10 +228,11 @@ export default function ProfileHero({
         <h1 className="font-display uppercase text-white text-[clamp(3rem,9vw,6.5rem)] leading-[0.9] tracking-tight break-words line-clamp-2 drop-shadow-lg">
           {name}
         </h1>
+        {bio && <div className="-mt-2 max-w-xl">{bio}</div>}
 
         <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-5">
           <div className="flex flex-wrap gap-x-8 sm:gap-x-10 gap-y-4">
-            {figures.map(([value, label]) => (
+            {showFigures && figures.map(([value, label]) => (
               <StatFigure key={label} value={value} label={label} />
             ))}
             {showTickets && <TicketFigure total={stats.ticketsEarned} current={profile.ticket_balance} />}
@@ -231,6 +245,6 @@ export default function ProfileHero({
           )}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

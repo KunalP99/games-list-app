@@ -12,8 +12,8 @@ import { FEATURES, wheelOn } from '@/lib/edition'
 const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
   // The friends edition calls it Profile: it carries your banner and stats.
-  // The public edition has a separate Profile (newProfile), so it stays My Games.
-  { href: '/games', label: FEATURES.newProfile ? 'My Games' : 'Profile' },
+  // The public edition leaves it out for its own Profile (newProfile).
+  { href: '/games', label: 'Profile' },
   { href: '/wheel', label: 'Wheel' },
 ]
 
@@ -40,10 +40,12 @@ export default function Nav({ profile, notificationSlot }: { profile: Profile; n
   // user — it's shared history, and still worth looking back on.
   // Public edition: your own profile comes first (lib/edition.ts newProfile).
   const profileHref = `/users/${encodeURIComponent(profile.username)}`
-  const primaryNavItems = [
-    ...(FEATURES.newProfile ? [{ href: profileHref, label: 'Profile' }] : []),
-    ...(wheelOn(profile) ? navItemsBefore : navItemsBefore.filter(item => item.href !== '/wheel')),
-  ]
+  // Public edition: Dashboard, then your Profile, which carries your games
+  // list (no separate My Games page there: /games redirects to it).
+  const before = wheelOn(profile) ? navItemsBefore : navItemsBefore.filter(item => item.href !== '/wheel')
+  const primaryNavItems = FEATURES.newProfile
+    ? [before[0], { href: profileHref, label: 'Profile' }, ...before.slice(1).filter(item => item.href !== '/games')]
+    : before
   // The wheel's page is active only on itself (not Wheel History); your
   // profile on itself and its tabs, not on someone whose name starts the same.
   const isActive = (href: string) =>

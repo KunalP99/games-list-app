@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
@@ -65,7 +66,19 @@ export default async function ProfileGames({
 
   return (
     <section aria-labelledby="profile-games" className="space-y-4 pt-4">
-      <h2 id="profile-games" className="text-xl font-bold text-fg-base">Games</h2>
+      {/* Your own list is "My Games", with + Add Game (the public edition has
+          no separate My Games page); someone else's is just "Games". */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="profile-games" className="text-xl font-bold text-fg-base">{isOwner ? 'My Games' : 'Games'}</h2>
+        {isOwner && (
+          <Link
+            href={`/games/new?status=${selectedStatus}`}
+            className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+          >
+            + Add Game
+          </Link>
+        )}
+      </div>
       <Suspense>
         <GameFilters />
       </Suspense>

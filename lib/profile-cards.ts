@@ -415,9 +415,54 @@ export function moveToRow(layout: ProfileLayout, card: ProfileCardId, row: numbe
 }
 
 /**
- * A card dropped on another: the same size, they swap places; otherwise the
- * dragged card takes a new row just before the other card's row. Either way
- * no row loses or gains any other card.
+ * The half-width space a square sits in, for swapping with a half card: the
+ * square and the square beside it in its row (a card or an empty space; the
+ * one to its right first, then its left), or the row's unfilled column right
+ * after it (`[index]` alone, `gap` set). Null when there's no such space: the
+ * square sits between halves, say. Layout indexes, left to right.
+ */
+function halfSpaceOf(layout: ProfileLayout, index: number): { indexes: number[]; gap: boolean } | null {
+  if (layout[index]?.size !== 'small') return null
+  const row = layoutRows(layout).find(indexes => indexes.includes(index))!
+  const at = row.indexOf(index)
+  const isSquare = (i: number | undefined) => i != null && layout[i].size === 'small'
+  if (isSquare(row[at + 1])) return { indexes: [index, row[at + 1]], gap: false }
+  if (isSquare(row[at - 1])) return { indexes: [row[at - 1], index], gap: false }
+  const used = row.reduce((sum, i) => sum + CARD_COLUMNS[layout[i].size], 0)
+  if (at === row.length - 1 && used < GRID_COLUMNS) return { indexes: [index], gap: true }
+  return null
+}
+
+/** What dropping `card` on `target` does (the hint shown while dragging). */
+export type CardDrop = 'swap' | 'swap-pair' | 'new-row'
+
+export function cardDrop(layout: ProfileLayout, card: ProfileCardId, target: ProfileCardId): CardDrop {
+  const from = layout.findIndex(item => item.card === card)
+  const to = layout.findIndex(item => item.card === target)
+  if (from < 0 || to < 0 || from === to) return 'new-row'
+  const a = layout[from].size
+  const b = layout[to].size
+  if (a === b) return 'swap'
+  if (a === 'full' || b === 'full') return 'new-row'
+  const space = halfSpaceOf(layout, a === 'small' ? from : to)
+  if (!space) return 'new-row'
+  // Two square cards go together; a square with an empty space beside it is
+  // a plain swap.
+  return space.indexes.filter(i => isCardItem(layout[i])).length > 1 ? 'swap-pair' : 'swap'
+}
+
+/**
+ * A card dropped on another swaps with it, and no other card moves.
+ *
+ * - The same size: they swap places.
+ * - A half and a square: the half swaps with the half-width space the square
+ *   sits in (`halfSpaceOf`): the square and the space beside it. When that's
+ *   an empty space, the square goes where the half was with an empty space
+ *   beside it; when it's another square, the two squares move together into
+ *   the half's place. Either way it's 2 columns for 2, so every row keeps its
+ *   width.
+ * - A full card, or a square with no half-width space (between two halves):
+ *   the dragged card takes a new row just before the other card's row.
  */
 export function dropOnCard(layout: ProfileLayout, card: ProfileCardId, target: ProfileCardId): ProfileLayout {
   const from = layout.findIndex(item => item.card === card)
@@ -427,6 +472,19 @@ export function dropOnCard(layout: ProfileLayout, card: ProfileCardId, target: P
     const next = [...layout]
     ;[next[from], next[to]] = [next[to], next[from]]
     return next
+  }
+  if (cardDrop(layout, card, target) !== 'new-row') {
+    const half = layout[from].size === 'half' ? from : to
+    const space = halfSpaceOf(layout, half === from ? to : from)!
+    const pair: ProfileLayout = space.indexes.map(i => layout[i])
+    if (space.gap) pair.push({ card: 'empty', size: 'small' })
+    const next: ProfileLayout = []
+    layout.forEach((item, i) => {
+      if (i === half) next.push(...pair)
+      else if (i === space.indexes[0]) next.push(layout[half])
+      else if (!space.indexes.includes(i)) next.push(item)
+    })
+    return trimEmpties(next)
   }
   const row = layoutRows(layout).findIndex(indexes => indexes.includes(to))
   return moveToRow(layout, card, row)

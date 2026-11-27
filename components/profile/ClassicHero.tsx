@@ -1,4 +1,4 @@
-import { levelProgress } from '@/lib/achievements'
+import { levelProgress } from '@/lib/levels'
 import type { UserStats } from '@/lib/user-stats'
 import { FEATURES } from '@/lib/edition'
 import { LevelAvatar } from '@/components/profile/ProfileHero'

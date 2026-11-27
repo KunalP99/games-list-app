@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { computeUserStats } from '@/lib/user-stats'
@@ -24,6 +25,19 @@ export default async function GamesPage(
   const searchParams = await props.searchParams;
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
+
+  // The public edition has no separate My Games page: your profile carries
+  // the same list (ProfileGames), so /games (old links, the dashboard's Games
+  // tile) goes there, keeping the tab, sort, view and search.
+  if (FEATURES.newProfile && user) {
+    const { data: me } = await supabase.from('profiles').select('username').eq('id', user.id).single() as { data: { username: string } | null }
+    if (me) {
+      const query = new URLSearchParams(
+        Object.entries(searchParams).filter((e): e is [string, string] => typeof e[1] === 'string'),
+      ).toString()
+      redirect(`/users/${encodeURIComponent(me.username)}${query ? `?${query}` : ''}`)
+    }
+  }
 
   // Default to Completed in place rather than redirecting. /games used to bounce
   // to /games?status=completed&sort=completion_date, which cost a second server
@@ -109,27 +123,17 @@ export default async function GamesPage(
     .toUpperCase() || '?'
   const accent = stats.profile.accent_colour ?? '#7c3aed'
 
-  // "My Games", the count and Import / Add Game: at the top in the public
-  // edition, just above the list in the friends edition (where the page is
-  // your Profile and the banner carries your name).
-  const Heading = FEATURES.newProfile ? 'h1' : 'h2'
+  // "My Games", the count and + Add Game, just above the list: the page is
+  // your Profile (friends edition) and the banner carries your name.
   const gamesHeader = (
     <div className="flex items-center justify-between">
       <div>
-        <Heading className="text-2xl font-bold text-fg-base">My Games</Heading>
+        <h2 className="text-2xl font-bold text-fg-base">My Games</h2>
         <p className="text-sm text-fg-muted mt-0.5">{games?.length ?? 0} games</p>
       </div>
       <div className="flex items-center gap-2">
-        {/* Friends edition: no Import button here (the /import page is still
-            there; it's due to move somewhere else). */}
-        {FEATURES.newProfile && (
-          <Link
-            href="/import"
-            className="px-3 py-2 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
-          >
-            Import
-          </Link>
-        )}
+        {/* No Import button here: the /import page is still there, and is
+            due to move somewhere else. */}
         <Link
           href={`/games/new?status=${selectedStatus}`}
           className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
@@ -148,9 +152,6 @@ export default async function GamesPage(
         <HeroWithBanner stats={stats} initials={initials} accent={accent} streak={streak} />
       </Suspense>
 
-      {/* The public edition keeps the heading and buttons at the top. */}
-      {FEATURES.newProfile && gamesHeader}
-
       {/* Now Playing strip — always visible if any games are in progress.
           Friends edition only: the public edition's Playing games show in
           Recently played (tracked ones) and the Playing tab (lib/edition.ts). */}
@@ -165,9 +166,9 @@ export default async function GamesPage(
           edition, every Playing game the tracker has seen. */}
       <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner />
 
-      {/* Friends edition: the page is your Profile (the banner's name is its
-          heading), and "My Games" titles the list, under Recently played. */}
-      {!FEATURES.newProfile && gamesHeader}
+      {/* The page is your Profile (the banner's name is its heading), and
+          "My Games" titles the list, under Recently played. */}
+      {gamesHeader}
 
       <Suspense>
         <GameFilters />
