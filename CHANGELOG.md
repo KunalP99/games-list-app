@@ -7,6 +7,7 @@ All notable changes to **GamesList** are documented here, newest first.
 ## [Unreleased]
 
 ### Added
+- **No wheel-turn pill on profile banners** (friends edition): the banner no longer shows "Spin turn" and the like.
 - **A quieter Edit profile button.** On the public profile's banner it's now a small white button with rounded corners, in the bottom-right corner just above "This week's banner" (the friend button sits there for visitors).
 - **Dropping a card on another always swaps them** in the profile editor (public edition). A half card and a square swap too: the half takes the square's place along with the space beside it, and the square goes where the half was (with an empty space beside it, or together with the square that was beside it, which the hint calls "Swap with these two"). No other card moves. A full card, or a square squeezed between two halves, still gets a new row above.
 - **Public edition: no separate My Games page.** Your profile already has the same games list, so My Games is gone from the nav and /games takes you to your profile (keeping the tab, sort and search). The nav now reads Dashboard, Profile, Achievements, Stats. On your own profile the list is titled **My Games**, with **+ Add Game**; on someone else's it's still Games.

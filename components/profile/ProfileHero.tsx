@@ -216,11 +216,8 @@ export default function ProfileHero({
                 <span className="font-display text-2xl sm:text-[32px] leading-none text-white tabular-nums drop-shadow">{streak}</span>
               </span>
             )}
-            {wheelTurn && (
-              <span className="shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-black/40 text-white border border-white/25 backdrop-blur-sm">
-                🎡 {wheelTurn === 'spin' ? 'Spin turn' : wheelTurn === 'spin_reroll' ? 'Spin + Reroll turn' : 'Choose turn'}
-              </span>
-            )}
+            {/* No wheel-turn pill here (removed 2026-11-27); the earlier
+                ClassicHero still takes `wheelTurn`. */}
           </div>
         </div>
 

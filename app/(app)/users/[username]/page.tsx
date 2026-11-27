@@ -14,7 +14,7 @@ import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
-import { FEATURES, wheelOn } from '@/lib/edition'
+import { FEATURES } from '@/lib/edition'
 import { ilikeAnyFilter } from '@/lib/query-escape'
 import FriendButton from '@/components/friends/FriendButton'
 import PrivateProfile from '@/components/friends/PrivateProfile'
@@ -130,11 +130,6 @@ export default async function UserProfilePage(
   const view: 'grid' | 'table' | 'cover' = rawView === 'grid' || rawView === 'table' ? rawView : 'cover'
 
 
-
-  // Someone who's opted out of wheel turns in Settings doesn't advertise one.
-  // Accounts predating the column read as opted in.
-  const wheelTurnBadge = wheelOn(profile) ? (profile.wheel_turn ?? null) : null
-
   return (
     <div className="space-y-6">
       {friendButton && <div className="flex justify-end -mb-3">{friendButton}</div>}
@@ -143,7 +138,7 @@ export default async function UserProfilePage(
         bannerImage={bannerImage}
         initials={initials}
         accent={accent}
-        wheelTurn={wheelTurnBadge}
+        wheelTurn={null}
         showTickets={allows('privacy_tickets')}
         streak={streak}
       />
