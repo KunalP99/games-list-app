@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hoursTickets, minutesToNextTicket, typedHoursTickets, wheelCompletionTickets, MINUTES_PER_TICKET } from '../hours-tickets'
+import { hoursTickets, hoursTicketProgress, minutesToNextTicket, typedHoursTickets, wheelCompletionTickets, MINUTES_PER_TICKET } from '../hours-tickets'
 
 describe('hoursTickets: the 25-hour counter', () => {
   it('pays nothing until 25 hours, then 1 and keeps the rest', () => {
@@ -52,5 +52,12 @@ describe('typedHoursTickets', () => {
     expect(typedHoursTickets(80, 30)).toBe(2)
     expect(typedHoursTickets(30, 45)).toBe(0)
     expect(typedHoursTickets(null, 0)).toBe(0)
+  })
+})
+
+describe('hoursTicketProgress: the dashboard tile', () => {
+  it('shows whole hours, the wording and how far along', () => {
+    expect(hoursTicketProgress(18 * 60 + 20)).toEqual({ short: '18 / 25h', label: '18 / 25h to your next ticket', percent: 73 })
+    expect(hoursTicketProgress(0)).toEqual({ short: '0 / 25h', label: '0 / 25h to your next ticket', percent: 0 })
   })
 })

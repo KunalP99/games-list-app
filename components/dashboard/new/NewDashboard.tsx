@@ -20,7 +20,7 @@ import GameSearchBar from '@/components/discover/GameSearchBar'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { levelProgress } from '@/lib/achievements'
 import { getFriendsOverview, getPlayingNowFor, type FriendsOverview } from '@/lib/data/friends'
-import { hoursToNextTicketLabel } from '@/lib/hours-tickets'
+import { hoursTicketProgress } from '@/lib/hours-tickets'
 import { wheelLockGame } from '@/lib/data/wheel-lock'
 
 // How far back sessions are loaded: a year (plus a day's slack for the time
@@ -192,7 +192,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
               subClass="text-emerald-600 dark:text-emerald-400"
               href="/tickets"
               // Progress to the next ticket from hours played (lib/hours-tickets.ts).
-              foot={FEATURES.hoursTickets ? hoursToNextTicketLabel(profile?.hours_ticket_minutes ?? 0) : undefined}
+              progress={FEATURES.hoursTickets ? hoursTicketProgress(profile?.hours_ticket_minutes ?? 0) : undefined}
             />
           </div>
 
@@ -236,7 +236,11 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   )
 }
 
-function Stat({ label, value, sub, subClass = 'text-fg-muted', href, foot }: { label: string; value: string; sub?: string; subClass?: string; href?: string; foot?: string }) {
+function Stat({ label, value, sub, subClass = 'text-fg-muted', href, progress }: {
+  label: string; value: string; sub?: string; subClass?: string; href?: string
+  /** Progress to something (the next hours ticket): a small "18 / 25h" top right and a thin line along the bottom, so the tile stays the same height as the others. */
+  progress?: { short: string; label: string; percent: number }
+}) {
   const body = (
     <>
       <p className="text-xs text-fg-muted">{label}</p>
@@ -244,10 +248,27 @@ function Stat({ label, value, sub, subClass = 'text-fg-muted', href, foot }: { l
         <span className="font-display text-[28px] leading-[0.9] text-fg-base">{value}</span>
         {sub && <span className={`ml-1.5 text-xs font-semibold ${subClass}`}>{sub}</span>}
       </p>
-      {foot && <p className="mt-1.5 text-[11px] text-fg-muted tabular-nums">{foot}</p>}
+      {progress && (
+        <>
+          <span className="absolute right-3 top-3.5 text-[11px] text-fg-muted tabular-nums" title={progress.label}>
+            {progress.short}
+            <span className="sr-only"> ({progress.label})</span>
+          </span>
+          <span
+            role="progressbar"
+            aria-label={progress.label}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress.percent}
+            className="absolute inset-x-0 bottom-0 h-1 bg-surface-active"
+          >
+            <span className="block h-full bg-brand-500" style={{ width: `${progress.percent}%` }} />
+          </span>
+        </>
+      )}
     </>
   )
-  const cls = 'block rounded-xl bg-surface-base border border-edge-base p-4'
+  const cls = 'relative block overflow-hidden rounded-xl bg-surface-base border border-edge-base p-4'
   return href
     ? <Link href={href} className={`${cls} hover:border-brand-300 dark:hover:border-brand-700 transition-colors`}>{body}</Link>
     : <div className={cls}>{body}</div>

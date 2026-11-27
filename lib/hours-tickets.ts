@@ -60,3 +60,13 @@ export function hoursToNextTicketLabel(counter: number): string {
   const played = Math.floor((Math.max(0, counter) % MINUTES_PER_TICKET) / 60)
   return `${played} / ${HOURS_PER_TICKET}h to your next ticket`
 }
+
+/** The dashboard's Tickets tile: "18 / 25h", the full wording, and how far along (0–100). */
+export function hoursTicketProgress(counter: number): { short: string; label: string; percent: number } {
+  const minutes = Math.max(0, counter) % MINUTES_PER_TICKET
+  return {
+    short: `${Math.floor(minutes / 60)} / ${HOURS_PER_TICKET}h`,
+    label: hoursToNextTicketLabel(counter),
+    percent: Math.round((minutes / MINUTES_PER_TICKET) * 100),
+  }
+}
