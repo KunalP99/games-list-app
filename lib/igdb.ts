@@ -496,13 +496,21 @@ export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo>
 // ── Store page (lib/store-page.ts) ──────────────────────────────────────────
 
 /**
- * The picture beside the store page's trailer, a fixed wide box (460×215).
- * Artworks come in every shape, and many are logos (Days Gone's is a
- * letterbox of its title), which cropping into that box cuts through. So
- * only an artwork close to the box's shape is used; otherwise a screenshot
- * (the right shape, and no logo to cut), else nothing.
+ * The picture beside the store page's trailer, a fixed wide box (460×215),
+ * for a game Steam has no header image for (the page tries Steam's first,
+ * StoreCapsule). The game's key art with its logo on it (IGDB artwork type 3)
+ * when one is close to the box's shape, as the nearest thing to its main
+ * artwork (nothing is printed over this box, so the logo doesn't clash);
+ * else the best picture artwork of that shape (pictureArtworks), else a
+ * screenshot, else nothing. Artworks come in every shape, and some are bare
+ * logos (Days Gone's is a letterbox of its title), so the shape check stays.
  */
 function capsuleImage(g: { artworks?: IgdbArtwork[]; screenshots?: Array<{ image_id?: string }> }): string | null {
+  const keyArt = (g.artworks ?? [])
+    .filter(a => a.artwork_type === 3 && a.image_id && a.width && a.height && !a.alpha_channel
+      && a.width / a.height >= 1.6 && a.width / a.height <= 2.4)
+    .sort((a, b) => (b.width! * b.height!) - (a.width! * a.height!))
+  if (keyArt[0]?.image_id) return landscapeUrl(keyArt[0].image_id)
   const fits = pictureArtworks(g.artworks, 1.6, 2.4)
   if (fits[0]?.image_id) return landscapeUrl(fits[0].image_id)
   const shot = g.screenshots?.find(s => s.image_id)?.image_id

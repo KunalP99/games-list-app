@@ -221,3 +221,8 @@ export function platformNames(platforms: { abbreviation?: string; name?: string 
     .sort((a, b) => rank(a.key) - rank(b.key))
     .map(p => p.name.replace(/^PC \(Microsoft Windows\)$/, 'PC'))
 }
+
+/** Steam's header image for an app id: the banner at the top of its Steam page (460×215). */
+export function steamHeaderUrl(appId: number): string {
+  return `https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`
+}

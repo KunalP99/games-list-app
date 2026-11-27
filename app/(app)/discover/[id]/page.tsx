@@ -6,8 +6,9 @@ import { getCachedStoreGame, getCachedDeveloperGames } from '@/lib/data/store-ga
 import { getFriendIds } from '@/lib/data/friends'
 import { getSteamReviewSummary, steamReviewBadge } from '@/lib/steam'
 import { allowRequest, IGDB_LOOKUP } from '@/lib/rate-limit'
-import { isUpcoming, isYearOnly, type StoreRelated } from '@/lib/store-page'
+import { isUpcoming, isYearOnly, steamHeaderUrl, type StoreRelated } from '@/lib/store-page'
 import { pickRow } from '@/lib/trackable-row'
+import StoreCapsule from '@/components/discover/StoreCapsule'
 import type { GameStatus } from '@/lib/types'
 import StoreMedia from '@/components/discover/StoreMedia'
 import StoreSummary from '@/components/discover/StoreSummary'
@@ -100,8 +101,13 @@ export default async function DiscoverGamePage(props: { params: Promise<{ id: st
               <p className="mt-1 text-sm text-fg-secondary">{game.releaseDate != null ? 'No exact date yet' : 'No release date yet'}</p>
             </section>
           )}
-          {!upcoming && game.capsule && (
-            <img src={game.capsule} alt="" className="aspect-[460/215] w-full rounded-xl object-cover" />
+          {!upcoming && (
+            <StoreCapsule
+              sources={[
+                ...(game.steamAppId != null ? [steamHeaderUrl(game.steamAppId)] : []),
+                ...(game.capsule ? [game.capsule] : []),
+              ]}
+            />
           )}
           {game.summary && <StoreSummary text={game.summary} />}
 
