@@ -101,7 +101,7 @@ export default function ProfileHero({
   showFigures?: boolean
   /** The public profile's bio (or its editor while editing), under the name. */
   bio?: React.ReactNode
-  /** The public profile's Edit profile button, or the friend button for a visitor; top right. */
+  /** The public profile's Edit profile button, or the friend button for a visitor; bottom right, above the banner credit. */
   action?: React.ReactNode
 }) {
   if (!FEATURES.cinematicBanner) {
@@ -216,7 +216,6 @@ export default function ProfileHero({
                 <span className="font-display text-2xl sm:text-[32px] leading-none text-white tabular-nums drop-shadow">{streak}</span>
               </span>
             )}
-            {action}
             {wheelTurn && (
               <span className="shrink-0 inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-black/40 text-white border border-white/25 backdrop-blur-sm">
                 🎡 {wheelTurn === 'spin' ? 'Spin turn' : wheelTurn === 'spin_reroll' ? 'Spin + Reroll turn' : 'Choose turn'}
@@ -238,10 +237,17 @@ export default function ProfileHero({
             {showTickets && <TicketFigure total={stats.ticketsEarned} current={profile.ticket_balance} />}
           </div>
 
-          {hero && bannerImage && (
-            <p className="text-xs text-white/60 drop-shadow">
-              This week&rsquo;s banner: <span className="font-semibold text-white/90">{hero.title}</span>
-            </p>
+          {/* Bottom right: the public profile's Edit profile / friend
+              button, then the banner's credit under it. */}
+          {((hero && bannerImage) || action) && (
+            <div className="flex flex-col items-start sm:items-end gap-2.5">
+              {action}
+              {hero && bannerImage && (
+                <p className="text-xs text-white/60 drop-shadow">
+                  This week&rsquo;s banner: <span className="font-semibold text-white/90">{hero.title}</span>
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
