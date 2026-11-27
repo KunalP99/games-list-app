@@ -266,6 +266,17 @@ body {
   background: conic-gradient(from var(--tier-frame-angle), #064e3b, #10b981, #6ee7b7, #d1fae5, #34d399, #047857, #064e3b);
   box-shadow: 0 0 10px rgba(16,185,129,.45);
 }
+/* A soft point of light running round the ring, like light catching a turning
+   gem: a narrow bright wedge, masked to the ring so it never crosses the avatar. */
+@property --tier-frame-glint { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.tier-frame--emerald::after {
+  content: ""; position: absolute; inset: 0; border-radius: 9999px; padding: var(--tier-frame-width, 3px); pointer-events: none;
+  background: conic-gradient(from var(--tier-frame-glint), transparent 0 84%, rgba(236,253,245,.55) 90%, #fff 93%, rgba(236,253,245,.55) 96%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude;
+  filter: drop-shadow(0 0 3px rgba(167,243,208,.9));
+}
+@keyframes tier-frame-glint { to { --tier-frame-glint: 360deg; } }
 .tier-frame--holo {
   background: conic-gradient(from var(--tier-frame-angle), #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5, #f0abfc);
   box-shadow: 0 0 12px rgba(232,121,249,.45);
@@ -277,10 +288,6 @@ body {
 .tier-frame--mythic {
   background: conic-gradient(from var(--tier-frame-angle), #7f1d1d, #dc2626, #7e22ce, #fbbf24, #fff7cc, #fbbf24, #7e22ce, #dc2626, #7f1d1d);
   box-shadow: 0 0 14px rgba(220,38,38,.5);
-}
-.tier-frame__spark {
-  position: absolute; top: 4%; right: 4%; width: 28%; max-width: 9px; aspect-ratio: 1; background: #fff;
-  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
 }
 @keyframes tier-frame-turn { to { --tier-frame-angle: 360deg; } }
 @keyframes tier-frame-flicker {
@@ -298,11 +305,11 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .tier-frame--silver { animation: tier-frame-turn 9s linear infinite; }
   .tier-frame--gold { animation: tier-frame-turn 6s linear infinite; }
-  .tier-frame--emerald { animation: tier-frame-turn 7s linear infinite, tier-frame-glow-green 3s ease-in-out infinite; }
+  .tier-frame--emerald { animation: tier-frame-turn 12s linear infinite, tier-frame-glow-green 3s ease-in-out infinite; }
+  .tier-frame--emerald::after { animation: tier-frame-glint 7s linear infinite; }
   .tier-frame--holo { animation: tier-frame-turn 4s linear infinite; }
   .tier-frame--inferno { animation: tier-frame-turn 2.4s linear infinite, tier-frame-flicker 1.6s ease-in-out infinite; }
   .tier-frame--mythic { animation: tier-frame-turn 3s linear infinite, tier-frame-pulse 2.6s ease-in-out infinite; }
-  .tier-frame__spark { animation: level-badge-twinkle 2.4s ease-in-out infinite; }
 }
 
 /* The banner's XP bar, filled in the level tier's colours (ProfileHero). */

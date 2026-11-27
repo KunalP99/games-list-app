@@ -8,7 +8,7 @@ import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, Ga
 import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
 import { orderVideos, pickAgeRating, playersLine, storeLinks, isUpcoming, releaseLines, splitAddOns, platformNames, type StoreGame, type StoreRelated } from './store-page'
-import { ARTWORK_FIELDS, pictureArtworks, type IgdbArtwork } from './igdb-artworks'
+import { ARTWORK_FIELDS, bestCategory, pictureArtworks, type IgdbArtwork } from './igdb-artworks'
 import { rankSearchResults, mergeById, apicalypseString, slugPrefix, FULL_GAME_TYPES, type RankCandidate } from './search-ranking'
 
 const TIMEOUT_MS = 8000
@@ -264,6 +264,19 @@ export async function getGameImages(id: number): Promise<string[]> {
     .filter(s => s.image_id)
     .map(s => screenshotUrl(s.image_id!))
   return Array.from(new Set([...artworks, ...shots]))
+}
+
+// The pictures the profile / My Games banner rotates through, a new one each
+// day (lib/hero-banner.ts): all the artworks in the game's best picture
+// category (bestCategory), else all its screenshots. Returns [] on failure.
+export async function getBannerImages(id: number): Promise<string[]> {
+  const games = await igdbQuery<IgdbGame>('games',
+    `fields ${ARTWORK_FIELDS}, screenshots.image_id; where id = ${id}; limit 1;`)
+  const g = games[0]
+  if (!g) return []
+  const art = bestCategory(g.artworks).map(a => bannerUrl(a.image_id!))
+  if (art.length > 0) return art
+  return (g.screenshots ?? []).filter(s => s.image_id).map(s => screenshotUrl(s.image_id!))
 }
 
 // ── Gaming-industry events (dashboard "Upcoming Events" card) ────────────────

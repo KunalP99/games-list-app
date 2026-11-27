@@ -106,6 +106,14 @@ export async function getGameImages(id: number): Promise<string[]> {
   return shots.map(s => s.image)
 }
 
+// The pictures the profile banner rotates through daily (lib/hero-banner.ts):
+// IGDB's best category of artwork, else screenshots. RAWG has only screenshots.
+export async function getBannerImages(id: number): Promise<string[]> {
+  if (METADATA_PROVIDER === 'igdb') return (await import('./igdb')).getBannerImages(id)
+  const shots = await getRawgScreenshots(id)
+  return shots.map(s => s.image)
+}
+
 export type RawgAchievement = {
   id: number
   name: string

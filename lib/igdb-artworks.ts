@@ -27,3 +27,27 @@ export function pictureArtworks<T extends IgdbArtwork>(artworks: T[] | undefined
     .filter(a => a.width! / a.height! >= minRatio && a.width! / a.height! <= maxRatio)
     .sort((a, b) => rank(a) - rank(b) || (b.width! * b.height!) - (a.width! * a.height!))
 }
+
+/**
+ * The pictures a banner rotates through: every artwork in the best picture
+ * category the game has (all its key art without a logo, else all its plain
+ * artwork, and so on), largest first. One picture in that category means no
+ * rotation: just that one. Pure.
+ */
+export function bestCategory<T extends IgdbArtwork>(artworks: T[] | undefined): T[] {
+  const pictures = pictureArtworks(artworks)
+  if (pictures.length === 0) return []
+  const best = PICTURE_ARTWORK_RANK[pictures[0].artwork_type ?? 1]
+  return pictures.filter(a => PICTURE_ARTWORK_RANK[a.artwork_type ?? 1] === best)
+}
+
+/**
+ * Today's pick from a list: a different one each UK day, in order, the same
+ * for everyone (so a profile shows the same banner to all its visitors that
+ * day). `day` is a London day key ("2026-11-27"). Pure.
+ */
+export function dailyPick<T>(items: readonly T[], day: string): T | undefined {
+  if (items.length === 0) return undefined
+  const dayNumber = Math.floor(Date.parse(`${day}T00:00:00Z`) / 86_400_000)
+  return items[((dayNumber % items.length) + items.length) % items.length]
+}
