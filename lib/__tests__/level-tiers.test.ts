@@ -8,7 +8,7 @@ describe('levelTier', () => {
     [10, 'silver'], [14, 'silver'],
     [15, 'gold'], [19, 'gold'],
     [20, 'emerald'], [24, 'emerald'],
-    [25, 'holo'], [29, 'holo'],
+    [25, 'diamond'], [29, 'diamond'],
     [30, 'inferno'], [49, 'inferno'],
     [50, 'mythic'], [120, 'mythic'],
   ])('level %i is %s', (level, id) => {

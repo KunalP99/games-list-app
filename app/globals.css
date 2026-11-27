@@ -177,19 +177,20 @@ body {
   position: absolute; width: 5px; height: 5px; background: #fff;
   clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
 }
-.level-badge--holo {
-  background: linear-gradient(110deg, #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5, #f0abfc); background-size: 300% 100%;
-  color: #1e1b4b; box-shadow: inset 0 0 0 1px rgba(255,255,255,.7), 0 0 14px rgba(232,121,249,.45);
-}
-.level-badge--holo::after {
-  content: ""; position: absolute; inset: 0; z-index: -1;
-  background: repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 2px, transparent 2px 6px);
+.level-badge--diamond {
+  background: radial-gradient(circle at 30% 20%, #1e3a5f, #0b1424 75%); color: #e0f2fe; overflow: visible;
+  box-shadow: 0 0 14px rgba(125,211,252,.35);
 }
 .level-badge--inferno { background: #140700; color: #fff; overflow: visible; box-shadow: 0 0 0 1px #7c2d12, 0 0 16px rgba(249,115,22,.55); }
-.level-badge--inferno::before, .level-badge--mythic::before {
+.level-badge--diamond::before, .level-badge--inferno::before, .level-badge--mythic::before {
   content: ""; position: absolute; border-radius: inherit;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude;
+}
+/* Diamond's crystal edge, running round the badge. */
+.level-badge--diamond::before {
+  inset: -1.5px; padding: 1.5px;
+  background: conic-gradient(from var(--level-badge-angle), #e0f2fe, #ffffff, #7dd3fc, #ffffff, #c7d2fe, #ffffff, #e0f2fe);
 }
 .level-badge--inferno::before {
   inset: -1px; padding: 1.5px; background-size: 200% 100%;
@@ -236,7 +237,8 @@ body {
   .level-badge--gold::after { animation: level-badge-shine 3.2s ease-in-out infinite; }
   .level-badge__spark { animation: level-badge-twinkle 2.4s ease-in-out infinite; }
   .level-badge--emerald { animation: level-badge-drift 8s ease-in-out infinite alternate; }
-  .level-badge--holo, .level-badge--inferno::before { animation: level-badge-slide 4s linear infinite; }
+  .level-badge--inferno::before { animation: level-badge-slide 4s linear infinite; }
+  .level-badge--diamond::before { animation: level-badge-spin 5s linear infinite; }
   .level-badge--inferno::before { animation-duration: 2s; }
   .level-badge--inferno .level-badge__text { animation: level-badge-flicker 1.6s ease-in-out infinite; }
   .level-badge__ember { animation: level-badge-ember 2.2s ease-in infinite; }
@@ -277,9 +279,10 @@ body {
   filter: drop-shadow(0 0 3px rgba(167,243,208,.9));
 }
 @keyframes tier-frame-glint { to { --tier-frame-glint: 360deg; } }
-.tier-frame--holo {
-  background: conic-gradient(from var(--tier-frame-angle), #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5, #f0abfc);
-  box-shadow: 0 0 12px rgba(232,121,249,.45);
+.tier-frame--diamond {
+  /* A smooth ice-blue gradient, turning. */
+  background: conic-gradient(from var(--tier-frame-angle), #1e3a8a, #2563eb, #38bdf8, #bae6fd, #38bdf8, #1d4ed8, #1e3a8a);
+  box-shadow: 0 0 12px rgba(125,211,252,.5);
 }
 .tier-frame--inferno {
   background: conic-gradient(from var(--tier-frame-angle), #7c2d12, #f97316, #fde047, #f97316, #7c2d12);
@@ -307,7 +310,7 @@ body {
   .tier-frame--gold { animation: tier-frame-turn 6s linear infinite; }
   .tier-frame--emerald { animation: tier-frame-turn 12s linear infinite, tier-frame-glow-green 3s ease-in-out infinite; }
   .tier-frame--emerald::after { animation: tier-frame-glint 7s linear infinite; }
-  .tier-frame--holo { animation: tier-frame-turn 4s linear infinite; }
+  .tier-frame--diamond { animation: tier-frame-turn 8s linear infinite; }
   .tier-frame--inferno { animation: tier-frame-turn 2.4s linear infinite, tier-frame-flicker 1.6s ease-in-out infinite; }
   .tier-frame--mythic { animation: tier-frame-turn 3s linear infinite, tier-frame-pulse 2.6s ease-in-out infinite; }
 }
@@ -318,11 +321,11 @@ body {
 .level-bar--silver { background: linear-gradient(90deg, #9ca3af, #f8fafc); }
 .level-bar--gold { background: linear-gradient(90deg, #f59e0b, #fde68a); box-shadow: 0 0 8px rgba(245,158,11,.6); }
 .level-bar--emerald { background: linear-gradient(90deg, #047857, #34d399); box-shadow: 0 0 8px rgba(16,185,129,.6); }
-.level-bar--holo { background: linear-gradient(90deg, #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5); background-size: 200% 100%; box-shadow: 0 0 8px rgba(232,121,249,.6); }
+.level-bar--diamond { background: linear-gradient(90deg, #1e3a8a, #7dd3fc, #ffffff); box-shadow: 0 0 10px rgba(125,211,252,.7); }
 .level-bar--inferno { background: linear-gradient(90deg, #7c2d12, #f97316, #fde047); box-shadow: 0 0 10px rgba(249,115,22,.7); }
 .level-bar--mythic { background: linear-gradient(90deg, #991b1b, #dc2626, #7e22ce, #fbbf24, #991b1b); background-size: 200% 100%; box-shadow: 0 0 10px rgba(251,191,36,.6); }
 @media (prefers-reduced-motion: no-preference) {
-  .level-bar--holo, .level-bar--mythic { animation: level-badge-slide 6s linear infinite; }
+  .level-bar--mythic { animation: level-badge-slide 6s linear infinite; }
 }
 
 /* The profile banner's artwork drifting slowly, like a film still (ProfileHero). */

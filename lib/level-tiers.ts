@@ -3,7 +3,7 @@
 // from lib/levels.ts: a rising curve to level 10 (4,500 XP), then 1,000 XP a
 // level (about 8 completed games), so level 20 is 14,500 XP and level 50 is 44,500.
 
-export type LevelTierId = 'rookie' | 'bronze' | 'silver' | 'gold' | 'emerald' | 'holo' | 'inferno' | 'mythic'
+export type LevelTierId = 'rookie' | 'bronze' | 'silver' | 'gold' | 'emerald' | 'diamond' | 'inferno' | 'mythic'
 
 export type LevelTier = {
   id: LevelTierId
@@ -19,7 +19,7 @@ export const LEVEL_TIERS: readonly LevelTier[] = [
   { id: 'silver', name: 'Silver', from: 10 },
   { id: 'gold', name: 'Gold', from: 15 },
   { id: 'emerald', name: 'Emerald', from: 20 },
-  { id: 'holo', name: 'Holo', from: 25 },
+  { id: 'diamond', name: 'Diamond', from: 25 },
   { id: 'inferno', name: 'Inferno', from: 30 },
   { id: 'mythic', name: 'Mythic', from: 50 },
 ]

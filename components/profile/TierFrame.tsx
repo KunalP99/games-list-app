@@ -3,7 +3,7 @@ import { FEATURES } from '@/lib/edition'
 
 // A frame round a person's avatar in their level's tier (lib/level-tiers.ts),
 // matching LevelBadge: slate, bronze, silver, gold, a turning green emerald
-// gradient with a point of light running round it and a soft glow, turning holo foil, burning inferno, and a royal mythic ring (crimson, purple, gold). The looks are CSS in app/globals.css (`.tier-frame--<tier>`),
+// gradient with a point of light running round it and a soft glow, a turning ice-blue gradient (diamond), burning inferno, and a royal mythic ring (crimson, purple, gold). The looks are CSS in app/globals.css (`.tier-frame--<tier>`),
 // still for reduced motion. `children` is the round avatar itself.
 export default function TierFrame({
   level,

@@ -2,7 +2,7 @@ import { levelTier, tierRange } from '@/lib/level-tiers'
 
 // "LEVEL 7" as a badge that gets fancier with the tier (lib/level-tiers.ts):
 // slate, bronze, silver, gold (with a shine), emerald (a cut gem with
-// sparkles), holo (shifting rainbow foil), inferno (a fire-lit edge and
+// sparkles), diamond (deep navy with a crystal edge running round it), inferno (a fire-lit edge and
 // embers) and mythic (a spinning royal edge (crimson, purple, gold), stars and a crown). The looks
 // are CSS in app/globals.css (`.level-badge--<tier>`); every animation there
 // stops for reduced motion. Sized by font-size, so `className` can scale it.
