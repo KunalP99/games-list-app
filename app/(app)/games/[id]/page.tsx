@@ -16,6 +16,7 @@ import AchievementGrid from '@/components/games/AchievementGrid'
 import AddToBacklogButton from '@/components/users/AddToBacklogButton'
 import GameVideos from '@/components/games/GameVideos'
 import PlayedByCard from '@/components/games/PlayedByCard'
+import { getLevel } from '@/lib/levels'
 import { mapGameVideos } from '@/lib/youtube'
 import PlaySessionsCard from '@/components/games/PlaySessionsCard'
 import { toTrackedSessions, type PlaySessionRow } from '@/lib/play-sessions'
@@ -120,8 +121,8 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
   const { data: playerProfiles } = playerIds.length
     ? await supabase
         .from('profiles')
-        .select('id, display_name, username, accent_colour')
-        .in('id', playerIds) as { data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null }
+        .select('id, display_name, username, accent_colour, xp')
+        .in('id', playerIds) as { data: { id: string; display_name: string | null; username: string; accent_colour: string | null; xp: number | null }[] | null }
     : { data: [] }
   const playedBy = (playerProfiles ?? [])
     .map(pr => ({
@@ -129,6 +130,7 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
       username: pr.username,
       displayName: pr.display_name,
       accentColour: pr.accent_colour,
+      level: getLevel(pr.xp ?? 0),
       status: (playerInfo.get(pr.id)?.playing ? 'playing' : 'completed') as 'playing' | 'completed',
     }))
     // Currently-playing users first, then alphabetical by display name.

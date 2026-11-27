@@ -7,6 +7,7 @@
  * which is why a session counts as live only while it has been checkpointed
  * recently, never from `ended_at` alone.
  */
+import { getLevel } from './levels'
 
 /**
  * How stale a checkpoint can be before a session is no longer shown as live.
@@ -88,6 +89,8 @@ export type PlayingNowEntry = {
   displayName: string
   username: string
   accentColour: string | null
+  /** Their level, for the tier frame round their avatar. */
+  level: number
   gameId: string
   gameTitle: string
   gameImage: string | null
@@ -125,10 +128,10 @@ export async function getPlayingNow(
 
   const [{ data: games }, { data: profiles }] = await Promise.all([
     supabase.from('games').select('id, title, artwork_url, image_url, cover_image_url').in('id', live.map(l => l.game_id!)),
-    supabase.from('profiles').select('id, display_name, username, accent_colour').in('id', live.map(l => l.user_id)),
+    supabase.from('profiles').select('id, display_name, username, accent_colour, xp').in('id', live.map(l => l.user_id)),
   ]) as [
     { data: { id: string; title: string; artwork_url: string | null; image_url: string | null; cover_image_url: string | null }[] | null },
-    { data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null },
+    { data: { id: string; display_name: string | null; username: string; accent_colour: string | null; xp: number | null }[] | null },
   ]
   const gameById = new Map((games ?? []).map(g => [g.id, g]))
   const profileById = new Map((profiles ?? []).map(p => [p.id, p]))
@@ -143,6 +146,7 @@ export async function getPlayingNow(
       displayName: profile.display_name ?? profile.username,
       username: profile.username,
       accentColour: profile.accent_colour,
+      level: getLevel(profile.xp ?? 0),
       gameId: game.id,
       gameTitle: game.title,
       gameImage: game.artwork_url ?? game.image_url ?? game.cover_image_url,

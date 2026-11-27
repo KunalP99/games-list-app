@@ -8,6 +8,7 @@ import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
 import GameFilters from '@/components/games/GameFilters'
 import ProfileHero from '@/components/profile/ProfileHero'
+import { getCurrentStreak } from '@/lib/data/current-streak'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
@@ -95,7 +96,7 @@ export default async function UserProfilePage(
   }
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(ilikeAnyFilter(['title', 'developer'], searchParams.q.trim()))
 
-  const [gamesRes, playingGamesRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
+  const [gamesRes, playingGamesRes, stats, recentlyPlayed, liveSessions, streak] = await Promise.all([
     gamesQuery,
     supabase
       .from('games')
@@ -111,6 +112,9 @@ export default async function UserProfilePage(
     computeUserStats(supabase, profile.id),
     getRecentlyPlayed(supabase, profile.id),
     getLiveSessions(supabase, [profile.id]),
+    // The banner's streak flame: the Cinematic banner only, and only when
+    // their play activity is visible (always, in the friends edition).
+    FEATURES.cinematicBanner && allows('privacy_activity') ? getCurrentStreak(supabase, profile.id) : Promise.resolve(0),
   ])
 
   const games = gamesRes.data as Game[] | null
@@ -141,6 +145,7 @@ export default async function UserProfilePage(
         accent={accent}
         wheelTurn={wheelTurnBadge}
         showTickets={allows('privacy_tickets')}
+        streak={streak}
       />
 
       {/* Everything runs full width in a single column. An earlier version put

@@ -5,12 +5,13 @@ import { computeUserStats } from '@/lib/user-stats'
 import { resolveBannerImage } from '@/lib/hero-banner'
 import type { Game } from '@/lib/types'
 import GameListView from '@/components/games/GameListView'
-import GameCard from '@/components/games/GameCard'
+import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import GameFilters from '@/components/games/GameFilters'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
 import { getRecentlyPlayed } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import ProfileHero from '@/components/profile/ProfileHero'
+import { getCurrentStreak } from '@/lib/data/current-streak'
 import { Suspense } from 'react'
 import { FEATURES } from '@/lib/edition'
 import { ilikeAnyFilter } from '@/lib/query-escape'
@@ -68,7 +69,7 @@ export default async function GamesPage(
   // Playing games always fetched separately for the Now Playing strip — run
   // alongside the main games query and the profile-banner stats (computeUserStats
   // is the same helper the friend profile page uses — see lib/user-stats.ts).
-  const [playingGamesRes, gamesRes, stats, recentlyPlayed, liveSessions] = await Promise.all([
+  const [playingGamesRes, gamesRes, stats, recentlyPlayed, liveSessions, streak] = await Promise.all([
     supabase
       .from('games')
       .select(GAME_LIST_COLS)
@@ -79,6 +80,8 @@ export default async function GamesPage(
     computeUserStats(supabase, user!.id),
     getRecentlyPlayed(supabase, user!.id),
     getLiveSessions(supabase, [user!.id]),
+    // The banner's streak flame (only the Cinematic banner shows it).
+    FEATURES.cinematicBanner ? getCurrentStreak(supabase, user!.id) : Promise.resolve(0),
   ])
 
   const playingGames = playingGamesRes.data as Game[] | null
@@ -110,8 +113,8 @@ export default async function GamesPage(
     <div className="space-y-6">
       {/* Fallback is the same hero minus the backdrop, so nothing moves when
           the image arrives — only the texture behind it changes. */}
-      <Suspense fallback={<ProfileHero stats={stats} bannerImage={null} initials={initials} accent={accent} wheelTurn={null} />}>
-        <HeroWithBanner stats={stats} initials={initials} accent={accent} />
+      <Suspense fallback={<ProfileHero stats={stats} bannerImage={null} initials={initials} accent={accent} wheelTurn={null} streak={streak} />}>
+        <HeroWithBanner stats={stats} initials={initials} accent={accent} streak={streak} />
       </Suspense>
 
       <div className="flex items-center justify-between">
@@ -138,18 +141,10 @@ export default async function GamesPage(
       {/* Now Playing strip — always visible if any games are in progress.
           Friends edition only: the public edition's Playing games show in
           Recently played (tracked ones) and the Playing tab (lib/edition.ts). */}
-      {FEATURES.ambient && playingGames && playingGames.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
-            Now Playing · {playingGames.length}
-          </h2>
-          {/* Now Playing always uses the capsule card, regardless of the list view */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {playingGames.map(game => (
-              <GameCard key={game.id} game={game} isOwner={true} liveSince={liveSessions.get(game.id) ?? null} />
-            ))}
-          </div>
-        </div>
+      {/* Always the capsule card, regardless of the list view; past three it's
+          one row that scrolls sideways. The same strip as on profiles. */}
+      {FEATURES.ambient && playingGames && (
+        <NowPlayingGrid games={playingGames} isOwner liveSessions={liveSessions} />
       )}
 
       {/* Ambient games, newest session first — what has actually been running,
@@ -186,11 +181,13 @@ async function HeroWithBanner({
   stats,
   initials,
   accent,
+  streak,
 }: {
   stats: Awaited<ReturnType<typeof computeUserStats>>
   initials: string
   accent: string
+  streak: number
 }) {
   const bannerImage = stats.heroGame ? await resolveBannerImage(stats.heroGame) : null
-  return <ProfileHero stats={stats} bannerImage={bannerImage} initials={initials} accent={accent} wheelTurn={null} />
+  return <ProfileHero stats={stats} bannerImage={bannerImage} initials={initials} accent={accent} wheelTurn={null} streak={streak} />
 }

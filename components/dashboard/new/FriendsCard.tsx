@@ -10,6 +10,7 @@ import AddFriendModal from '@/components/friends/AddFriendModal'
 import RelationButton from '@/components/friends/RelationButton'
 import PersonAvatar, { initials } from '@/components/friends/PersonAvatar'
 import FriendActions from '@/components/friends/FriendActions'
+import TierFrame from '@/components/profile/TierFrame'
 
 /** How often the live list is re-read, so friends starting or stopping show up. */
 const REFRESH_MS = 60_000
@@ -23,6 +24,8 @@ export type FriendSummary = {
   playing: number
   /** Public edition: shown instead of the game counts. */
   level?: number
+  /** Their level, for the tier frame round their avatar (both editions). */
+  tierLevel: number
 }
 
 /**
@@ -138,13 +141,15 @@ export default function FriendsCard({
           href={`/games/${p.gameId}`}
           className={`flex items-center gap-3 rounded-xl bg-emerald-50 p-2.5 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/15 transition-colors ${friendSystem ? 'pr-10' : ''}`}
         >
-          <span className="relative shrink-0">
-            <span
-              className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ backgroundColor: p.accentColour ?? '#7c3aed' }}
-            >
-              {initials(p.displayName)}
-            </span>
+          <span className="relative shrink-0 flex">
+            <TierFrame level={p.level} width={2}>
+              <span
+                className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
+                style={{ backgroundColor: p.accentColour ?? '#7c3aed' }}
+              >
+                {initials(p.displayName)}
+              </span>
+            </TierFrame>
             <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface-base bg-emerald-500" />
           </span>
           <span className="min-w-0 flex-1">
@@ -164,12 +169,14 @@ export default function FriendsCard({
           <li key={f.id}>
             <WithActions on={friendSystem} person={{ id: f.id, username: f.username, displayName: f.displayName }} className="-mx-2">
             <Link href={`/users/${encodeURIComponent(f.username)}`} className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface-hover transition-colors ${friendSystem ? 'pr-10' : ''}`}>
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                style={{ backgroundColor: f.accentColour ?? '#7c3aed' }}
-              >
-                {initials(f.displayName)}
-              </span>
+              <TierFrame level={f.tierLevel} width={2}>
+                <span
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                  style={{ backgroundColor: f.accentColour ?? '#7c3aed' }}
+                >
+                  {initials(f.displayName)}
+                </span>
+              </TierFrame>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-fg-base truncate">{f.displayName}</span>
                 <span className="block text-xs text-fg-muted truncate">

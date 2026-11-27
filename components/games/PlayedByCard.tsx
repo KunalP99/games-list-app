@@ -1,10 +1,15 @@
 import Link from 'next/link'
+import TierFrame from '@/components/profile/TierFrame'
+// Letters and digits only, so "Sam (test)" is "ST", not "S(".
+import { initials as initialsOf } from '@/components/friends/PersonAvatar'
 
 export type PlayedByUser = {
   id: string
   username: string
   displayName: string | null
   accentColour: string | null
+  /** For the tier frame round their avatar. */
+  level: number
   status: 'playing' | 'completed'
 }
 
@@ -20,16 +25,17 @@ export default function PlayedByCard({ players }: { players: PlayedByUser[] }) {
       <ul className="space-y-1.5">
         {players.map(p => {
           const name = p.displayName ?? p.username
-          const initials = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
           return (
             <li key={p.id}>
               <Link href={`/users/${encodeURIComponent(p.username)}`} className="group flex items-center gap-2.5">
-                <span
-                  className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white"
-                  style={{ backgroundColor: p.accentColour ?? '#7c3aed' }}
-                >
-                  {initials}
-                </span>
+                <TierFrame level={p.level} width={2}>
+                  <span
+                    className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white"
+                    style={{ backgroundColor: p.accentColour ?? '#7c3aed' }}
+                  >
+                    {initialsOf(name)}
+                  </span>
+                </TierFrame>
                 <span className="flex-1 min-w-0 text-sm text-fg-base truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
                   {name}
                 </span>

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { signOut } from '@/app/(auth)/login/actions'
 import type { Profile } from '@/lib/types'
+import TierFrame from '@/components/profile/TierFrame'
+import { getLevel } from '@/lib/levels'
 
 export default function UserDropdown({ profile }: { profile: Profile }) {
   const [open, setOpen] = useState(false)
@@ -33,6 +35,7 @@ export default function UserDropdown({ profile }: { profile: Profile }) {
 
   const name = profile.display_name ?? profile.username
   const initial = name.charAt(0).toUpperCase()
+  const level = getLevel(profile.xp ?? 0)
 
   return (
     <div ref={ref} className="relative">
@@ -42,12 +45,14 @@ export default function UserDropdown({ profile }: { profile: Profile }) {
         className="flex items-center gap-1.5 rounded-full hover:bg-black/[0.05] dark:hover:bg-white/[0.08] px-1.5 py-1 transition-colors"
         aria-label="User menu"
       >
-        <span
-          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-          style={{ backgroundColor: 'rgb(var(--brand-600))' }}
-        >
-          {initial}
-        </span>
+        <TierFrame level={level} width={2}>
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+            style={{ backgroundColor: 'rgb(var(--brand-600))' }}
+          >
+            {initial}
+          </span>
+        </TierFrame>
         <span className="hidden lg:block text-xs text-fg-muted shrink-0 max-w-24 truncate">{name}</span>
         <svg
           className={`w-3 h-3 text-fg-subtle transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -63,12 +68,14 @@ export default function UserDropdown({ profile }: { profile: Profile }) {
 
           {/* User header */}
           <div className="px-4 py-3 flex items-center gap-3">
-            <span
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-              style={{ backgroundColor: 'rgb(var(--brand-600))' }}
-            >
-              {initial}
-            </span>
+            <TierFrame level={level} width={2}>
+              <span
+                className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+                style={{ backgroundColor: 'rgb(var(--brand-600))' }}
+              >
+                {initial}
+              </span>
+            </TierFrame>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-fg-base truncate">{name}</p>
               <p className="text-xs text-fg-subtle truncate">@{profile.username}</p>

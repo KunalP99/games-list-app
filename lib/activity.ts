@@ -76,6 +76,8 @@ export type ActivityItem = {
   displayName: string
   username: string
   accentColour: string | null
+  /** Their level, for the tier frame round their avatar. */
+  level?: number
   gameTitle?: string
   gameImageUrl?: string
   gameCoverUrl?: string
@@ -264,6 +266,7 @@ type ProfileInfo = {
   displayName: string
   username: string
   accentColour: string | null
+  level?: number
 }
 
 function completionXp(hours: number | null, achievementProgress: number | null): number {
@@ -298,6 +301,7 @@ export function buildActivityItems(
       displayName: profile.displayName,
       username: profile.username,
       accentColour: profile.accentColour,
+      level: profile.level,
       gameTitle: g.title,
       gameImageUrl: g.image_url ?? undefined,
       gameCoverUrl: g.cover_image_url ?? undefined,
@@ -341,6 +345,7 @@ export function buildActivityItems(
       displayName: profile.displayName,
       username: profile.username,
       accentColour: profile.accentColour,
+      level: profile.level,
       wheelResult: spin.result_name ?? undefined,
       date: spin.created_at,
       isSelf: spin.user_id === currentUserId,
@@ -356,6 +361,7 @@ export function buildActivityItems(
       displayName: profile.displayName,
       username: profile.username,
       accentColour: profile.accentColour,
+      level: profile.level,
       achievementId: unlock.achievement_id,
       achievementName: unlock.achievement_name,
       achievementIcon: unlock.achievement_icon,
@@ -404,6 +410,7 @@ export function buildActivityItems(
       displayName: profile.displayName,
       username: profile.username,
       accentColour: profile.accentColour,
+      level: profile.level,
       gameTitle: game.title,
       gameImageUrl: game.image_url ?? undefined,
       gameCoverUrl: game.cover_image_url ?? undefined,

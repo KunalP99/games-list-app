@@ -55,6 +55,16 @@ describe('featuresFor', () => {
     expect(featuresFor('public').presetAccents).toBe(true)
   })
 
+  it('has the Cinematic banner in the friends edition only', () => {
+    expect(featuresFor('friends').cinematicBanner).toBe(true)
+    expect(featuresFor('public').cinematicBanner).toBe(false)
+  })
+
+  it('has level tiers in the friends edition only', () => {
+    expect(featuresFor('friends').levelTiers).toBe(true)
+    expect(featuresFor('public').levelTiers).toBe(false)
+  })
+
   it('shares the ticket ledger in the friends edition only', () => {
     expect(featuresFor('friends').sharedTicketLedger).toBe(true)
     expect(featuresFor('public').sharedTicketLedger).toBe(false)

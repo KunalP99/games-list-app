@@ -1,6 +1,6 @@
 import type { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/lib/types'
-import { ACHIEVEMENTS } from '@/lib/achievements'
+import { ACHIEVEMENTS, getLevel } from '@/lib/achievements'
 import { FEATURES } from '@/lib/edition'
 import { settleSession } from '@/lib/presence'
 import { getFriendIds } from '@/lib/data/friends'
@@ -23,13 +23,13 @@ export async function getActivityFeed(supabase: Supabase, userId: string, limit 
   const onlyFriends = FEATURES.friendSystem ? await getFriendIds(supabase, userId) : null
   let friendsQuery = supabase
     .from('profiles')
-    .select('id, display_name, username, accent_colour')
+    .select('id, display_name, username, accent_colour, xp')
     .neq('id', userId)
   if (onlyFriends) friendsQuery = friendsQuery.in('id', onlyFriends)
   const [{ data: myProfile }, { data: friendProfiles }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, display_name, username, accent_colour')
+      .select('id, display_name, username, accent_colour, xp')
       .eq('id', userId)
       .single() as unknown as Promise<{ data: Profile | null }>,
     (onlyFriends && onlyFriends.length === 0
@@ -112,7 +112,7 @@ export async function getActivityFeed(supabase: Supabase, userId: string, limit 
   const allProfiles = [...(friendProfiles ?? []), ...(myProfile ? [myProfile] : [])]
   const profileMap = new Map(allProfiles.map(p => [
     p.id,
-    { displayName: p.display_name ?? p.username, username: p.username, accentColour: p.accent_colour ?? null },
+    { displayName: p.display_name ?? p.username, username: p.username, accentColour: p.accent_colour ?? null, level: getLevel(p.xp ?? 0) },
   ]))
 
   return groupActivityItems(

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { activityVerb, activitySuffix, activityLiveTag, hasSessionToggle, formatActivityDate, getInitials, type ActivityItem } from '@/lib/activity'
 import ActivityBatchChips from '@/components/activity/ActivityBatchChips'
+import TierFrame from '@/components/profile/TierFrame'
 import { PlaySessions, PlaySessionsToggle, PlaySessionsList } from '@/components/activity/PlaySessionList'
 
 /**
@@ -28,10 +29,16 @@ export default function ActivityRow({ item, batchShown = 3 }: { item: ActivityIt
       <Link
         href={profileHref}
         aria-label={item.isSelf ? 'Your games' : `${item.displayName}'s profile`}
-        className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white hover:opacity-90 transition-opacity"
-        style={{ backgroundColor: item.accentColour ?? '#7c3aed' }}
+        className="shrink-0 flex hover:opacity-90 transition-opacity"
       >
-        {getInitials(item.displayName)}
+        <TierFrame level={item.level ?? 1} width={2}>
+          <span
+            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+            style={{ backgroundColor: item.accentColour ?? '#7c3aed' }}
+          >
+            {getInitials(item.displayName)}
+          </span>
+        </TierFrame>
       </Link>
 
       {/* Game thumbnail — portrait box art (falls back to the banner) */}

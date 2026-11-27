@@ -53,6 +53,42 @@ describe('getLevel', () => {
   })
 })
 
+describe('the flat curve from level 10', () => {
+  it('keeps the old curve up to level 10 (4,500 XP)', () => {
+    expect(xpForLevel(9)).toBe(3600)
+    expect(xpForLevel(10)).toBe(4500)
+    expect(getLevel(4499)).toBe(9)
+    expect(getLevel(4500)).toBe(10)
+  })
+
+  it('costs 1,000 XP for every level after that', () => {
+    expect(xpForLevel(11)).toBe(5500)
+    expect(xpForLevel(20)).toBe(14500)
+    expect(xpForLevel(50)).toBe(44500)
+    for (let L = 10; L < 80; L++) expect(xpForLevel(L + 1) - xpForLevel(L)).toBe(1000)
+  })
+
+  it('finds the level from XP past 10', () => {
+    expect(getLevel(5499)).toBe(10)
+    expect(getLevel(5500)).toBe(11)
+    expect(getLevel(13175)).toBe(18)
+    expect(getLevel(17425)).toBe(22)
+    expect(getLevel(44500)).toBe(50)
+  })
+
+  it('agrees with xpForLevel at every boundary', () => {
+    for (let L = 1; L < 80; L++) {
+      expect(getLevel(xpForLevel(L))).toBe(L)
+      if (L > 1) expect(getLevel(xpForLevel(L) - 1)).toBe(L - 1)
+    }
+  })
+
+  it('shows progress through a flat level', () => {
+    const p = levelProgress(17425)
+    expect(p).toMatchObject({ level: 22, intoLevel: 925, span: 1000, percent: 93, nextThreshold: 17500 })
+  })
+})
+
 describe('levelProgress', () => {
   it('at level 1 with 50 XP, shows correct progress toward level 2', () => {
     const p = levelProgress(50)

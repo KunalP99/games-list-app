@@ -41,6 +41,9 @@ export default function DragScroller({ children, className = '' }: { children: R
       onMouseUp={end}
       onMouseLeave={end}
       onClickCapture={onClickCapture}
+      // A link or image inside would otherwise start the browser's own drag
+      // (a ghost of the link) instead of scrolling the row.
+      onDragStart={e => e.preventDefault()}
     >
       {children}
     </div>

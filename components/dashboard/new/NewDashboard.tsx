@@ -74,15 +74,15 @@ export default async function NewDashboard({ userId }: { userId: string }) {
       ? Promise.resolve({ data: null })
       : supabase
         .from('profiles')
-        .select('id, display_name, username, accent_colour')
+        .select('id, display_name, username, accent_colour, xp')
         .neq('id', userId)
-        .order('display_name', { ascending: true, nullsFirst: false }) as unknown as Promise<{ data: { id: string; display_name: string | null; username: string; accent_colour: string | null }[] | null }>,
+        .order('display_name', { ascending: true, nullsFirst: false }) as unknown as Promise<{ data: { id: string; display_name: string | null; username: string; accent_colour: string | null; xp: number | null }[] | null }>,
     FEATURES.friendSystem ? getFriendsOverview(supabase, userId) : Promise.resolve<FriendsOverview | null>(null),
   ])
 
   const games = gamesRes.data ?? []
   const friendProfiles = overview
-    ? overview.friends.map(f => ({ id: f.id, display_name: f.displayName, username: f.username, accent_colour: f.accentColour }))
+    ? overview.friends.map(f => ({ id: f.id, display_name: f.displayName, username: f.username, accent_colour: f.accentColour, xp: f.xp }))
     : friendProfilesRes.data ?? []
 
   // Hero: the most recently played Playing or Ambient game (a year of
@@ -120,7 +120,6 @@ export default async function NewDashboard({ userId }: { userId: string }) {
 
   // Friends: who's on what, for the card's quiet rows.
   // (The public edition shows each friend's level instead: no counts needed.)
-  const xpById = new Map((overview?.friends ?? []).map(f => [f.id, f.xp]))
   const friendIds = overview ? [] : friendProfiles.map(f => f.id)
   const { data: friendGames } = friendIds.length > 0
     ? await (supabase.from('games').select('user_id, status').in('user_id', friendIds) as unknown as Promise<{ data: { user_id: string; status: string }[] | null }>)
@@ -139,7 +138,9 @@ export default async function NewDashboard({ userId }: { userId: string }) {
     accentColour: f.accent_colour,
     ...(counts.get(f.id) ?? { completed: 0, playing: 0 }),
     // Public edition: their level under their name, not game counts.
-    level: overview ? levelProgress(xpById.get(f.id) ?? 0).level : undefined,
+    level: overview ? levelProgress(f.xp ?? 0).level : undefined,
+    // Both editions: their avatar is framed in their level's tier.
+    tierLevel: levelProgress(f.xp ?? 0).level,
   }))
 
   const wheelEnabled = wheelOn(profile)

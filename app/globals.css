@@ -136,6 +136,198 @@ body {
   65% { d: path("M11.5 2.9C12.4 5.9 14.4 7.5 16.2 9.4C17.8 11.1 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 12.6 5.6 10.4 6.7 8.5C7.2 10.6 8.4 12.2 9.6 12.8C9.4 9.6 10.1 6.1 11.5 2.9Z"); }
   85% { d: path("M12.6 1.8C13 5 14.9 7.1 16.6 9.1C18.1 10.9 19 12.8 19 15.2A7 7 0 0 1 5 15.2C5 13 5.9 11.3 7.2 10C7.5 11.5 8.5 12.7 9.7 13.1C9.5 9.4 10.6 5.2 12.6 1.8Z"); }
 }
+/* Level badges, one look per tier (components/profile/LevelBadge.tsx,
+   lib/level-tiers.ts). Sized in em, so font-size scales the whole badge. */
+.level-badge {
+  position: relative; display: inline-flex; align-items: center; gap: .45em;
+  padding: .38em .85em; border-radius: .5em; isolation: isolate; overflow: hidden;
+  font-size: 12px; font-weight: 800; letter-spacing: .12em; line-height: 1; white-space: nowrap;
+}
+.level-badge b { font-weight: 900; }
+.level-badge--rookie { background: #3f3f46; color: #e4e4e7; box-shadow: inset 0 0 0 1px #52525b; }
+.level-badge--bronze {
+  background: linear-gradient(135deg, #6b3416, #d38a52 45%, #9a5428 70%, #e0a070); color: #fff7ed;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 -1px 0 rgba(0,0,0,.35); text-shadow: 0 1px 0 rgba(0,0,0,.35);
+}
+.level-badge--silver {
+  background: linear-gradient(135deg, #9ca3af, #f8fafc 38%, #71717a 58%, #e5e7eb); color: #18181b;
+  box-shadow: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(0,0,0,.25);
+}
+.level-badge--gold {
+  background: linear-gradient(90deg, #fde68a, #f59e0b); color: #1c1300;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 0 12px rgba(245,158,11,.35);
+}
+.level-badge--silver::after, .level-badge--gold::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; transform: translateX(-120%);
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.85) 50%, transparent 65%);
+}
+.level-badge--gold::after { z-index: 0; mix-blend-mode: overlay; }
+.level-badge--emerald {
+  background: linear-gradient(135deg, #064e3b, #10b981 25%, #047857 45%, #34d399 65%, #065f46 85%, #10b981);
+  background-size: 250% 250%; color: #ecfdf5;
+  clip-path: polygon(.7em 0, calc(100% - .7em) 0, 100% 50%, calc(100% - .7em) 100%, .7em 100%, 0 50%);
+  border-radius: 0; padding: .38em 1.2em; text-shadow: 0 0 8px rgba(16,185,129,.9);
+}
+.level-badge--emerald::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(60deg, transparent 45%, rgba(255,255,255,.25) 46%, transparent 60%),
+              linear-gradient(-60deg, transparent 55%, rgba(255,255,255,.18) 56%, transparent 70%);
+}
+.level-badge__spark {
+  position: absolute; width: 5px; height: 5px; background: #fff;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+}
+.level-badge--holo {
+  background: linear-gradient(110deg, #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5, #f0abfc); background-size: 300% 100%;
+  color: #1e1b4b; box-shadow: inset 0 0 0 1px rgba(255,255,255,.7), 0 0 14px rgba(232,121,249,.45);
+}
+.level-badge--holo::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: repeating-linear-gradient(45deg, rgba(255,255,255,.18) 0 2px, transparent 2px 6px);
+}
+.level-badge--inferno { background: #140700; color: #fff; overflow: visible; box-shadow: 0 0 0 1px #7c2d12, 0 0 16px rgba(249,115,22,.55); }
+.level-badge--inferno::before, .level-badge--mythic::before {
+  content: ""; position: absolute; border-radius: inherit;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude;
+}
+.level-badge--inferno::before {
+  inset: -1px; padding: 1.5px; background-size: 200% 100%;
+  background-image: linear-gradient(90deg, #7c2d12, #f97316, #fde047, #f97316, #7c2d12);
+}
+.level-badge--inferno .level-badge__text {
+  background: linear-gradient(0deg, #f97316, #fde047); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 4px rgba(249,115,22,.9));
+}
+.level-badge__ember { position: absolute; bottom: 0; width: 3px; height: 3px; border-radius: 9px; background: #fdba74; box-shadow: 0 0 4px #f97316; opacity: 0; }
+@property --level-badge-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.level-badge--mythic {
+  background: radial-gradient(circle at 30% 30%, #581c87, #1a0510 70%); color: #fff; overflow: visible;
+  box-shadow: 0 0 14px rgba(220,38,38,.45);
+}
+.level-badge--mythic::before {
+  inset: -2px; padding: 2px;
+  background: conic-gradient(from var(--level-badge-angle), #7f1d1d, #dc2626, #7e22ce, #fbbf24, #fff7cc, #fbbf24, #7e22ce, #dc2626, #7f1d1d);
+}
+.level-badge--mythic::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
+  background-image: radial-gradient(1px 1px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 60%, #fff, transparent),
+                    radial-gradient(1px 1px at 45% 80%, #fde68a, transparent), radial-gradient(1px 1px at 85% 25%, #fff, transparent);
+}
+.level-badge--mythic .level-badge__text {
+  background: linear-gradient(90deg, #fde68a, #fff7cc, #fca5a5, #e9d5ff, #fde68a); background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.level-badge__crown { font-size: 1.05em; letter-spacing: 0; }
+@keyframes level-badge-shine { 0%, 55% { transform: translateX(-120%); } 85%, 100% { transform: translateX(120%); } }
+@keyframes level-badge-slide { to { background-position: 300% 0; } }
+@keyframes level-badge-twinkle { 0%, 100% { opacity: .2; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.1); } }
+@keyframes level-badge-flicker {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(249,115,22,.9)); }
+  50% { filter: drop-shadow(0 0 9px rgba(253,224,71,.9)); }
+}
+@keyframes level-badge-ember { 0% { opacity: 0; transform: translateY(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(4px, -22px); } }
+/* Emerald's greens drifting slowly inside the gem. */
+@keyframes level-badge-drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+@keyframes level-badge-spin { to { --level-badge-angle: 360deg; } }
+@keyframes level-badge-pulse { 0%, 100% { box-shadow: 0 0 14px rgba(220,38,38,.45); } 50% { box-shadow: 0 0 26px rgba(251,191,36,.65); } }
+@media (prefers-reduced-motion: no-preference) {
+  .level-badge--silver::after { animation: level-badge-shine 7s ease-in-out infinite; }
+  .level-badge--gold::after { animation: level-badge-shine 3.2s ease-in-out infinite; }
+  .level-badge__spark { animation: level-badge-twinkle 2.4s ease-in-out infinite; }
+  .level-badge--emerald { animation: level-badge-drift 8s ease-in-out infinite alternate; }
+  .level-badge--holo, .level-badge--inferno::before { animation: level-badge-slide 4s linear infinite; }
+  .level-badge--inferno::before { animation-duration: 2s; }
+  .level-badge--inferno .level-badge__text { animation: level-badge-flicker 1.6s ease-in-out infinite; }
+  .level-badge__ember { animation: level-badge-ember 2.2s ease-in infinite; }
+  .level-badge--mythic { animation: level-badge-pulse 2.6s ease-in-out infinite; }
+  .level-badge--mythic::before { animation: level-badge-spin 3s linear infinite; }
+  .level-badge--mythic::after { animation: level-badge-twinkle 3s ease-in-out infinite; }
+  .level-badge--mythic .level-badge__text { animation: level-badge-slide 3s linear infinite; }
+}
+/* Without motion the embers would sit invisible, so show them faintly. */
+@media (prefers-reduced-motion: reduce) {
+  .level-badge__ember { opacity: .6; }
+}
+
+/* Avatar frames, matching the level badges' tiers (components/profile/
+   TierFrame.tsx). A ring drawn as the frame's background around the round
+   avatar inside it; the metal and gem tiers turn slowly, the top ones glow. */
+@property --tier-frame-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.tier-frame { position: relative; display: inline-flex; flex: none; border-radius: 9999px; padding: var(--tier-frame-width, 3px); }
+.tier-frame--rookie { background: #52525b; }
+.tier-frame--bronze { background: conic-gradient(from 200deg, #6b3416, #e0a070, #9a5428, #f0b98a, #6b3416); }
+.tier-frame--silver { background: conic-gradient(from var(--tier-frame-angle), #71717a, #f8fafc, #9ca3af, #ffffff, #71717a); }
+.tier-frame--gold {
+  background: conic-gradient(from var(--tier-frame-angle), #b45309, #fde68a, #f59e0b, #fff7cc, #b45309);
+  box-shadow: 0 0 10px rgba(245,158,11,.45);
+}
+.tier-frame--emerald {
+  background: conic-gradient(from var(--tier-frame-angle), #064e3b, #10b981, #6ee7b7, #d1fae5, #34d399, #047857, #064e3b);
+  box-shadow: 0 0 10px rgba(16,185,129,.45);
+}
+.tier-frame--holo {
+  background: conic-gradient(from var(--tier-frame-angle), #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5, #f0abfc);
+  box-shadow: 0 0 12px rgba(232,121,249,.45);
+}
+.tier-frame--inferno {
+  background: conic-gradient(from var(--tier-frame-angle), #7c2d12, #f97316, #fde047, #f97316, #7c2d12);
+  box-shadow: 0 0 12px rgba(249,115,22,.6);
+}
+.tier-frame--mythic {
+  background: conic-gradient(from var(--tier-frame-angle), #7f1d1d, #dc2626, #7e22ce, #fbbf24, #fff7cc, #fbbf24, #7e22ce, #dc2626, #7f1d1d);
+  box-shadow: 0 0 14px rgba(220,38,38,.5);
+}
+.tier-frame__spark {
+  position: absolute; top: 4%; right: 4%; width: 28%; max-width: 9px; aspect-ratio: 1; background: #fff;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+}
+@keyframes tier-frame-turn { to { --tier-frame-angle: 360deg; } }
+@keyframes tier-frame-flicker {
+  0%, 100% { box-shadow: 0 0 10px rgba(249,115,22,.55); }
+  50% { box-shadow: 0 0 18px rgba(253,224,71,.75); }
+}
+@keyframes tier-frame-glow-green {
+  0%, 100% { box-shadow: 0 0 8px rgba(16,185,129,.4); }
+  50% { box-shadow: 0 0 16px rgba(52,211,153,.7); }
+}
+@keyframes tier-frame-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(220,38,38,.5); }
+  50% { box-shadow: 0 0 22px rgba(251,191,36,.7); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tier-frame--silver { animation: tier-frame-turn 9s linear infinite; }
+  .tier-frame--gold { animation: tier-frame-turn 6s linear infinite; }
+  .tier-frame--emerald { animation: tier-frame-turn 7s linear infinite, tier-frame-glow-green 3s ease-in-out infinite; }
+  .tier-frame--holo { animation: tier-frame-turn 4s linear infinite; }
+  .tier-frame--inferno { animation: tier-frame-turn 2.4s linear infinite, tier-frame-flicker 1.6s ease-in-out infinite; }
+  .tier-frame--mythic { animation: tier-frame-turn 3s linear infinite, tier-frame-pulse 2.6s ease-in-out infinite; }
+  .tier-frame__spark { animation: level-badge-twinkle 2.4s ease-in-out infinite; }
+}
+
+/* The banner's XP bar, filled in the level tier's colours (ProfileHero). */
+.level-bar--rookie { background: #a1a1aa; }
+.level-bar--bronze { background: linear-gradient(90deg, #9a5428, #e0a070); }
+.level-bar--silver { background: linear-gradient(90deg, #9ca3af, #f8fafc); }
+.level-bar--gold { background: linear-gradient(90deg, #f59e0b, #fde68a); box-shadow: 0 0 8px rgba(245,158,11,.6); }
+.level-bar--emerald { background: linear-gradient(90deg, #047857, #34d399); box-shadow: 0 0 8px rgba(16,185,129,.6); }
+.level-bar--holo { background: linear-gradient(90deg, #f0abfc, #93c5fd, #86efac, #fde68a, #fca5a5); background-size: 200% 100%; box-shadow: 0 0 8px rgba(232,121,249,.6); }
+.level-bar--inferno { background: linear-gradient(90deg, #7c2d12, #f97316, #fde047); box-shadow: 0 0 10px rgba(249,115,22,.7); }
+.level-bar--mythic { background: linear-gradient(90deg, #991b1b, #dc2626, #7e22ce, #fbbf24, #991b1b); background-size: 200% 100%; box-shadow: 0 0 10px rgba(251,191,36,.6); }
+@media (prefers-reduced-motion: no-preference) {
+  .level-bar--holo, .level-bar--mythic { animation: level-badge-slide 6s linear infinite; }
+}
+
+/* The profile banner's artwork drifting slowly, like a film still (ProfileHero). */
+@keyframes banner-drift {
+  from { transform: scale(1.04) translate(0, 0); }
+  to { transform: scale(1.14) translate(-2%, -2%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-banner-drift {
+    animation: banner-drift 24s ease-in-out infinite alternate;
+  }
+}
 @keyframes flame-core {
   0%, 100% { transform: scale(1, 1); opacity: 0.9; }
   30% { transform: scale(0.9, 1.12); opacity: 1; }
