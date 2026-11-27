@@ -109,6 +109,37 @@ export default async function GamesPage(
     .toUpperCase() || '?'
   const accent = stats.profile.accent_colour ?? '#7c3aed'
 
+  // "My Games", the count and Import / Add Game: at the top in the public
+  // edition, just above the list in the friends edition (where the page is
+  // your Profile and the banner carries your name).
+  const Heading = FEATURES.newProfile ? 'h1' : 'h2'
+  const gamesHeader = (
+    <div className="flex items-center justify-between">
+      <div>
+        <Heading className="text-2xl font-bold text-fg-base">My Games</Heading>
+        <p className="text-sm text-fg-muted mt-0.5">{games?.length ?? 0} games</p>
+      </div>
+      <div className="flex items-center gap-2">
+        {/* Friends edition: no Import button here (the /import page is still
+            there; it's due to move somewhere else). */}
+        {FEATURES.newProfile && (
+          <Link
+            href="/import"
+            className="px-3 py-2 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
+          >
+            Import
+          </Link>
+        )}
+        <Link
+          href={`/games/new?status=${selectedStatus}`}
+          className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
+        >
+          + Add Game
+        </Link>
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       {/* Fallback is the same hero minus the backdrop, so nothing moves when
@@ -117,26 +148,8 @@ export default async function GamesPage(
         <HeroWithBanner stats={stats} initials={initials} accent={accent} streak={streak} />
       </Suspense>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-fg-base">My Games</h1>
-          <p className="text-sm text-fg-muted mt-0.5">{games?.length ?? 0} games</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/import"
-            className="px-3 py-2 border border-edge-base text-fg-secondary text-sm font-medium rounded-lg hover:bg-surface-hover transition-colors"
-          >
-            Import
-          </Link>
-          <Link
-            href={`/games/new?status=${selectedStatus}`}
-            className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 transition-colors"
-          >
-            + Add Game
-          </Link>
-        </div>
-      </div>
+      {/* The public edition keeps the heading and buttons at the top. */}
+      {FEATURES.newProfile && gamesHeader}
 
       {/* Now Playing strip — always visible if any games are in progress.
           Friends edition only: the public edition's Playing games show in
@@ -151,6 +164,10 @@ export default async function GamesPage(
           as opposed to what was deliberately picked up above. In the public
           edition, every Playing game the tracker has seen. */}
       <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner />
+
+      {/* Friends edition: the page is your Profile (the banner's name is its
+          heading), and "My Games" titles the list, under Recently played. */}
+      {!FEATURES.newProfile && gamesHeader}
 
       <Suspense>
         <GameFilters />

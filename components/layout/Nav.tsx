@@ -11,7 +11,9 @@ import { FEATURES, wheelOn } from '@/lib/edition'
 
 const navItemsBefore = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/games', label: 'My Games' },
+  // The friends edition calls it Profile: it carries your banner and stats.
+  // The public edition has a separate Profile (newProfile), so it stays My Games.
+  { href: '/games', label: FEATURES.newProfile ? 'My Games' : 'Profile' },
   { href: '/wheel', label: 'Wheel' },
 ]
 
