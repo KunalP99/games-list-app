@@ -8,6 +8,7 @@ import type { RawgSearchResult, RawgGameDetail, RawgScreenshot, RawgAddition, Ga
 import { EMPTY_GAME_EXTRAS } from './rawg'
 import { SEARCH_PAGE_SIZE } from './rawg'
 import { orderVideos, pickAgeRating, playersLine, storeLinks, isUpcoming, releaseLines, splitAddOns, platformNames, type StoreGame, type StoreRelated } from './store-page'
+import { ARTWORK_FIELDS, pictureArtworks, type IgdbArtwork } from './igdb-artworks'
 import { rankSearchResults, mergeById, apicalypseString, slugPrefix, FULL_GAME_TYPES, type RankCandidate } from './search-ranking'
 
 const TIMEOUT_MS = 8000
@@ -29,10 +30,8 @@ function bannerUrl(imageId: string): string {
 // (portrait posters, 16:9 key art, ultra-wide banners) in arbitrary order, so
 // keep only landscape ones (ratio ≥ 1.3) and take the highest-resolution — that
 // fills a 16:9 hero cleanly. Returns null if none are landscape (→ screenshot).
-function artworkImage(g: { artworks?: Array<{ image_id?: string; width?: number; height?: number }> }): string | null {
-  const landscape = (g.artworks ?? [])
-    .filter(a => a.image_id && a.width && a.height && a.width / a.height >= 1.3)
-    .sort((a, b) => (b.width! * b.height!) - (a.width! * a.height!))
+function artworkImage(g: { artworks?: IgdbArtwork[] }): string | null {
+  const landscape = pictureArtworks(g.artworks)
   return landscape[0]?.image_id ? bannerUrl(landscape[0].image_id) : null
 }
 function screenshotUrl(imageId: string): string {
@@ -41,10 +40,10 @@ function screenshotUrl(imageId: string): string {
 // The card/hero image (landscape). Prefer a screenshot (no baked-in title text,
 // so it doesn't clash with the title the card overlays), then artwork (key art —
 // often has the logo), then the portrait cover as a last resort.
-function heroImage(g: { artworks?: Array<{ image_id?: string }>; screenshots?: Array<{ image_id?: string }>; cover?: { image_id?: string } }): string | null {
+function heroImage(g: { artworks?: IgdbArtwork[]; screenshots?: Array<{ image_id?: string }>; cover?: { image_id?: string } }): string | null {
   const shot = g.screenshots?.find(s => s.image_id)?.image_id
   if (shot) return landscapeUrl(shot)
-  const art = g.artworks?.find(a => a.image_id)?.image_id
+  const art = pictureArtworks(g.artworks, 0)[0]?.image_id
   if (art) return landscapeUrl(art)
   return coverUrl(g.cover?.image_id)
 }
@@ -121,7 +120,7 @@ async function igdbQuery<T = unknown>(endpoint: string, body: string): Promise<T
   return (await igdbTry<T>(endpoint, body)).rows
 }
 
-const DETAIL_FIELDS = 'name, summary, first_release_date, cover.image_id, artworks.image_id, artworks.width, artworks.height, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer'
+const DETAIL_FIELDS = `name, summary, first_release_date, cover.image_id, ${ARTWORK_FIELDS}, screenshots.image_id, genres.name, involved_companies.company.name, involved_companies.developer`
 
 type IgdbGame = {
   id: number
@@ -129,7 +128,7 @@ type IgdbGame = {
   summary?: string
   first_release_date?: number
   cover?: { image_id?: string }
-  artworks?: Array<{ image_id?: string; width?: number; height?: number }>
+  artworks?: IgdbArtwork[]
   screenshots?: Array<{ image_id?: string }>
   genres?: Array<{ name: string }>
   involved_companies?: IgdbCompany[]
@@ -256,12 +255,10 @@ export async function getGameDetail(id: number): Promise<RawgGameDetail | null> 
 // getGameDetail would store. Returns [] on failure or if the game has none.
 export async function getGameImages(id: number): Promise<string[]> {
   const games = await igdbQuery<IgdbGame>('games',
-    `fields artworks.image_id, artworks.width, artworks.height, screenshots.image_id; where id = ${id}; limit 1;`)
+    `fields ${ARTWORK_FIELDS}, screenshots.image_id; where id = ${id}; limit 1;`)
   const g = games[0]
   if (!g) return []
-  const artworks = (g.artworks ?? [])
-    .filter(a => a.image_id && a.width && a.height && a.width / a.height >= 1.3)
-    .sort((a, b) => (b.width! * b.height!) - (a.width! * a.height!))
+  const artworks = pictureArtworks(g.artworks)
     .map(a => bannerUrl(a.image_id!))
   const shots = (g.screenshots ?? [])
     .filter(s => s.image_id)
@@ -358,9 +355,9 @@ export async function getEventsToday(): Promise<IgdbEvent[]> {
 // version_parent) and cancelled titles. Ordered most-hyped first.
 export async function getAnticipatedGames(limit = 12): Promise<RelatedGame[]> {
   const now = Math.floor(Date.now() / 1000)
-  const rows = await igdbQuery<{ id: number; name: string; first_release_date?: number; cover?: { image_id?: string }; screenshots?: Array<{ image_id?: string }>; artworks?: Array<{ image_id?: string }>; game_status?: number }>(
+  const rows = await igdbQuery<{ id: number; name: string; first_release_date?: number; cover?: { image_id?: string }; screenshots?: Array<{ image_id?: string }>; artworks?: IgdbArtwork[]; game_status?: number }>(
     'games',
-    `fields name, first_release_date, cover.image_id, screenshots.image_id, artworks.image_id, game_status; where first_release_date > ${now} & hypes > 0 & game_type = 0 & version_parent = null; sort hypes desc; limit ${limit + 8};`)
+    `fields name, first_release_date, cover.image_id, screenshots.image_id, ${ARTWORK_FIELDS}, game_status; where first_release_date > ${now} & hypes > 0 & game_type = 0 & version_parent = null; sort hypes desc; limit ${limit + 8};`)
   return rows
     .filter(g => g.game_status !== 6) // drop cancelled
     .map(g => ({
@@ -492,10 +489,8 @@ export async function getDeveloperGames(id: number): Promise<DeveloperGamesInfo>
  * only an artwork close to the box's shape is used; otherwise a screenshot
  * (the right shape, and no logo to cut), else nothing.
  */
-function capsuleImage(g: { artworks?: Array<{ image_id?: string; width?: number; height?: number }>; screenshots?: Array<{ image_id?: string }> }): string | null {
-  const fits = (g.artworks ?? [])
-    .filter(a => a.image_id && a.width && a.height && a.width / a.height >= 1.6 && a.width / a.height <= 2.4)
-    .sort((a, b) => (b.width! * b.height!) - (a.width! * a.height!))
+function capsuleImage(g: { artworks?: IgdbArtwork[]; screenshots?: Array<{ image_id?: string }> }): string | null {
+  const fits = pictureArtworks(g.artworks, 1.6, 2.4)
   if (fits[0]?.image_id) return landscapeUrl(fits[0].image_id)
   const shot = g.screenshots?.find(s => s.image_id)?.image_id
   return shot ? landscapeUrl(shot) : null
@@ -528,7 +523,7 @@ export async function getStoreGame(id: number): Promise<StoreGame | null> {
     'involved_companies.developer', 'involved_companies.company.name',
     'platforms.name', 'platforms.abbreviation',
     'age_ratings.organization.name', 'age_ratings.rating_category.rating',
-    'cover.image_id', 'artworks.image_id', 'artworks.width', 'artworks.height', 'screenshots.image_id',
+    'cover.image_id', ARTWORK_FIELDS, 'screenshots.image_id',
     'videos.name', 'videos.video_id', 'websites.url', 'websites.type.type',
     'external_games.uid', 'external_games.external_game_source',
     'release_dates.date', 'release_dates.platform.abbreviation', 'release_dates.platform.name',
@@ -542,7 +537,7 @@ export async function getStoreGame(id: number): Promise<StoreGame | null> {
     involved_companies?: Array<{ developer?: boolean; company?: { name?: string } }>
     platforms?: Array<{ name?: string; abbreviation?: string }>
     age_ratings?: Parameters<typeof pickAgeRating>[0]
-    cover?: { image_id?: string }; artworks?: Array<{ image_id?: string; width?: number; height?: number }>; screenshots?: Array<{ image_id?: string }>
+    cover?: { image_id?: string }; artworks?: IgdbArtwork[]; screenshots?: Array<{ image_id?: string }>
     videos?: Array<{ name?: string; video_id?: string }>
     websites?: Parameters<typeof storeLinks>[0]
     external_games?: Array<{ uid?: string; external_game_source?: number }>
