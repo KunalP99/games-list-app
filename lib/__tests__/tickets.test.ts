@@ -19,42 +19,37 @@ describe('calculateCompletionAwards', () => {
       expect(awards).toContainEqual({ reason: 'game_completed_short', amount: 1 })
     })
 
-    it('awards 2 tickets for a medium game (20–49 hours)', () => {
+    it('awards 2 tickets for a medium game (20–59 hours)', () => {
       const awards = calculateCompletionAwards(20, null)
       expect(awards).toContainEqual({ reason: 'game_completed_medium', amount: 2 })
     })
 
-    it('awards 2 tickets at 49 hours (still medium)', () => {
-      const awards = calculateCompletionAwards(49, null)
+    it('awards 2 tickets at 59.9 hours (still medium)', () => {
+      const awards = calculateCompletionAwards(59.9, null)
       expect(awards).toContainEqual({ reason: 'game_completed_medium', amount: 2 })
     })
 
-    it('awards 3 tickets for a long game (50+ hours)', () => {
-      const awards = calculateCompletionAwards(50, null)
+    it('awards 3 tickets for a long game (60+ hours)', () => {
+      const awards = calculateCompletionAwards(60, null)
       expect(awards).toContainEqual({ reason: 'game_completed_long', amount: 3 })
     })
 
-    it('awards 3 tickets at exactly 100 hours (no bonus yet)', () => {
-      const awards = calculateCompletionAwards(100, null)
+    it('awards 3 tickets up to 94.9 hours (no bonus yet)', () => {
+      const awards = calculateCompletionAwards(94.9, null)
       expect(awards).toContainEqual({ reason: 'game_completed_long', amount: 3 })
       expect(awards.find(a => a.reason === 'game_completed_bonus_hours')).toBeUndefined()
     })
   })
 
-  describe('bonus hours beyond 100', () => {
-    it('awards 1 bonus ticket at 120 hours (1 full 20h block beyond 100)', () => {
-      const awards = calculateCompletionAwards(120, null)
+  describe('bonus hours past 75', () => {
+    it('awards 1 bonus ticket at 95 hours (1 full 20h block past 75)', () => {
+      const awards = calculateCompletionAwards(95, null)
       expect(awards).toContainEqual({ reason: 'game_completed_bonus_hours', amount: 1 })
     })
 
-    it('awards 2 bonus tickets at 140 hours (2 full 20h blocks beyond 100)', () => {
-      const awards = calculateCompletionAwards(140, null)
+    it('awards 2 bonus tickets at 115 hours', () => {
+      const awards = calculateCompletionAwards(115, null)
       expect(awards).toContainEqual({ reason: 'game_completed_bonus_hours', amount: 2 })
-    })
-
-    it('awards no bonus at 119 hours (not a full 20h block beyond 100)', () => {
-      const awards = calculateCompletionAwards(119, null)
-      expect(awards.find(a => a.reason === 'game_completed_bonus_hours')).toBeUndefined()
     })
   })
 
@@ -85,7 +80,7 @@ describe('calculateCompletionAwards', () => {
     it('stacks long game + bonus hours + achievement bonus', () => {
       const awards = calculateCompletionAwards(120, 100)
       const total = awards.reduce((sum, a) => sum + a.amount, 0)
-      expect(total).toBe(7) // 3 (long) + 1 (bonus hours) + 3 (achievements)
+      expect(total).toBe(8) // 3 (long) + 2 (bonus: 95 and 115) + 3 (achievements)
     })
 
     it('returns exactly one base award per completion', () => {

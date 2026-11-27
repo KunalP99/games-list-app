@@ -13,11 +13,25 @@ describe('editionFrom', () => {
 })
 
 describe('featuresFor', () => {
-  it('has the wheel and Ambient in the friends edition only', () => {
+  it('has the wheel in the friends edition only, and Ambient in neither', () => {
     expect(featuresFor('friends').wheel).toBe(true)
     expect(featuresFor('public').wheel).toBe(false)
-    expect(featuresFor('friends').ambient).toBe(true)
+    expect(featuresFor('friends').ambient).toBe(false)
     expect(featuresFor('public').ambient).toBe(false)
+  })
+
+  it('has the Main Game and the wheel lock in the friends edition only', () => {
+    expect(featuresFor('friends').mainGame).toBe(true)
+    expect(featuresFor('public').mainGame).toBe(false)
+    expect(featuresFor('friends').wheelLock).toBe(true)
+    expect(featuresFor('public').wheelLock).toBe(false)
+  })
+
+  it('pays tickets for hours played in both, capped per day in the public edition only', () => {
+    expect(featuresFor('friends').hoursTickets).toBe(true)
+    expect(featuresFor('public').hoursTickets).toBe(true)
+    expect(featuresFor('friends').hoursTicketDailyCap).toBeNull()
+    expect(featuresFor('public').hoursTicketDailyCap).toBe(8)
   })
 
   it('lists Ticket History in the nav for friends only', () => {
@@ -100,9 +114,9 @@ describe('wheelOnFor', () => {
 })
 
 describe('statusForEdition', () => {
-  it('turns Ambient into Playing in the public edition only', () => {
+  it('turns Ambient into Playing in both editions', () => {
     expect(statusForEdition('public', 'ambient')).toBe('playing')
-    expect(statusForEdition('friends', 'ambient')).toBe('ambient')
+    expect(statusForEdition('friends', 'ambient')).toBe('playing')
   })
 
   it('leaves every other status alone', () => {

@@ -28,12 +28,32 @@ export function featuresFor(edition: Edition) {
     /** The wheel, its history, settings, achievements and dashboard card. */
     wheel: edition === 'friends',
     /**
-     * A separate Ambient status for ongoing games the tracker files in. The
-     * public edition has a single Playing status instead: tracker-found games
-     * are filed as Playing, Ambient isn't offered anywhere, and there's no Now
-     * Playing section, just Recently played (tracked Playing games).
+     * A separate Ambient status for ongoing games the tracker files in. Off in
+     * both editions since the hours-tickets change (2026-11-27): there's a
+     * single Playing status, tracker-found games are filed as Playing, and
+     * Ambient isn't offered anywhere (db/ambient-to-playing.sql moved the
+     * friends edition's Ambient games to Playing). Kept as a switch because
+     * the code still reads it.
      */
-    ambient: edition === 'friends',
+    ambient: false,
+    /**
+     * The friends edition's Main Game: games the wheel picked (games.assigned_by)
+     * shown on their own above Playing (every other Playing game). The public
+     * edition has no wheel; its Recently played is every tracked Playing game.
+     */
+    mainGame: edition === 'friends',
+    /**
+     * A wheel game won from now on (games.locks_wheel) locks the wheel until
+     * it's completed, DNF'd or deleted, and can't be moved back to Backlog.
+     */
+    wheelLock: edition === 'friends',
+    /**
+     * 1 ticket per 25 hours of tracked play on games the wheel didn't pick
+     * (lib/hours-tickets.ts, add_hours_progress in db/hours-tickets.sql).
+     */
+    hoursTickets: true,
+    /** At most this many tracked hours a UK day count towards hours tickets (null: no cap). */
+    hoursTicketDailyCap: edition === 'public' ? 8 : null,
     /**
      * Dropping a game (DNF) costs tickets. The public edition's tickets only
      * ever go up from playing (they'll be spent on cosmetics), so it has no DNF

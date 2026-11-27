@@ -205,7 +205,7 @@ export function gameCompletionXp(hours: number | null, achievementProgress: numb
   const h = hours ?? 0
   let base: number
   if (h < 20) base = 50
-  else if (h < 50) base = 100
+  else if (h < 60) base = 100
   else if (h <= 100) base = 175
   else base = 250 + Math.floor((h - 100) / 10) * 5
   if (achievementProgress === 100) base += 75

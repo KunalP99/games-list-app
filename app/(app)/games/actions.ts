@@ -18,6 +18,8 @@ import {
 } from '@/lib/game-quick-actions'
 import { editionStatus, FEATURES } from '@/lib/edition'
 import { tagReplayIfFinishedBefore } from '@/lib/data/replays'
+import { sameGame, type LibraryRow } from '@/lib/trackable-row'
+import { TICKET_PENALTIES } from '@/lib/constants'
 import {
   parseHours, parseAchievementProgress, parseDlc, parseYoutubeVideos, parseStringList, type GameVideo,
 } from '@/lib/game-input'
@@ -104,10 +106,20 @@ export async function fetchGameMedia(url: string): Promise<
   }
 }
 
+// ─── The Main Game ──────────────────────────────────────────────────────────
+// A wheel game won since the lock came in holds the wheel while it's Playing
+// (FEATURES.wheelLock, games.locks_wheel). It can be completed or DNF'd (or
+// deleted), but not put back in the Backlog: that would unlock the wheel
+// without finishing or dropping it.
+const MAIN_GAME_STAYS = 'This is your Main Game from the wheel: finish it or drop it (DNF) to unlock the wheel. It can’t go back to the Backlog.'
+function holdsWheel(game: { status: string; locks_wheel?: boolean | null }): boolean {
+  return FEATURES.wheelLock && game.status === 'playing' && !!game.locks_wheel
+}
+
 // ─── Completion rewards ─────────────────────────────────────────────────────
 // Tickets and completion XP for a game that has just become (or stays)
-// Completed. The rules are in lib/completion-rewards.ts (friends: as before;
-// public: verified). Everything is read back from the database after the
+// Completed. The rules are in lib/completion-rewards.ts (friends: by length
+// for wheel games, untracked hours for others; public: verified). Everything is read back from the database after the
 // game's row was written, so every caller gets the same answer from the same
 // facts. The reward, including its XP and why, is recorded per game in
 // completion_rewards (service role only), which is what lets it be taken back
@@ -116,7 +128,7 @@ async function grantCompletionRewards(userId: string, gameId: string) {
   const admin = createAdminClient() as any
   const [{ data: game }, { data: sessions }, { data: profile }, { data: recent }] = await Promise.all([
     admin.from('games')
-      .select('hours_played, achievement_progress, is_sequel, igdb_id, rawg_id, completion_date')
+      .select('hours_played, achievement_progress, is_sequel, igdb_id, rawg_id, completion_date, assigned_by')
       .eq('id', gameId).eq('user_id', userId).single(),
     admin.from('play_sessions').select('applied_hours').eq('game_id', gameId).eq('user_id', userId),
     admin.from('profiles').select('created_at').eq('id', userId).single(),
@@ -133,6 +145,7 @@ async function grantCompletionRewards(userId: string, gameId: string) {
     typedHours: game.hours_played == null ? null : Number(game.hours_played),
     achievementProgress: game.achievement_progress == null ? null : Number(game.achievement_progress),
     isSequel: !!game.is_sequel,
+    isWheelGame: game.assigned_by != null,
     trackedHours: (sessions ?? []).reduce((sum: number, s: { applied_hours: number | string }) => sum + Number(s.applied_hours ?? 0), 0),
     providerLinked: game.igdb_id != null || game.rawg_id != null,
     completionDate: game.completion_date ?? null,
@@ -305,10 +318,10 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Fetch current status, rawg_id, and description before updating to detect transitions
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress, steam_appid, completion_date, is_sequel')
+    .select('status, rawg_id, igdb_id, description, genres, dominant_color, cover_image_url, artwork_url, hours_played, achievement_progress, steam_appid, completion_date, is_sequel, locks_wheel')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null; completion_date: string | null; is_sequel: boolean | null } | null }
+    .single() as { data: { locks_wheel?: boolean | null; status: string; rawg_id: number | null; igdb_id: number | null; description: string | null; genres: string[] | null; dominant_color: string | null; cover_image_url: string | null; artwork_url: string | null; hours_played: number | null; achievement_progress: number | null; steam_appid: number | null; completion_date: string | null; is_sequel: boolean | null } | null }
 
   // Not this user's game (or no such game). Without this the update below
   // matches no rows, which isn't an error, and the ticket logic further down
@@ -318,6 +331,7 @@ export async function updateGame(id: string, formData: FormData) {
 
   // Ambient becomes Playing in an edition without it (lib/edition.ts).
   const status = editionStatus(formData.get('status') as string)
+  if (holdsWheel(existing) && status === 'backlog') return { error: MAIN_GAME_STAYS }
   // Checked here, not just by the form's inputs: a Server Action can be called
   // with any payload, and hours feed straight into completion tickets.
   const hoursParsed = parseHours(formData.get('hours_played'))
@@ -643,11 +657,12 @@ export async function deleteImpact(id: string): Promise<DeleteImpact | null> {
   if (!user) return null
 
   const { data: game } = await (supabase.from('games') as any)
-    .select('status')
+    .select('status, locks_wheel')
     .eq('id', id)
     .eq('user_id', user.id)
-    .maybeSingle() as { data: { status: string } | null }
+    .maybeSingle() as { data: { status: string; locks_wheel?: boolean | null } | null }
   if (!game) return null
+  const asDnf = holdsWheel(game)
 
   const reasons: readonly string[] =
     game.status === 'completed' ? COMPLETION_TICKET_REASONS
@@ -668,7 +683,9 @@ export async function deleteImpact(id: string): Promise<DeleteImpact | null> {
     .eq('id', user.id)
     .single() as { data: { ticket_balance: number } | null }
 
-  return { change: -reversed, balance: profile?.ticket_balance ?? 0 }
+  // Deleting the Main Game counts as dropping it: the DNF charge (a negative amount).
+  const charge = asDnf && FEATURES.dnfPenalty ? TICKET_PENALTIES.assigned_game_incomplete : 0
+  return { change: charge - reversed, balance: profile?.ticket_balance ?? 0, asDnf }
 }
 
 // `stay`: the quick-actions menu deletes from the list itself, so it skips
@@ -680,12 +697,20 @@ export async function deleteGame(id: string, opts?: { stay?: boolean }) {
 
   // Reverse any earned tickets and remove their history rows before deletion
   const { data: game } = await (supabase.from('games') as any)
-    .select('status')
+    .select('status, locks_wheel')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: string } | null }
+    .single() as { data: { status: string; locks_wheel?: boolean | null } | null }
 
-  if (game?.status === 'completed') {
+  // The Main Game holding the wheel: deleting it counts as dropping it, so
+  // the DNF charge applies and stays (its ledger row outlives the game), and
+  // the turn comes back as for a DNF (consumeWheelPending). The confirmation
+  // says so first (deleteImpact's `asDnf`).
+  if (game && holdsWheel(game)) {
+    await applyDnfPenalty(supabase, user.id, id)
+    const reverted = await consumeWheelPending(supabase, user.id, id, true)
+    if (reverted) revalidatePath('/wheel')
+  } else if (game?.status === 'completed') {
     await reverseCompletionRewards(supabase, user.id, id)
   } else if (game?.status === 'dnf') {
     await reverseDnfPenalty(supabase, user.id, id)
@@ -713,12 +738,13 @@ export async function setGameStatus(id: string, rawTo: string) {
   if (!user) redirect('/login')
 
   const { data: existing } = await (supabase.from('games') as any)
-    .select('status')
+    .select('status, locks_wheel')
     .eq('id', id)
     .eq('user_id', user.id)
-    .single() as { data: { status: 'backlog' | 'playing' | 'completed' | 'dnf' | 'ambient' } | null }
+    .single() as { data: { status: 'backlog' | 'playing' | 'completed' | 'dnf' | 'ambient'; locks_wheel?: boolean | null } | null }
   if (!existing) return { error: 'Game not found' }
   if (existing.status === to) return { success: true }
+  if (holdsWheel(existing) && to === 'backlog') return { error: MAIN_GAME_STAYS }
 
   // Same field rules as updateGame: completion/drop dates only belong to
   // completed and DNF games, and a backlog game hasn't been started.
@@ -839,5 +865,32 @@ export async function addRecommendationToBacklog(formData: FormData): Promise<{ 
   if (error) return { success: false, error: error.message }
   revalidatePath('/dashboard')
   revalidatePath('/games')
+  return { success: true }
+}
+
+// ─── Which copy gets tracked hours ──────────────────────────────────────────
+// A game can be both the Main Game (a new copy the wheel added) and another
+// Playing copy (its multiplayer, say). The tracker gives the hours to the
+// Main Game unless its owner picks a copy here (lib/trackable-row.ts pickRow).
+export async function trackHoursHere(id: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: playing } = await (supabase.from('games') as any)
+    .select('id, title, status, igdb_id, rawg_id, steam_appid')
+    .eq('user_id', user.id)
+    .eq('status', 'playing') as { data: LibraryRow[] | null }
+  const target = (playing ?? []).find(g => g.id === id)
+  if (!target) return { error: 'Only a game you’re playing can take tracked hours.' }
+  const others = (playing ?? []).filter(g => g.id !== id && sameGame(g, target)).map(g => g.id)
+
+  const { error } = await (supabase.from('games') as any).update({ tracks_hours: true }).eq('id', id).eq('user_id', user.id)
+  if (error) return { error: error.message }
+  if (others.length > 0) {
+    await (supabase.from('games') as any).update({ tracks_hours: false }).in('id', others).eq('user_id', user.id)
+  }
+  revalidatePath(`/games/${id}`)
+  for (const other of others) revalidatePath(`/games/${other}`)
   return { success: true }
 }

@@ -88,11 +88,23 @@ describe('decideWonGameAction', () => {
     ])).toEqual({ action: 'flip', gameId: 'b1' })
   })
 
-  it('still does nothing when an ambient copy sits beside one being played', () => {
+  it('does nothing when the game is already the Main Game (a Playing wheel game)', () => {
     expect(decideWonGameAction([
       { id: 'a1', status: 'ambient' },
-      { id: 'p1', status: 'playing' },
+      { id: 'p1', status: 'playing', assigned_by: 'me' },
     ])).toEqual({ action: 'noop' })
+  })
+
+  it('adds a new Main Game copy beside one already being played outside the wheel', () => {
+    // The multiplayer's been Playing for months; the wheel picks it for the campaign.
+    expect(decideWonGameAction([{ id: 'p1', status: 'playing', assigned_by: null }]))
+      .toEqual({ action: 'insert', isReplay: false })
+    // Finished before: the wheel's run is a replay.
+    expect(decideWonGameAction([{ id: 'p1', status: 'playing' }, { id: 'c1', status: 'completed' }]))
+      .toEqual({ action: 'insert', isReplay: true })
+    // A Backlog copy is still the one the wheel meant.
+    expect(decideWonGameAction([{ id: 'p1', status: 'playing' }, { id: 'b1', status: 'backlog' }]))
+      .toEqual({ action: 'flip', gameId: 'b1' })
   })
 
   it('inserts a replay entry when the game is owned only as completed', () => {
@@ -107,15 +119,15 @@ describe('decideWonGameAction', () => {
     ])).toEqual({ action: 'insert', isReplay: true })
   })
 
-  it('is a no-op when the game is already playing (avoids duplicates)', () => {
-    expect(decideWonGameAction([{ id: 'p1', status: 'playing' }]))
+  it('is a no-op when the game is already the Main Game (avoids duplicates)', () => {
+    expect(decideWonGameAction([{ id: 'p1', status: 'playing', assigned_by: 'me' }]))
       .toEqual({ action: 'noop' })
   })
 
-  it('is a no-op when a replay is in progress (completed + playing)', () => {
+  it('is a no-op when a wheel replay is in progress (completed + Main Game)', () => {
     expect(decideWonGameAction([
       { id: 'c1', status: 'completed' },
-      { id: 'p1', status: 'playing' },
+      { id: 'p1', status: 'playing', assigned_by: 'me' },
     ])).toEqual({ action: 'noop' })
   })
 
@@ -145,10 +157,10 @@ describe('decideWonGameAction', () => {
     ])).toEqual({ action: 'flip', gameId: 'b1' })
   })
 
-  it('playing takes precedence over an existing backlog copy', () => {
+  it('the Main Game takes precedence over an existing backlog copy', () => {
     expect(decideWonGameAction([
       { id: 'b1', status: 'backlog' },
-      { id: 'p1', status: 'playing' },
+      { id: 'p1', status: 'playing', assigned_by: 'me' },
     ])).toEqual({ action: 'noop' })
   })
 

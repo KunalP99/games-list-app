@@ -68,17 +68,22 @@ export function moveWarning(from: GameStatus, to: GameStatus, withDnfPenalty: bo
  * The ledger rows deleting a game reverses: a completed game's completion
  * tickets, or a DNF game's penalty. Must match the reasons in
  * `reverse_game_completion_tickets` / `reverse_game_dnf_tickets`
- * (db/review-fixes.sql).
+ * (db/review-fixes.sql; `hours_typed` from db/hours-tickets.sql). Tickets
+ * for tracked play (`hours_played`) are never taken back.
  */
 export const COMPLETION_TICKET_REASONS = [
   'game_completed_short', 'game_completed_medium', 'game_completed_long',
   'game_completed_bonus_hours', 'achievement_100_percent',
-  'sequel_back_to_back', 'series_back_to_back',
+  'sequel_back_to_back', 'series_back_to_back', 'hours_typed',
 ] as const
 export const DNF_TICKET_REASONS = ['assigned_game_incomplete'] as const
 
 /** What deleting a game does to the balance (from `deleteImpact`). */
-export type DeleteImpact = { change: number; balance: number }
+/**
+ * `asDnf`: the game is the Main Game holding the wheel (FEATURES.wheelLock),
+ * so deleting it counts as dropping it: the DNF charge applies and stays.
+ */
+export type DeleteImpact = { change: number; balance: number; asDnf?: boolean }
 
 /** A balance for display: a real minus sign, so −3 doesn't read as a dash. */
 export const formatBalance = (n: number) => (n < 0 ? `−${-n}` : `${n}`)
@@ -94,6 +99,9 @@ export const formatChange = (n: number) => (n > 0 ? `+${n}` : formatBalance(n))
  */
 export function deleteWarning(status: GameStatus, impact?: DeleteImpact | null): string {
   const gone = 'It comes off your list for good, along with its hours and notes.'
+  if (impact?.asDnf) {
+    return `${gone} It's your Main Game from the wheel, so deleting it counts as dropping it (DNF): the DNF ticket charge applies and stays, and the wheel unlocks.`
+  }
   if (status === 'completed' && impact === null) return `${gone} The tickets you earned for completing it are taken back.`
   return gone
 }

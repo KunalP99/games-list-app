@@ -11,7 +11,7 @@ import ProfileHero from '@/components/profile/ProfileHero'
 import { getCurrentStreak } from '@/lib/data/current-streak'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
-import { getRecentlyPlayed } from '@/lib/recently-played'
+import { getPlayingStrips } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import { Suspense } from 'react'
 import { FEATURES } from '@/lib/edition'
@@ -96,21 +96,10 @@ export default async function UserProfilePage(
   }
   if (searchParams.q?.trim()) gamesQuery = (gamesQuery as any).or(ilikeAnyFilter(['title', 'developer'], searchParams.q.trim()))
 
-  const [gamesRes, playingGamesRes, stats, recentlyPlayed, liveSessions, streak] = await Promise.all([
+  const [gamesRes, stats, strips, liveSessions, streak] = await Promise.all([
     gamesQuery,
-    supabase
-      .from('games')
-      .select('*')
-      .eq('user_id', profile.id)
-      .eq('status', 'playing')
-      // Most recently picked up first. `start_date` is what actually records
-      // when a game became "playing" (the wheel stamps it on assignment, and
-      // the form asks for it), so it leads; `created_at` breaks ties and covers
-      // games with no start date, which sort last.
-      .order('start_date', { ascending: false, nullsFirst: false })
-      .order('created_at', { ascending: false }),
     computeUserStats(supabase, profile.id),
-    getRecentlyPlayed(supabase, profile.id),
+    getPlayingStrips(supabase, profile.id),
     getLiveSessions(supabase, [profile.id]),
     // The banner's streak flame: the Cinematic banner only, and only when
     // their play activity is visible (always, in the friends edition).
@@ -118,7 +107,6 @@ export default async function UserProfilePage(
   ])
 
   const games = gamesRes.data as Game[] | null
-  const playingGames = (playingGamesRes.data ?? []) as Game[]
 
   // Depends on stats.heroGame, so it can't join the Promise.all above; it may
   // fetch the game's screenshots live (lib/hero-banner.ts), bounded by that
@@ -148,9 +136,12 @@ export default async function UserProfilePage(
           as the rail, leaving a large gap above the games list whenever the
           content beside it was shorter. */}
       {/* No Now Playing in the public edition: Recently played covers it (lib/edition.ts). */}
-      {FEATURES.ambient && <NowPlayingGrid games={playingGames} isOwner={isOwner} liveSessions={liveSessions} />}
+      {/* Friends edition: the Main Game, the Playing games the wheel picked. */}
+      {FEATURES.mainGame && <NowPlayingGrid heading="Main Game" games={strips.mainGames} isOwner={isOwner} liveSessions={liveSessions} />}
 
-      {allows('privacy_activity') && <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner={isOwner} />}
+      {allows('privacy_activity') && (
+        <RecentlyPlayed heading={FEATURES.mainGame ? 'Playing' : undefined} games={strips.playing} liveSessions={liveSessions} isOwner={isOwner} />
+      )}
 
       {!allows('privacy_games') ? (
         <div className="rounded-2xl border border-edge-base bg-surface-base px-6 py-10 text-center">

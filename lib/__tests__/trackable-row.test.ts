@@ -105,3 +105,20 @@ describe('backlogCopy: the copy a running game starts from', () => {
     expect(backlogCopy(done, [done, other])).toBeUndefined()
   })
 })
+
+describe('pickRow between a Main Game and another Playing copy', () => {
+  const mp = { id: 'mp', title: 'Halo', status: 'playing', assigned_by: null, tracks_hours: false }
+  const campaign = { id: 'camp', title: 'Halo', status: 'playing', assigned_by: 'me', tracks_hours: false }
+
+  it('gives the hours to the Main Game (the wheel copy), whichever was touched last', () => {
+    expect(pickRow([mp, campaign])!.id).toBe('camp')
+  })
+
+  it('unless its owner chose the other copy', () => {
+    expect(pickRow([campaign, { ...mp, tracks_hours: true }])!.id).toBe('mp')
+  })
+
+  it('goes back to the other copy once the Main Game is finished', () => {
+    expect(pickRow([{ ...campaign, status: 'completed' }, mp])!.id).toBe('mp')
+  })
+})

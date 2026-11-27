@@ -3,13 +3,15 @@ import { menuMoves, moveWarning, statusChangeEffects, isQuickStatus, deleteWarni
 
 describe('menuMoves', () => {
   it('offers every other status, in a fixed order', () => {
-    expect(menuMoves('playing')).toEqual([
+    expect(menuMoves('playing', true)).toEqual([
       { kind: 'complete' },
       { kind: 'status', to: 'backlog' },
       { kind: 'dnf' },
       { kind: 'status', to: 'ambient' },
     ])
-    expect(menuMoves('completed').map(m => m.kind)).toEqual(['status', 'status', 'dnf', 'status'])
+    expect(menuMoves('completed', true).map(m => m.kind)).toEqual(['status', 'status', 'dnf', 'status'])
+    // No Ambient in either edition now: it's never offered by default.
+    expect(menuMoves('playing')).not.toContainEqual({ kind: 'status', to: 'ambient' })
     expect(menuMoves('dnf')).not.toContainEqual({ kind: 'dnf' })
   })
 
@@ -110,5 +112,13 @@ describe('formatChange / formatBalance', () => {
     expect(formatChange(5)).toBe('+5')
     expect(formatBalance(-2)).toBe('−2')
     expect(formatBalance(0)).toBe('0')
+  })
+})
+
+describe('deleting the Main Game', () => {
+  it('warns that it counts as a DNF, with the charge shown as the change', () => {
+    const impact = { change: -5, balance: 20, asDnf: true }
+    expect(deleteWarning('playing', impact)).toMatch(/counts as dropping it \(DNF\)/)
+    expect(deleteTicketChange(impact)).toEqual({ change: -5, before: 20, after: 15 })
   })
 })

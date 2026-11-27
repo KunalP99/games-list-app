@@ -9,7 +9,7 @@ import GameListView from '@/components/games/GameListView'
 import NowPlayingGrid from '@/components/profile/NowPlayingGrid'
 import GameFilters from '@/components/games/GameFilters'
 import RecentlyPlayed from '@/components/games/RecentlyPlayed'
-import { getRecentlyPlayed } from '@/lib/recently-played'
+import { getPlayingStrips } from '@/lib/recently-played'
 import { getLiveSessions } from '@/lib/presence'
 import ProfileHero from '@/components/profile/ProfileHero'
 import { getCurrentStreak } from '@/lib/data/current-streak'
@@ -83,22 +83,15 @@ export default async function GamesPage(
   // Playing games always fetched separately for the Now Playing strip — run
   // alongside the main games query and the profile-banner stats (computeUserStats
   // is the same helper the friend profile page uses — see lib/user-stats.ts).
-  const [playingGamesRes, gamesRes, stats, recentlyPlayed, liveSessions, streak] = await Promise.all([
-    supabase
-      .from('games')
-      .select(GAME_LIST_COLS)
-      .eq('user_id', user!.id)
-      .eq('status', 'playing')
-      .order('created_at', { ascending: false }),
+  const [gamesRes, stats, strips, liveSessions, streak] = await Promise.all([
     gamesQuery,
     computeUserStats(supabase, user!.id),
-    getRecentlyPlayed(supabase, user!.id),
+    getPlayingStrips(supabase, user!.id),
     getLiveSessions(supabase, [user!.id]),
     // The banner's streak flame (only the Cinematic banner shows it).
     FEATURES.cinematicBanner ? getCurrentStreak(supabase, user!.id) : Promise.resolve(0),
   ])
 
-  const playingGames = playingGamesRes.data as Game[] | null
   let games = gamesRes.data as Game[] | null
 
   if (sort === 'status' && games) {
@@ -157,14 +150,13 @@ export default async function GamesPage(
           Recently played (tracked ones) and the Playing tab (lib/edition.ts). */}
       {/* Always the capsule card, regardless of the list view; past three it's
           one row that scrolls sideways. The same strip as on profiles. */}
-      {FEATURES.ambient && playingGames && (
-        <NowPlayingGrid games={playingGames} isOwner liveSessions={liveSessions} />
-      )}
+      {/* Friends edition: the Main Game, the Playing games the wheel picked. */}
+      {FEATURES.mainGame && <NowPlayingGrid heading="Main Game" games={strips.mainGames} isOwner liveSessions={liveSessions} />}
 
       {/* Ambient games, newest session first — what has actually been running,
           as opposed to what was deliberately picked up above. In the public
           edition, every Playing game the tracker has seen. */}
-      <RecentlyPlayed games={recentlyPlayed} liveSessions={liveSessions} isOwner />
+      <RecentlyPlayed heading={FEATURES.mainGame ? 'Playing' : undefined} games={strips.playing} liveSessions={liveSessions} isOwner />
 
       {/* The page is your Profile (the banner's name is its heading), and
           "My Games" titles the list, under Recently played. */}

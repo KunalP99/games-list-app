@@ -128,9 +128,12 @@ export default function ProfileHero({
     // the bottom edge as a line.
     <section
       aria-label={name}
-      className="relative rounded-xl border border-edge-base overflow-hidden"
+      // Not overflow-hidden itself: the friend button's ⋯ menu has to be able
+      // to open past the banner's edge. The backdrop layers clip themselves.
+      className="relative rounded-xl border border-edge-base"
       style={{ backgroundColor: accent }}
     >
+      <div aria-hidden className="absolute inset-0 overflow-hidden rounded-[inherit]">
       {/* Backdrop: a live screenshot of this week's pick from their 5-star
           games where one could be found (screenshots, unlike key art or box
           art, don't usually carry a baked-in title/logo) — otherwise their
@@ -165,6 +168,7 @@ export default function ProfileHero({
         />
       )}
       <div className="absolute inset-x-0 bottom-0 h-[3px]" style={{ backgroundColor: accent }} />
+      </div>
 
       <div className="relative flex flex-col justify-between gap-6 min-h-[300px] sm:min-h-[380px] px-5 sm:px-10 pt-6 sm:pt-8 pb-6 sm:pb-8">
         {/* Wraps on narrow screens: the streak, wheel pill and Edit profile /
@@ -238,7 +242,8 @@ export default function ProfileHero({
               button, then the banner's credit under it. */}
           {((hero && bannerImage) || action) && (
             <div className="flex flex-col items-start sm:items-end gap-2.5">
-              {action}
+              {/* Above the credit, so its ⋯ menu opens over it. */}
+              {action && <div className="relative z-10">{action}</div>}
               {hero && bannerImage && (
                 <p className="text-xs text-white/60 drop-shadow">
                   This week&rsquo;s banner: <span className="font-semibold text-white/90">{hero.title}</span>

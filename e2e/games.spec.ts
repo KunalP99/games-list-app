@@ -146,20 +146,21 @@ test(`completing from the game page (${EDITION} rules)`, async () => {
   const { data: game } = await admin().from('games').select('hours_played').eq('id', gameId).single()
   expect(Number(game!.hours_played), 'a blank hours box keeps the hours').toBe(12.5)
   // The reward is recorded just after the status changes (same request), so wait for it.
-  // Friends: typed hours, 12.5h → +1. Public: this game isn't linked to IGDB → nothing.
+  // Friends: not a wheel game, so its 12.5 untracked hours pay 1 per 25 → nothing
+  // (lib/hours-tickets.ts). Public: this game isn't linked to IGDB → nothing.
   await expect.poll(async () => (await admin().from('completion_rewards').select('tickets, why').eq('game_id', gameId).maybeSingle()).data)
-    .toEqual(EDITION === 'public' ? { tickets: 0, why: 'not_linked' } : { tickets: 1, why: 'full' })
+    .toEqual(EDITION === 'public' ? { tickets: 0, why: 'not_linked' } : { tickets: 0, why: 'full' })
 })
 
 // Finished once (2021), then finished again: the second finish is certainly a
-// replay, so it's tagged, whatever the copy was before (here Ambient in the
-// friends edition, Playing in public, which has no Ambient).
+// replay, so it's tagged, whatever the copy was before (Playing: neither
+// edition has Ambient any more).
 test('finishing a game a second time tags that copy as a replay', async () => {
   const title = 'ZZ E2E Second Finish'
   await games.add({ title, status: 'completed', completion_date: '2021-01-01', hours_played: 47.8 })
-  const status = EDITION === 'friends' ? 'ambient' : 'playing'
+  const status = 'playing'
   const again = await games.add({ title, status, hours_played: 27.2 })
-  // From its ⋯ menu (right-click), the way an Ambient game is completed.
+  // From its ⋯ menu (right-click).
   await page.goto(`/games?status=${status}&q=${encodeURIComponent(title)}`)
   await page.waitForLoadState('networkidle')
   await page.getByRole('heading', { name: title }).first().click({ button: 'right' })

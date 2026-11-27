@@ -18,8 +18,13 @@ export type WonGameDecision =
 // Decides what winning a game should do to the library, given the user's
 // existing rows for that game (already matched by rawg_id or title). A game can
 // own several rows once replays exist, so this takes the full set. Precedence:
-//   • any Playing (incl. a replay in progress) → noop, don't duplicate
+//   • a Playing wheel game (the Main Game)     → noop, don't duplicate
 //   • Backlog                                  → flip that row to playing
+//   • Playing, but not from the wheel          → insert a new copy: the
+//     wheel's own run (the Main Game), with its own hours, beside the copy
+//     already being played (its multiplayer, say), which is left alone. The
+//     tracker gives the new copy the hours (lib/trackable-row.ts) unless its
+//     owner switches them back. A replay if a Completed copy exists.
 //   • Completed (Ambient or not)               → insert a fresh replay entry.
 //     An Ambient row next to a Completed one is the play *after* finishing it
 //     — multiplayer, say — so it is left alone: claiming it would carry all
@@ -34,9 +39,9 @@ export type WonGameDecision =
 //   • owned but none of the above (e.g. dnf)   → noop, leave untouched
 //   • not owned at all                         → insert a plain (non-replay) entry
 export function decideWonGameAction(
-  rows: { id: string; status: string }[],
+  rows: { id: string; status: string; assigned_by?: string | null }[],
 ): WonGameDecision {
-  if (rows.some(r => r.status === 'playing')) return { action: 'noop' }
+  if (rows.some(r => r.status === 'playing' && r.assigned_by)) return { action: 'noop' }
 
   // Backlog first: a backlog row is the copy that was deliberately queued, so
   // it is the one the wheel meant.
@@ -44,6 +49,7 @@ export function decideWonGameAction(
   if (backlog) return { action: 'flip', gameId: backlog.id }
 
   const hasCompleted = rows.some(r => r.status === 'completed')
+  if (rows.some(r => r.status === 'playing')) return { action: 'insert', isReplay: hasCompleted }
   if (hasCompleted) return { action: 'insert', isReplay: true }
 
   const ambient = rows.find(r => r.status === 'ambient')

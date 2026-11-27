@@ -15,7 +15,12 @@ const COPY: Record<string, { title: string; body: string; cta: string }> = {
  * Choose cycle, and one button into it. A turn that's already underway (the
  * resumable `wheel_session`) says so instead.
  */
-export default function WheelTurnCard({ turn, inProgress }: { turn: string; inProgress: boolean }) {
+export default function WheelTurnCard({ turn, inProgress, lockedBy = null }: {
+  turn: string
+  inProgress: boolean
+  /** The Main Game holding the wheel (lib/data/wheel-lock.ts): the card says so and links to it. */
+  lockedBy?: { id: string; title: string } | null
+}) {
   const copy = COPY[turn] ?? COPY.spin
   const current = Math.max(0, TURNS.indexOf(turn as (typeof TURNS)[number]))
 
@@ -38,12 +43,16 @@ export default function WheelTurnCard({ turn, inProgress }: { turn: string; inPr
           ))}
         </p>
       </div>
-      <p className="text-sm text-white/90">{inProgress ? 'You have a turn underway — pick up where you left off.' : copy.body}</p>
+      <p className="text-sm text-white/90">
+        {lockedBy
+          ? <>🔒 Locked until you finish or drop your Main Game, <strong className="font-semibold text-white">{lockedBy.title}</strong>.</>
+          : inProgress ? 'You have a turn underway — pick up where you left off.' : copy.body}
+      </p>
       <Link
-        href="/wheel"
+        href={lockedBy ? `/games/${lockedBy.id}` : '/wheel'}
         className="mt-1 flex items-center justify-center h-11 rounded-lg bg-white text-zinc-900 text-sm font-semibold hover:bg-zinc-100 transition-colors"
       >
-        {inProgress ? 'Resume your turn' : copy.cta}
+        {lockedBy ? `Go to ${lockedBy.title}` : inProgress ? 'Resume your turn' : copy.cta}
       </Link>
     </div>
   )

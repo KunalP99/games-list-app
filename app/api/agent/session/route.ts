@@ -5,6 +5,8 @@ import { validateSessionPayload, computeHoursDelta, roundHours } from '@/lib/age
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { isTrackable, pickRow, resolveRow, type LibraryRow } from '@/lib/trackable-row'
 import { pickLegacyLink, type ExeLinkRow } from '@/lib/exe-links'
+import { FEATURES } from '@/lib/edition'
+import { londonDay } from '@/lib/activity'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,13 +47,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // picks among that game's rows: Playing, then Ambient. The same rule
   // /api/agent/state uses, so the agent and the server agree on the game.
   const { data: libraryData, error: libraryError } = await (sb.from('games') as any)
-    .select('id, title, status, hours_played, steam_appid, igdb_id, rawg_id')
+    .select('id, title, status, hours_played, steam_appid, igdb_id, rawg_id, assigned_by, tracks_hours')
     .eq('user_id', identity.userId)
     .order('updated_at', { ascending: false })
   if (libraryError) return NextResponse.json({ error: libraryError.message }, { status: 500 })
-  const library = (libraryData ?? []) as (GameRow & LibraryRow)[]
+  const library = (libraryData ?? []) as (GameRow & LibraryRow & { assigned_by: string | null })[]
 
-  let game: (GameRow & LibraryRow) | null = null
+  let game: (GameRow & LibraryRow & { assigned_by: string | null }) | null = null
 
   // Newer trackers say which game they matched — per folder, so WoW Retail and
   // Forever (both Wow.exe) are told apart. Used only if it's in this user's
@@ -131,7 +133,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     last_checkpoint_at: nowIso,
   }
   const raced = () => NextResponse.json({
-    ok: true, gameId: game!.id, title: game!.title, addedHours: 0, totalHours: game!.hours_played ?? 0,
+    ok: true, gameId: game!.id, title: game!.title, addedHours: 0, ticketsEarned: 0, totalHours: game!.hours_played ?? 0,
   })
 
   if (existing) {
@@ -165,6 +167,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   let totalHours = game.hours_played ?? 0
+  let hoursTicketsEarned = 0
   if (delta > 0) {
     // hours_played + delta in one statement (db/review-fixes.sql), so two
     // sessions at once (two PCs) can't overwrite each other's hours. Only this
@@ -185,7 +188,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: addError.message }, { status: 500 })
     }
     // null: the game stopped being trackable in between, so nothing was added.
-    if (newTotal != null) totalHours = Number(newTotal)
+    if (newTotal != null) {
+      totalHours = Number(newTotal)
+      // 1 ticket per 25 hours played (lib/hours-tickets.ts), on one running
+      // counter per player, credited to the game that crosses the line. Not
+      // for a game the wheel picked: it pays by length when it's completed.
+      // Counted once per checkpoint, because the claim above already makes
+      // each delta apply once.
+      if (FEATURES.hoursTickets && !game.assigned_by) {
+        const cap = FEATURES.hoursTicketDailyCap
+        const { data: paid, error: ticketError } = await (sb as any).rpc('add_hours_progress', {
+          p_user_id: identity.userId,
+          p_game_id: game.id,
+          p_minutes: Math.round(delta * 60),
+          p_daily_cap_minutes: cap == null ? null : cap * 60,
+          p_day: londonDay(new Date().toISOString()),
+        })
+        if (ticketError) console.error(`session: hours tickets for ${game.id} failed: ${ticketError.message}`)
+        else hoursTicketsEarned = Number(paid ?? 0)
+      }
+    }
   }
 
   // Hours achievements count across every status, so tracked time can unlock
@@ -203,6 +225,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ok: true,
     gameId: game.id,
     title: game.title,
+    ticketsEarned: hoursTicketsEarned,
     addedHours: delta,
     totalHours,
   })

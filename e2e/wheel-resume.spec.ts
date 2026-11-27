@@ -150,7 +150,11 @@ test('a finalized turn does not resurrect on the next visit', async ({ page }) =
   const resumedPage = await closeAndReopen(page, '/wheel')
 
   // wheel_session was cleared by advanceTurn — no stale "You got" screen.
-  await expect(resumedPage.getByRole('button', { name: '🎰 Spin!' }).or(
-    resumedPage.getByText('Pick a Game', { exact: false }),
-  )).toBeVisible({ timeout: 20_000 })
+  // The won game is now the Main Game, which locks the wheel until it's
+  // finished or dropped, so the page shows that (an unlocked wheel would show
+  // a fresh setup screen); either way, not the old turn.
+  await expect(resumedPage.getByRole('heading', { name: 'The wheel is locked' }).or(
+    resumedPage.getByRole('button', { name: '🎰 Spin!' }),
+  ).or(resumedPage.getByText('Pick a Game', { exact: false }))).toBeVisible({ timeout: 20_000 })
+  await expect(resumedPage.getByText('You got')).toHaveCount(0)
 })

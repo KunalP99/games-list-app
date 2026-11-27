@@ -55,7 +55,7 @@ export async function resetTestWheelState() {
   if (ids.length > 0) {
     const { error: gamesError } = await supabase
       .from('games')
-      .update({ status: 'backlog', start_date: null, assigned_by: null } as never)
+      .update({ status: 'backlog', start_date: null, assigned_by: null, locks_wheel: false } as never)
       .in('user_id', ids)
       .eq('status', 'playing')
       .not('assigned_by', 'is', null)

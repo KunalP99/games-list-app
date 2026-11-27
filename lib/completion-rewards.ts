@@ -5,9 +5,14 @@
 //
 // Two rule sets, chosen by the edition (FEATURES.verifiedRewards):
 //
-//   friends — exactly as before: tickets and XP from the hours and
-//             achievement progress typed in, plus the sequel bonus. An honour
-//             system among friends.
+//   friends — tickets and XP from the hours typed in (an honour system
+//             among friends). A game the wheel picked pays by length
+//             (calculateCompletionAwards: under 20h 1, 20–59h 2, 60–75h 3,
+//             +1 per 20h past 75). Any other game earned its tickets from its
+//             hours as they were played (1 per 25 tracked hours, lib/hours-
+//             tickets.ts), so its completion pays only for the hours that were
+//             never tracked (`hours_typed`, 1 per 25). Both: +3 at 100%
+//             achievements, +1 for a back-to-back sequel.
 //
 //   verified (public edition) — tickets will buy cosmetics, so they come only
 //             from what the site can check:
@@ -15,15 +20,18 @@
 //     • it must be completed on or after the day the account was created
 //       (bringing your history over earns achievements and stats, not
 //       tickets or completion XP);
-//     • tracked hours (the desktop app's sessions) set the tier and the 100h+
-//       bonus; a game with no tracked time earns the basic +1 ticket and base
-//       XP, whatever hours are typed in;
+//     • tracked hours (the desktop app's sessions) already earned tickets as
+//       they were played (1 per 25, at most 8 a UK day), so a tracked
+//       completion earns its XP (by tracked hours) and no tickets; a game
+//       with no tracked time earns the basic +1 ticket and base XP, whatever
+//       hours are typed in;
 //     • untracked completions earn at most UNTRACKED_DAILY_LIMIT a UK day;
 //     • no 100% or sequel bonus (nothing verifies them yet).
 
 import { TICKET_AWARDS } from './constants'
 import { calculateCompletionAwards } from './tickets'
 import { gameCompletionXp } from './achievements'
+import { typedHoursTickets } from './hours-tickets'
 
 export const UNTRACKED_DAILY_LIMIT = 5
 
@@ -52,6 +60,8 @@ export type CompletionInput = {
   typedHours: number | null
   achievementProgress: number | null
   isSequel: boolean
+  /** The wheel picked this game (games.assigned_by): it pays by length. */
+  isWheelGame: boolean
   /** Hours the desktop app logged against this game (0 if none). */
   trackedHours: number
   /** Linked to the metadata provider (IGDB/RAWG id present). */
@@ -71,7 +81,16 @@ const MIN_TRACKED_HOURS = 0.1
 
 export function completionReward(input: CompletionInput): CompletionReward {
   if (!input.verified) {
-    const tickets = calculateCompletionAwards(input.typedHours, input.achievementProgress)
+    const tickets: AwardEntry[] = input.isWheelGame
+      ? calculateCompletionAwards(input.typedHours, input.achievementProgress)
+      : []
+    if (!input.isWheelGame) {
+      const typed = typedHoursTickets(input.typedHours, input.trackedHours)
+      if (typed > 0) tickets.push({ reason: 'hours_typed', amount: typed })
+      if (input.achievementProgress === 100) {
+        tickets.push({ reason: 'achievement_100_percent', amount: TICKET_AWARDS.achievement_100_percent })
+      }
+    }
     if (input.isSequel) tickets.push({ reason: 'sequel_back_to_back', amount: TICKET_AWARDS.sequel_back_to_back })
     return { tickets, xp: gameCompletionXp(input.typedHours, input.achievementProgress), untracked: false, why: 'full' }
   }
@@ -81,10 +100,10 @@ export function completionReward(input: CompletionInput): CompletionReward {
   if (input.completionDate < input.joinedDay) return nothing('before_joining')
 
   if (input.trackedHours >= MIN_TRACKED_HOURS) {
-    // Tracked time is checked against real elapsed time by the server, so it
-    // sets the tier and isn't limited per day. No 100% bonus: unverified.
+    // Tracked time is checked against real elapsed time by the server, and it
+    // already paid its tickets as it was played; it sets the XP.
     return {
-      tickets: calculateCompletionAwards(input.trackedHours, null),
+      tickets: [],
       xp: gameCompletionXp(input.trackedHours, null),
       untracked: false,
       why: 'tracked',
@@ -112,7 +131,7 @@ export function rewardExplanation(why: RewardWhy, tickets: number, xp: number): 
     case 'full':
       return null
     case 'tracked':
-      return `Earned ${earned} from the hours the desktop app tracked.`
+      return `Earned ${xp} XP from the hours the desktop app tracked. Those hours earn tickets as you play: 1 for every 25 hours.`
     case 'untracked':
       return `Earned ${earned}. Track your play with the desktop app to earn more for longer games.`
     case 'not_linked':

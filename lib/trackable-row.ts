@@ -7,7 +7,13 @@
  * `/identify`) resolves through here so they all agree on one rule:
  *
  *   1. A Playing row wins — the game someone deliberately chose to play now.
- *   2. Then an Ambient row — the ongoing, outside-the-wheel play.
+ *      Among Playing rows: the one its owner picked on the game's page
+ *      (`tracks_hours`, "Count tracked hours here"), then the Main Game (a
+ *      wheel game, `assigned_by`), then the most recently touched. So a game
+ *      the wheel picked takes the hours from a copy already being played (its
+ *      multiplayer, say) unless the owner switches them back.
+ *   2. Then an Ambient row — the ongoing, outside-the-wheel play (none since
+ *      Ambient went, but old rows may exist).
  *   3. Nothing trackable? Then the row matched in the first place (most
  *      recently touched), which is what raises the replay/resume prompt.
  *
@@ -23,9 +29,17 @@ export type LibraryRow = {
   igdb_id?: number | null
   rawg_id?: number | null
   steam_appid?: number | null
+  /** A wheel game (the Main Game while Playing). Select it for the tracker's choice between copies. */
+  assigned_by?: string | null
+  /** Its owner chose this copy for tracked hours ("Count tracked hours here"). */
+  tracks_hours?: boolean | null
 }
 
-const PRIORITY: Record<string, number> = { playing: 0, ambient: 1 }
+/** Lower is preferred: a chosen Playing copy, then a wheel Playing copy, then any Playing, then Ambient. */
+function rank(row: LibraryRow): number {
+  if (row.status === 'playing') return row.tracks_hours ? 0 : row.assigned_by ? 1 : 2
+  return 3
+}
 
 export function isTrackable(row: { status: string }): boolean {
   return row.status === 'playing' || row.status === 'ambient'
@@ -52,7 +66,7 @@ export function pickRow<R extends LibraryRow>(rows: R[]): R | undefined {
   const trackable = rows.filter(isTrackable)
   if (trackable.length > 0) {
     // Stable sort: within a status, the given (most recent first) order stays.
-    return [...trackable].sort((a, b) => PRIORITY[a.status] - PRIORITY[b.status])[0]
+    return [...trackable].sort((a, b) => rank(a) - rank(b))[0]
   }
   return rows[0]
 }

@@ -25,6 +25,8 @@ import { FEATURES } from '@/lib/edition'
 import { withOwnerNotes } from '@/lib/data/private-notes'
 import { rewardExplanation, type RewardWhy } from '@/lib/completion-rewards'
 import { playthroughOrder, type PlaythroughCopy } from '@/lib/replays'
+import { pickRow, sameGame, type LibraryRow } from '@/lib/trackable-row'
+import TrackHoursHereButton from '@/components/games/TrackHoursHereButton'
 
 
 export default async function GameDetailPage(props: { params: Promise<{ id: string }> }) {
@@ -49,6 +51,25 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
     ? await (supabase as any).from('completion_rewards').select('tickets, xp, why').eq('game_id', game.id).maybeSingle() as { data: { tickets: number; xp: number; why: RewardWhy } | null }
     : { data: null }
   const rewardNote = completionReward ? rewardExplanation(completionReward.why, completionReward.tickets, completionReward.xp) : null
+
+  // Every ticket this game has earned its owner: completion, bonuses, and the
+  // hours tickets it crossed 25 hours for (lib/hours-tickets.ts). Owner only.
+  const { data: earnedRows } = isOwner && FEATURES.hoursTickets
+    ? await (supabase as any).from('ticket_transactions').select('amount').eq('game_id', game.id).eq('user_id', game.user_id).gt('amount', 0) as { data: { amount: number }[] | null }
+    : { data: null }
+  const ticketsEarned = (earnedRows ?? []).reduce((sum, r) => sum + r.amount, 0)
+
+  // Another Playing copy of this game (the Main Game and its multiplayer,
+  // say): which one the desktop app counts tracked hours on, and a switch.
+  const { data: playingCopies } = isOwner && game.status === 'playing'
+    ? await (supabase as any).from('games')
+      .select('id, title, status, igdb_id, rawg_id, steam_appid, assigned_by, tracks_hours')
+      .eq('user_id', game.user_id).eq('status', 'playing')
+      .order('updated_at', { ascending: false }) as { data: LibraryRow[] | null }
+    : { data: null }
+  const copies = (playingCopies ?? []).filter(r => sameGame(r, game as unknown as LibraryRow))
+  const tracked = copies.length > 1 ? pickRow(copies) : undefined
+  const otherCopy = tracked && tracked.id !== game.id ? tracked : undefined
 
   const { data: ownerProfile } = !isOwner
     ? await supabase
@@ -415,6 +436,25 @@ export default async function GameDetailPage(props: { params: Promise<{ id: stri
           </p>
           <p className="text-fg-secondary text-sm leading-relaxed whitespace-pre-wrap">{game.review}</p>
         </div>
+      )}
+
+      {tracked && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-fg-muted">
+          {otherCopy ? (
+            <>
+              <span>⏱️ The desktop app counts your tracked hours on your other copy (<Link href={`/games/${otherCopy.id}`} className="underline hover:text-fg-base">{otherCopy.assigned_by ? 'the Main Game' : 'Playing'}</Link>).</span>
+              <TrackHoursHereButton gameId={game.id} />
+            </>
+          ) : (
+            <span>⏱️ The desktop app counts your tracked hours on this copy{game.assigned_by ? ' (your Main Game)' : ''}, not your other one.</span>
+          )}
+        </p>
+      )}
+
+      {ticketsEarned > 0 && (
+        <p className="text-sm text-fg-muted">
+          🎟️ This game has earned you <strong className="font-semibold text-fg-base">{ticketsEarned} ticket{ticketsEarned === 1 ? '' : 's'}</strong>.
+        </p>
       )}
 
       {/* Public edition: what completing this game earned, and why */}

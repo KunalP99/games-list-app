@@ -259,7 +259,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // over, and what sends multiplayer back to the Ambient row once the replay
   // is Completed, instead of re-raising the "is this a replay?" prompt.
   const { data: libraryData } = await (sb.from('games') as any)
-    .select('id, title, status, igdb_id, rawg_id, steam_appid, start_date')
+    .select('id, title, status, igdb_id, rawg_id, steam_appid, start_date, assigned_by, tracks_hours')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
   const library = (libraryData ?? []) as (LibraryRow & { start_date: string | null })[]

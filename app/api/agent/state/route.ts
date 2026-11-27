@@ -33,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // at a row that's since been Completed, and the rule in
     // lib/trackable-row.ts needs its siblings to send the hours elsewhere.
     (sb.from('games') as any)
-      .select('id, title, status, steam_appid, igdb_id, rawg_id, hours_played, platform')
+      .select('id, title, status, steam_appid, igdb_id, rawg_id, hours_played, platform, assigned_by, tracks_hours')
       .eq('user_id', identity.userId)
       .order('updated_at', { ascending: false }),
     (sb.from('game_executables') as any)

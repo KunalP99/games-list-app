@@ -9,8 +9,8 @@ export type SessionRow = {
   last_checkpoint_at?: string | null
 }
 
-/** A Recently Played game, with when it was last actually running. */
-export type RecentlyPlayedGame = Game & { lastPlayedAt: string }
+/** A Recently Played game, with when it was last actually running (null: never tracked). */
+export type RecentlyPlayedGame = Game & { lastPlayedAt: string | null }
 
 /**
  * When each game was last running: the end of its newest session — or, while
@@ -104,4 +104,63 @@ export async function getRecentlyPlayed(
   return orderByIds((games ?? []) as Game[], ids)
     .slice(0, limit)
     .map(g => ({ ...g, lastPlayedAt: lastPlayed.get(g.id)! }))
+}
+
+/**
+ * The friends edition's Playing section (FEATURES.mainGame): every Playing
+ * game the wheel didn't pick. Tracked ones first, most recently played first;
+ * then the rest, most recently started first (then most recently added).
+ * Pure, for the tests.
+ */
+export function playingOrder<G extends { id: string; start_date: string | null; created_at: string }>(
+  games: G[],
+  lastPlayed: ReadonlyMap<string, string>,
+): (G & { lastPlayedAt: string | null })[] {
+  const withLast = games.map(g => ({ ...g, lastPlayedAt: lastPlayed.get(g.id) ?? null }))
+  return withLast.sort((a, b) => {
+    if (a.lastPlayedAt && b.lastPlayedAt) return b.lastPlayedAt.localeCompare(a.lastPlayedAt)
+    if (a.lastPlayedAt || b.lastPlayedAt) return a.lastPlayedAt ? -1 : 1
+    return (b.start_date ?? '').localeCompare(a.start_date ?? '') || b.created_at.localeCompare(a.created_at)
+  })
+}
+
+/**
+ * The friends edition's two Playing sections: the Main Game (Playing games
+ * the wheel picked, newest first) and Playing (every other Playing game, in
+ * `playingOrder`).
+ */
+export async function getPlayingSections(
+  supabase: { from: (t: string) => any },
+  userId: string,
+): Promise<{ mainGames: Game[]; playing: RecentlyPlayedGame[] }> {
+  const [{ data: games }, { data: sessions }] = await Promise.all([
+    supabase.from('games').select('*').eq('user_id', userId).eq('status', 'playing')
+      .order('start_date', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false }),
+    supabase.from('play_sessions')
+      .select('game_id, started_at, ended_at, last_checkpoint_at')
+      .eq('user_id', userId)
+      .not('game_id', 'is', null)
+      .order('started_at', { ascending: false })
+      .limit(500),
+  ])
+  const all = (games ?? []) as Game[]
+  const lastPlayed = lastPlayedByGame((sessions ?? []) as SessionRow[])
+  return {
+    mainGames: all.filter(g => g.assigned_by != null),
+    playing: playingOrder(all.filter(g => g.assigned_by == null), lastPlayed),
+  }
+}
+
+/**
+ * What goes above the games list: in the friends edition the Main Game and
+ * Playing sections (getPlayingSections); elsewhere no Main Game, and the
+ * Recently played strip as Playing (getRecentlyPlayed).
+ */
+export async function getPlayingStrips(
+  supabase: { from: (t: string) => any },
+  userId: string,
+): Promise<{ mainGames: Game[]; playing: RecentlyPlayedGame[] }> {
+  if (FEATURES.mainGame) return getPlayingSections(supabase, userId)
+  return { mainGames: [], playing: await getRecentlyPlayed(supabase, userId) }
 }

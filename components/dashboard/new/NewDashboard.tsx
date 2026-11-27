@@ -20,6 +20,8 @@ import GameSearchBar from '@/components/discover/GameSearchBar'
 import { FEATURES, wheelOn } from '@/lib/edition'
 import { levelProgress } from '@/lib/achievements'
 import { getFriendsOverview, getPlayingNowFor, type FriendsOverview } from '@/lib/data/friends'
+import { hoursToNextTicketLabel } from '@/lib/hours-tickets'
+import { wheelLockGame } from '@/lib/data/wheel-lock'
 
 // How far back sessions are loaded: a year (plus a day's slack for the time
 // zone), for the "Your year" chart. The streak counts within the same window,
@@ -81,6 +83,8 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   ])
 
   const games = gamesRes.data ?? []
+  // The Main Game holding the wheel, if any (friends edition, FEATURES.wheelLock).
+  const wheelLock = await wheelLockGame(supabase, userId)
   const friendProfiles = overview
     ? overview.friends.map(f => ({ id: f.id, display_name: f.displayName, username: f.username, accent_colour: f.accentColour, xp: f.xp }))
     : friendProfilesRes.data ?? []
@@ -187,6 +191,8 @@ export default async function NewDashboard({ userId }: { userId: string }) {
               sub={weekTickets > 0 ? `+${weekTickets} this week` : undefined}
               subClass="text-emerald-600 dark:text-emerald-400"
               href="/tickets"
+              // Progress to the next ticket from hours played (lib/hours-tickets.ts).
+              foot={FEATURES.hoursTickets ? hoursToNextTicketLabel(profile?.hours_ticket_minutes ?? 0) : undefined}
             />
           </div>
 
@@ -198,7 +204,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
         {/* Right rail — below the main column on narrow screens */}
         <div className="flex-[1_1_300px] min-w-0 space-y-4">
           {wheelEnabled && (
-            <WheelTurnCard turn={profile?.wheel_turn ?? 'spin'} inProgress={profile?.wheel_session != null} />
+            <WheelTurnCard turn={profile?.wheel_turn ?? 'spin'} inProgress={profile?.wheel_session != null} lockedBy={wheelLock} />
           )}
           {/* No wheel in this edition: your level and next achievement take its
               place, in the same bold card (lib/edition.ts). */}
@@ -230,7 +236,7 @@ export default async function NewDashboard({ userId }: { userId: string }) {
   )
 }
 
-function Stat({ label, value, sub, subClass = 'text-fg-muted', href }: { label: string; value: string; sub?: string; subClass?: string; href?: string }) {
+function Stat({ label, value, sub, subClass = 'text-fg-muted', href, foot }: { label: string; value: string; sub?: string; subClass?: string; href?: string; foot?: string }) {
   const body = (
     <>
       <p className="text-xs text-fg-muted">{label}</p>
@@ -238,6 +244,7 @@ function Stat({ label, value, sub, subClass = 'text-fg-muted', href }: { label: 
         <span className="font-display text-[28px] leading-[0.9] text-fg-base">{value}</span>
         {sub && <span className={`ml-1.5 text-xs font-semibold ${subClass}`}>{sub}</span>}
       </p>
+      {foot && <p className="mt-1.5 text-[11px] text-fg-muted tabular-nums">{foot}</p>}
     </>
   )
   const cls = 'block rounded-xl bg-surface-base border border-edge-base p-4'

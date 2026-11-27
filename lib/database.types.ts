@@ -30,6 +30,8 @@ export type Database = {
           wheel_session: Record<string, unknown> | null
           /** Opt out of wheel turns entirely (settings toggle). */
           wheel_enabled: boolean
+          /** Minutes of tracked play towards the next hours ticket (db/hours-tickets.sql). Server-written. */
+          hours_ticket_minutes?: number
           theme_preference: 'light' | 'dark' | 'system'
           accent_colour: string | null
           is_admin: boolean
@@ -186,6 +188,8 @@ export type Database = {
           is_sequel: boolean
           dominant_color: string | null
           assigned_by: string | null
+          /** A wheel game won since 2026-11-27: holds the wheel until it's completed, DNF'd or deleted (db/hours-tickets.sql). Server-written. */
+          locks_wheel?: boolean
           youtube_playlist_url: string | null
           youtube_videos: { youtube_id: string; title: string; author_name: string | null; thumbnail_url: string | null }[] | null
           youtube_item_count: number | null
@@ -715,6 +719,8 @@ export type Database = {
         | 'assigned_game_incomplete'
         | 'objective_incomplete'
         | 'admin_adjustment'
+        | 'hours_played'
+        | 'hours_typed'
     }
   }
 }

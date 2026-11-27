@@ -23,6 +23,9 @@ const REASON_BADGE: Record<string, { label: string; className: string }> = {
   assigned_game_incomplete: { label: 'DNF',   className: 'bg-red-50 text-red-600 border border-red-200' },
   objective_incomplete:     { label: 'OBJ−',  className: 'bg-red-50 text-red-600 border border-red-200' },
   admin_adjustment:         { label: 'ADJ',   className: 'bg-surface-active text-fg-muted border border-edge-base' },
+  // Hours played (lib/hours-tickets.ts): 25 tracked hours, or untracked hours paid on completion.
+  hours_played:             { label: '25H',   className: 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-900/40 dark:text-sky-300 dark:border-sky-700' },
+  hours_typed:              { label: 'HRS',   className: 'bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-900/40 dark:text-sky-300 dark:border-sky-700' },
 }
 
 // Maps CSV abbreviations (stored in the note) back to internal reason keys for badge display

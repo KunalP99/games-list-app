@@ -47,6 +47,25 @@ test.describe('things users cannot do by hand', () => {
     expect((await sam.client.from('user_achievements').select('achievement_id').limit(1)).error).toBeNull()
   })
 
+  test('wheel games: users can neither mark nor unmark one (it decides how hours pay)', async () => {
+    const own = await games.add({ title: 'ZZ E2E Wheel Mark', status: 'playing', assigned_by: sam.id, locks_wheel: true })
+    await sam.client.from('games').update({ assigned_by: null, locks_wheel: false }).eq('id', own)
+    const { data: kept } = await admin().from('games').select('assigned_by, locks_wheel').eq('id', own).single()
+    expect(kept, 'an update keeps both').toEqual({ assigned_by: sam.id, locks_wheel: true })
+
+    const { data: made } = await sam.client.from('games')
+      .insert({ user_id: sam.id, title: 'ZZ E2E Fake Wheel', status: 'playing', assigned_by: sam.id, locks_wheel: true })
+      .select('id').single()
+    const { data: inserted } = await admin().from('games').select('assigned_by, locks_wheel').eq('id', made!.id).single()
+    expect(inserted, 'an insert cannot set them').toEqual({ assigned_by: null, locks_wheel: false })
+    await admin().from('games').delete().eq('id', made!.id)
+  })
+
+  test('hours tickets: the counter function is server-only', async () => {
+    const { error } = await sam.client.rpc('add_hours_progress', { p_user_id: sam.id, p_game_id: null, p_minutes: 99_999 })
+    expect(error).not.toBeNull()
+  })
+
   test('ticket ledger: no direct inserts', async () => {
     const ins = await sam.client.from('ticket_transactions').insert({ user_id: sam.id, amount: 1000, reason: 'admin_adjustment' })
     expect(ins.error).toBeTruthy()

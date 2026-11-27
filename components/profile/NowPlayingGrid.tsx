@@ -14,7 +14,10 @@ export default function NowPlayingGrid({
   games,
   isOwner,
   liveSessions = new Map(),
+  heading = 'Now Playing',
 }: {
+  /** "Main Game" for the friends edition's wheel games. */
+  heading?: string
   games: Game[]
   isOwner: boolean
   liveSessions?: Map<string, string>
@@ -28,7 +31,7 @@ export default function NowPlayingGrid({
   return (
     <div>
       <h2 className="text-sm font-semibold text-fg-muted uppercase tracking-wider mb-3">
-        Now Playing{games.length > 1 && ` · ${games.length}`}
+        {heading}{games.length > 1 && ` · ${games.length}`}
       </h2>
 
       {games.length <= NOW_PLAYING_GRID_MAX ? (

@@ -10,7 +10,8 @@ import { PROVIDER_ID_COLUMN } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
 import { checkAndAwardAchievements } from '@/lib/achievements'
 import { restoreSession, collapsePhase, type WheelSession } from '@/lib/wheel-session'
-import { wheelOn } from '@/lib/edition'
+import { FEATURES, wheelOn } from '@/lib/edition'
+import { wheelLockGame } from '@/lib/data/wheel-lock'
 import { escapeLike } from '@/lib/query-escape'
 
 // The wheel's state columns (wheel_turn, pending_wheel_*, wheel_session) and the
@@ -165,6 +166,8 @@ async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, us
     .eq('id', userId)
     .single() as { data: { wheel_turn: WheelTurn; ticket_balance: number; wheel_enabled: boolean | null } | null }
   if (data && !wheelOn(data)) return null
+  // The Main Game holds the wheel until it's finished or dropped (FEATURES.wheelLock).
+  if (data && await wheelLockGame(supabase, userId)) return null
   return data
 }
 
@@ -206,6 +209,11 @@ async function addWonGameToLibrary(
   if (!rawgGame) return null
 
   const today = new Date().toISOString().split('T')[0]
+  // Wheel games are marked (and lock the wheel) through the service role: a
+  // database trigger keeps browser users from setting or clearing these
+  // columns (db/hours-tickets.sql), since they decide how a game's hours pay.
+  // The ownership checks below (user_id) still apply.
+  const lock = FEATURES.wheelLock ? { locks_wheel: true } : {}
   const plat = platform?.trim() || null
   const art = artworkUrl?.trim() || null // user-picked / custom image for the card + hero
 
@@ -213,8 +221,8 @@ async function addWonGameToLibrary(
   // Before this, an unlinked backlog game could win and silently stay in
   // Backlog, because only linked games could be found again.
   if ('libraryId' in rawgGame) {
-    const { data: moved } = await (supabase.from('games') as any)
-      .update({ status: 'playing', start_date: today, assigned_by: userId })
+    const { data: moved } = await (privileged().from('games') as any)
+      .update({ status: 'playing', start_date: today, assigned_by: userId, ...lock })
       .eq('id', rawgGame.libraryId)
       .eq('user_id', userId)
       .in('status', ['backlog', 'ambient'])
@@ -223,9 +231,9 @@ async function addWonGameToLibrary(
   }
 
   const byId = await (supabase.from('games') as any)
-    .select('id, status')
+    .select('id, status, assigned_by')
     .eq('user_id', userId)
-    .eq(PROVIDER_ID_COLUMN, rawgGame.id) as { data: { id: string; status: string }[] | null }
+    .eq(PROVIDER_ID_COLUMN, rawgGame.id) as { data: { id: string; status: string; assigned_by: string | null }[] | null }
   let rows = byId.data ?? []
 
   // Fallback: a copy may exist without this rawg_id (free-text add, un-enriched
@@ -233,24 +241,32 @@ async function addWonGameToLibrary(
   // nothing, so the precise id path stays authoritative for linked games.
   if (rows.length === 0) {
     const byTitle = await (supabase.from('games') as any)
-      .select('id, status')
+      .select('id, status, assigned_by')
       .eq('user_id', userId)
-      .ilike('title', escapeLike(rawgGame.name)) as { data: { id: string; status: string }[] | null }
+      .ilike('title', escapeLike(rawgGame.name)) as { data: { id: string; status: string; assigned_by: string | null }[] | null }
     rows = byTitle.data ?? []
   }
 
   const decision = decideWonGameAction(rows)
   if (decision.action === 'noop') return null
 
+  // The new Main Game takes the tracked hours: clear any "Count tracked hours
+  // here" its other copies had (lib/trackable-row.ts). Its owner can switch
+  // them back on the game's page.
+  if (rows.length > 0) {
+    await (privileged().from('games') as any).update({ tracks_hours: false }).in('id', rows.map(r => r.id)).eq('user_id', userId)
+  }
+
   // A backlog or ambient copy is pulled straight into playing (with the chosen
   // platform + image). hours_played is deliberately untouched, so a game the
   // agent had been tracking as ambient keeps every hour it earned.
   if (decision.action === 'flip') {
-    await (supabase.from('games') as any)
+    await (privileged().from('games') as any)
       .update({
         status: 'playing',
         start_date: today,
-        assigned_by: userId, // marks it as a wheel-assigned game (for achievements)
+        assigned_by: userId, // marks it as a wheel-assigned game (achievements, tickets)
+        ...lock,
         ...(plat ? { platform: plat } : {}),
         ...(art ? { image_url: art, artwork_url: art } : {}),
       })
@@ -263,7 +279,7 @@ async function addWonGameToLibrary(
   const { getRawgGameDetail } = await import('@/lib/rawg')
   const detail = await getRawgGameDetail(rawgGame.id)
 
-  const { data: inserted } = await (supabase.from('games') as any).insert({
+  const { data: inserted } = await (privileged().from('games') as any).insert({
     user_id: userId,
     title: rawgGame.name,
     developer: detail?.developers?.[0]?.name ?? null,
@@ -281,7 +297,8 @@ async function addWonGameToLibrary(
     genres: detail?.genres?.map(g => g.name) ?? null,
     dominant_color: detail?.saturated_color ?? detail?.dominant_color ?? null,
     is_replay: decision.isReplay,
-    assigned_by: userId, // marks it as a wheel-assigned game (for achievements)
+    assigned_by: userId, // marks it as a wheel-assigned game (achievements, tickets)
+    ...lock,
   }).select('id').single() as { data: { id: string } | null }
 
   return inserted?.id ?? null

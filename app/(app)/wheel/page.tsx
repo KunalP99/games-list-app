@@ -4,6 +4,8 @@ import WheelClient from '@/components/wheel/WheelClient'
 import { providerIdOf } from '@/lib/rawg'
 import type { WheelTurn } from '@/lib/types'
 import { FEATURES, wheelOn } from '@/lib/edition'
+import { wheelLockGame } from '@/lib/data/wheel-lock'
+import Link from 'next/link'
 
 export default async function WheelPage() {
   // An edition without the wheel has no wheel page at all (lib/edition.ts).
@@ -52,6 +54,33 @@ export default async function WheelPage() {
   // DB round-trip on every request. Page-level is also naturally path-exact,
   // so /wheel/history stays reachable, which is the agreed behaviour.
   if (!wheelOn(profile)) redirect('/dashboard')
+
+  // The Main Game holds the wheel until it's completed or dropped
+  // (FEATURES.wheelLock; the actions refuse too, in getProfile).
+  const lockedBy = await wheelLockGame(supabase, user.id)
+  if (lockedBy) {
+    return (
+      <div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-fg-base">Wheel Spin</h1>
+          <p className="text-sm text-fg-muted mt-0.5">Spin to decide what you play next</p>
+        </div>
+        <section className="mx-auto max-w-lg rounded-2xl border border-edge-base bg-surface-base px-6 py-10 text-center">
+          <p className="text-4xl" aria-hidden>🔒</p>
+          <h2 className="mt-3 text-lg font-bold text-fg-base">The wheel is locked</h2>
+          <p className="mt-1.5 text-sm text-fg-secondary">
+            Finish or drop your Main Game, <strong className="font-semibold text-fg-base">{lockedBy.title}</strong>, to spin again.
+          </p>
+          <Link
+            href={`/games/${lockedBy.id}`}
+            className="mt-5 inline-flex items-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+          >
+            Go to {lockedBy.title}
+          </Link>
+        </section>
+      </div>
+    )
+  }
 
   // Unreleased games can't be played yet, so keep them off the wheel until their
   // release date passes (games with no date are treated as available).

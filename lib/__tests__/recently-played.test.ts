@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recentGameIds, orderByIds, lastPlayedByGame, type SessionRow } from '../recently-played'
+import { recentGameIds, orderByIds, lastPlayedByGame, playingOrder, type SessionRow } from '../recently-played'
 import type { Game } from '../types'
 
 describe('lastPlayedByGame', () => {
@@ -93,5 +93,21 @@ describe('orderByIds', () => {
     const games = [game('rocket', 'Rocket League')]
     expect(orderByIds(games, ['rocket', 'moved-to-playing']).map(g => g.id))
       .toEqual(['rocket'])
+  })
+})
+
+describe('playingOrder: the friends edition Playing section', () => {
+  const g = (id: string, start_date: string | null, created_at = '2026-01-01T00:00:00Z') => ({ id, start_date, created_at })
+
+  it('puts tracked games first, most recently played first, then the rest by start date', () => {
+    const games = [g('untracked-old', '2026-01-01'), g('tracked-a', '2026-02-01'), g('untracked-new', '2026-03-01'), g('tracked-b', null)]
+    const lastPlayed = new Map([['tracked-a', '2026-11-20T10:00:00Z'], ['tracked-b', '2026-11-26T10:00:00Z']])
+    expect(playingOrder(games, lastPlayed).map(x => x.id)).toEqual(['tracked-b', 'tracked-a', 'untracked-new', 'untracked-old'])
+  })
+
+  it('marks untracked games with no last-played time, and breaks start-date ties by when added', () => {
+    const out = playingOrder([g('a', null, '2026-01-01T00:00:00Z'), g('b', null, '2026-02-01T00:00:00Z')], new Map())
+    expect(out.map(x => x.id)).toEqual(['b', 'a'])
+    expect(out[0].lastPlayedAt).toBeNull()
   })
 })

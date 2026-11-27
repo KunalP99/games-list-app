@@ -8,6 +8,7 @@ const base: CompletionInput = {
   typedHours: null,
   achievementProgress: null,
   isSequel: false,
+  isWheelGame: false,
   trackedHours: 0,
   providerLinked: true,
   completionDate: '2026-11-19',
@@ -18,19 +19,39 @@ const base: CompletionInput = {
 describe('completionReward — friends edition', () => {
   const friends = { ...base, verified: false }
 
-  it('is exactly the old rules: typed hours, 100% bonus, sequel bonus', () => {
-    const r = completionReward({ ...friends, typedHours: 140, achievementProgress: 100, isSequel: true })
+  it('a wheel game pays by length, with the 100% and sequel bonuses', () => {
+    const r = completionReward({ ...friends, isWheelGame: true, typedHours: 140, achievementProgress: 100, isSequel: true })
     expect(r.tickets).toEqual([
       ...calculateCompletionAwards(140, 100),
       { reason: 'sequel_back_to_back', amount: 1 },
     ])
+    expect(rewardTickets(r)).toBe(3 + 3 + 3 + 1) // 140h: 3 + 3 (95, 115, 135), 100%, sequel
     expect(r.xp).toBe(gameCompletionXp(140, 100))
     expect(r.why).toBe('full')
     expect(r.untracked).toBe(false)
   })
 
+  it('a wheel game pays the same whether its hours were tracked or not', () => {
+    const r = completionReward({ ...friends, isWheelGame: true, typedHours: 30, trackedHours: 30 })
+    expect(r.tickets).toEqual([{ reason: 'game_completed_medium', amount: 2 }])
+  })
+
+  it('any other game pays only for its untracked hours (1 per 25), plus the bonuses', () => {
+    const untracked = completionReward({ ...friends, typedHours: 60, achievementProgress: 100, isSequel: true })
+    expect(untracked.tickets).toEqual([
+      { reason: 'hours_typed', amount: 2 },
+      { reason: 'achievement_100_percent', amount: 3 },
+      { reason: 'sequel_back_to_back', amount: 1 },
+    ])
+    expect(untracked.xp).toBe(gameCompletionXp(60, 100))
+    // Its tracked hours already paid as they were played.
+    const tracked = completionReward({ ...friends, typedHours: 60, trackedHours: 50 })
+    expect(tracked.tickets).toEqual([])
+    expect(tracked.xp).toBe(gameCompletionXp(60, null))
+  })
+
   it('ignores every public-edition check', () => {
-    const r = completionReward({ ...friends, typedHours: 30, providerLinked: false, completionDate: null, joinedDay: '2099-01-01', untrackedRewardsToday: 99 })
+    const r = completionReward({ ...friends, isWheelGame: true, typedHours: 30, providerLinked: false, completionDate: null, joinedDay: '2099-01-01', untrackedRewardsToday: 99 })
     expect(rewardTickets(r)).toBe(2)
   })
 })
@@ -44,10 +65,9 @@ describe('completionReward — public edition (verified)', () => {
     expect(r.why).toBe('untracked')
   })
 
-  it('tracked hours set the tier and the 100h+ bonus, with no 100% or sequel bonus', () => {
+  it('a tracked completion earns its XP by tracked hours and no tickets (the hours paid as they were played)', () => {
     const r = completionReward({ ...base, trackedHours: 140, typedHours: 5, achievementProgress: 100, isSequel: true })
-    expect(r.tickets).toEqual(calculateCompletionAwards(140, null))
-    expect(rewardTickets(r)).toBe(3 + 2)
+    expect(r.tickets).toEqual([])
     expect(r.xp).toBe(gameCompletionXp(140, null))
     expect(r.untracked).toBe(false)
     expect(r.why).toBe('tracked')
@@ -55,7 +75,8 @@ describe('completionReward — public edition (verified)', () => {
 
   it('a tracked completion is not limited per day', () => {
     const r = completionReward({ ...base, trackedHours: 25, untrackedRewardsToday: UNTRACKED_DAILY_LIMIT + 3 })
-    expect(rewardTickets(r)).toBe(2)
+    expect(r.why).toBe('tracked')
+    expect(r.xp).toBe(gameCompletionXp(25, null))
   })
 
   it('untracked rewards stop at the daily limit', () => {
@@ -91,7 +112,7 @@ describe('rewardExplanation', () => {
 
   it('explains every public-edition outcome', () => {
     expect(rewardExplanation('untracked', 1, 50)).toContain('Earned 1 ticket and 50 XP')
-    expect(rewardExplanation('tracked', 2, 100)).toContain('Earned 2 tickets and 100 XP')
+    expect(rewardExplanation('tracked', 0, 100)).toContain('Earned 100 XP from the hours the desktop app tracked')
     for (const why of ['not_linked', 'no_date', 'before_joining', 'daily_limit'] as const) {
       expect(rewardExplanation(why, 0, 0)).toMatch(/^No tickets/)
     }

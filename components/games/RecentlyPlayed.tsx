@@ -119,7 +119,7 @@ export default function RecentlyPlayed({
               ) : (
                 <span className="text-xs text-white/70 drop-shadow">
                   {[
-                    `Last played ${lastPlayedLabel(hero.lastPlayedAt)}`,
+                    hero.lastPlayedAt ? `Last played ${lastPlayedLabel(hero.lastPlayedAt)}` : 'Not tracked yet',
                     hero.hours_played != null ? `${hero.hours_played}h logged` : null,
                   ].filter(Boolean).join(' · ')}
                 </span>
@@ -165,7 +165,7 @@ export default function RecentlyPlayed({
                 // redesign dropped the title row for.
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/50 to-transparent px-2.5 pb-2 pt-8 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                   <p className="text-[11px] font-medium text-white leading-tight">
-                    Last played {lastPlayedLabel(game.lastPlayedAt)}
+                    {game.lastPlayedAt ? `Last played ${lastPlayedLabel(game.lastPlayedAt)}` : 'Not tracked yet'}
                   </p>
                   {game.hours_played != null && (
                     <p className="text-[11px] text-white/70 leading-tight mt-0.5">{game.hours_played}h logged</p>

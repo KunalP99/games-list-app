@@ -28,6 +28,48 @@ test.afterAll(async () => {
 const hours = (id: string) => admin().from('games').select('hours_played').eq('id', id).single().then(r => Number(r.data!.hours_played))
 const checkpoint = (body: Record<string, unknown>) => device.post('/api/agent/session', body).then(r => r.json())
 
+// 1 ticket per 25 hours played (lib/hours-tickets.ts, add_hours_progress):
+// one running counter per player, credited to the game that crosses the line;
+// never for a game the wheel picked. The public edition counts 8 hours a day.
+const counter = () => admin().from('profiles').select('hours_ticket_minutes').eq('id', uid).single().then(r => r.data!.hours_ticket_minutes as number)
+const hoursTickets = (gameId: string) => admin().from('ticket_transactions').select('amount').eq('user_id', uid).eq('game_id', gameId).eq('reason', 'hours_played').then(r => r.data ?? [])
+
+test('25 tracked hours pay a ticket on the game that crosses the line; a wheel game pays none', async () => {
+  const before = await counter()
+  try {
+    await admin().from('profiles').update({ hours_ticket_minutes: 24 * 60, hours_ticket_day: null, hours_ticket_day_minutes: 0 }).eq('id', uid)
+    const id = await games.add({ title: 'ZZ E2E Hours Ticket', status: 'playing', hours_played: 0 })
+    const body = { clientSessionId: 'e2e-' + randomUUID(), minutes: 120, startedAt: minutesAgo(180), gameId: id }
+    // Sent twice at once: the checkpoint counts once, so the ticket is paid once.
+    const [a, b] = await Promise.all([checkpoint(body), checkpoint(body)])
+    expect([a.ticketsEarned, b.ticketsEarned].sort()).toEqual([0, 1])
+    expect(await hoursTickets(id)).toEqual([{ amount: 1 }])
+    expect(await counter(), 'the rest carries on').toBe(60)
+
+    const wheel = await games.add({ title: 'ZZ E2E Wheel Hours', status: 'playing', hours_played: 0, assigned_by: uid })
+    const w = await checkpoint({ clientSessionId: 'e2e-' + randomUUID(), minutes: 120, startedAt: minutesAgo(180), gameId: wheel })
+    expect(w.addedHours, 'its hours still count as hours').toBe(2)
+    expect(w.ticketsEarned).toBe(0)
+    expect(await counter(), 'but not towards tickets').toBe(60)
+  } finally {
+    await admin().from('profiles').update({ hours_ticket_minutes: before }).eq('id', uid)
+  }
+})
+
+test('the public edition counts at most 8 tracked hours a day towards tickets', async () => {
+  test.skip(EDITION !== 'public', 'The daily cap is the public edition only.')
+  const before = await counter()
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' })
+    await admin().from('profiles').update({ hours_ticket_minutes: 0, hours_ticket_day: today, hours_ticket_day_minutes: 8 * 60 - 10 }).eq('id', uid)
+    const id = await games.add({ title: 'ZZ E2E Hours Cap', status: 'playing', hours_played: 0 })
+    await checkpoint({ clientSessionId: 'e2e-' + randomUUID(), minutes: 60, startedAt: minutesAgo(90), gameId: id })
+    expect(await counter(), 'only the 10 minutes left today count').toBe(10)
+  } finally {
+    await admin().from('profiles').update({ hours_ticket_minutes: before, hours_ticket_day: null, hours_ticket_day_minutes: 0 }).eq('id', uid)
+  }
+})
+
 test('the same checkpoint sent twice at once adds its hours once; later ones add normally', async () => {
   const id = await games.add({ title: 'ZZ E2E Tracked', status: 'playing', hours_played: 2 })
   const body = { clientSessionId: 'e2e-' + randomUUID(), minutes: 60, startedAt: minutesAgo(120), gameId: id }
@@ -110,8 +152,8 @@ test('identify: with only the completed game, it still offers a replay (untracke
 
 // Completed years ago, then put in the Backlog to replay. Starting it again
 // is about the Backlog copy, even when the Completed copy was touched more
-// recently: with Ambient (friends) the tracker asks "Playing or Ambient?" of
-// that copy and the answer moves it; without (public) it's started as Playing.
+// recently: it's started as Playing (neither edition has Ambient any more, so
+// there's no "Playing or Ambient?" to ask).
 // Either way no third row ("Playthrough 3 of 3") appears.
 test('identify: a Backlog copy beside a Completed one is the copy started', async () => {
   const title = 'ZZ E2E Bannerlord'
@@ -122,17 +164,10 @@ test('identify: a Backlog copy beside a Completed one is the copy started', asyn
   const today = new Date().toISOString().slice(0, 10)
 
   const body = await (await device.post('/api/agent/identify', { igdbId: 9608, title, exeName: 'Bannerlord.exe' })).json()
-  if (EDITION === 'friends') {
-    expect(body).toMatchObject({ result: 'untracked', gameId: backlog, resumable: 'backlog' })
-    expect((await rows()).find(g => g.id === backlog)!.status, 'nothing moves until they answer').toBe('backlog')
-    // They answer "Set to Ambient": that same copy moves.
-    const answer = await device.post('/api/agent/resume', { gameId: backlog, kind: 'backlog', status: 'ambient', exeName: 'Bannerlord.exe' })
-    expect(answer.ok).toBe(true)
-    expect((await rows()).find(g => g.id === backlog)).toMatchObject({ status: 'ambient', start_date: today })
-  } else {
-    expect(body).toMatchObject({ result: 'tracked', gameId: backlog, status: 'playing' })
-    expect((await rows()).find(g => g.id === backlog)).toMatchObject({ status: 'playing', start_date: today })
-  }
+  // Neither edition has Ambient now, so there's nothing to ask: that copy is
+  // started as Playing.
+  expect(body).toMatchObject({ result: 'tracked', gameId: backlog, status: 'playing' })
+  expect((await rows()).find(g => g.id === backlog)).toMatchObject({ status: 'playing', start_date: today })
   const after = await rows()
   expect(after, 'no new copy was added').toHaveLength(2)
   expect(after.find(g => g.id === done)!.status, 'the 2021 run is left alone').toBe('completed')

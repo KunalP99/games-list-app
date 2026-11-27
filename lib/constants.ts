@@ -28,10 +28,13 @@ export const TICKET_COSTS = {
 
 // Ticket awards (earning)
 export const TICKET_AWARDS = {
+  // Completing a game the wheel picked (lib/tickets.ts calculateCompletionAwards).
   game_completed_short: 1,   // < 20 hours
-  game_completed_medium: 2,  // 20–49 hours
-  game_completed_long: 3,    // 50–100 hours
-  game_completed_bonus_hours: 1, // per 20 hours beyond 100
+  game_completed_medium: 2,  // 20–59 hours
+  game_completed_long: 3,    // 60–75 hours (and up to 95)
+  game_completed_bonus_hours: 1, // per full 20 hours past 75
+  // Other games: 1 per 25 hours played (lib/hours-tickets.ts).
+  hours_played: 1,
   achievement_100_percent: 3,
   sequel_back_to_back: 1,
   series_back_to_back: 1,
@@ -47,9 +50,11 @@ export const WHEEL_MIN_GAMES = 5
 
 export const TICKET_REASON_LABELS: Record<string, string> = {
   game_completed_short: 'Completed a short game (<20 hrs)',
-  game_completed_medium: 'Completed a medium game (20–49 hrs)',
-  game_completed_long: 'Completed a long game (50–100 hrs)',
-  game_completed_bonus_hours: 'Bonus hours beyond 100',
+  game_completed_medium: 'Completed a medium game (20–59 hrs)',
+  game_completed_long: 'Completed a long game (60+ hrs)',
+  game_completed_bonus_hours: 'Bonus: every 20 hrs past 75',
+  hours_played: '25 hours played',
+  hours_typed: 'Hours played (untracked), paid on completion',
   achievement_100_percent: '100% achievement completion',
   sequel_back_to_back: 'Played sequel back-to-back',
   series_back_to_back: 'Continued series back-to-back',

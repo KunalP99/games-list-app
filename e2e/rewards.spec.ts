@@ -42,7 +42,8 @@ test('completion XP is taken back on un-completing, and given once on completing
   const id = await games.add({ title: 'ZZ E2E XP Loop', status: 'playing', hours_played: 30, igdb_id: 1942 })
   await complete(page, id)
   const first = await reward(id)
-  if (EDITION === 'friends') expect(first).toMatchObject({ tickets: 2, xp: 100, why: 'full' })
+  // Friends: not a wheel game, so its 30 untracked hours pay 1 per 25 (hours_typed).
+  if (EDITION === 'friends') expect(first).toMatchObject({ tickets: 1, xp: 100, why: 'full' })
   else expect(first).toMatchObject({ tickets: 1, xp: 50, why: 'untracked' })
   const afterFirst = await xp()
 
@@ -71,7 +72,8 @@ test('two tabs completing the same game at once pay once', async ({ browser }: {
   await expect.poll(() => reward(id), { timeout: 20_000 }).not.toBeNull()
   await page.waitForTimeout(2_500) // let the slower request finish
   const { data: tx } = await admin().from('ticket_transactions').select('amount').eq('game_id', id)
-  const expected = EDITION === 'friends' ? 2 : 1
+  // Friends: 30 untracked hours on a non-wheel game pay 1 (1 per 25). Public: untracked +1.
+  const expected = 1
   expect(tx!.reduce((s, t) => s + t.amount, 0)).toBe(expected)
   await second.close()
   void browser
@@ -80,11 +82,11 @@ test('two tabs completing the same game at once pay once', async ({ browser }: {
 test.describe('public edition: verified rewards', () => {
   test.skip(EDITION !== 'public', 'Verified rewards are the public edition\'s rules.')
 
-  test('tracked hours set the tier; typed hours are ignored', async () => {
+  test('tracked hours set the XP and pay no completion tickets (they paid as played); typed hours are ignored', async () => {
     const id = await games.add({ title: 'ZZ E2E Tracked', status: 'playing', hours_played: 5000, igdb_id: 1942 })
     await admin().from('play_sessions').insert({ user_id: uid, game_id: id, client_session_id: 'e2e-t-' + id, minutes: 1800, started_at: minutesAgo(40 * 60), applied_hours: 30 })
     await complete(page, id)
-    expect(await reward(id)).toMatchObject({ tickets: 2, xp: 100, why: 'tracked' })
+    expect(await reward(id)).toMatchObject({ tickets: 0, xp: 100, why: 'tracked' })
     await expect(page.getByText(/from the hours the desktop app tracked/)).toBeVisible()
   })
 

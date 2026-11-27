@@ -127,8 +127,9 @@ describe('gameCompletionXp', () => {
     expect(gameCompletionXp(49, null)).toBe(100)
   })
 
-  it('awards 175 XP for a long game (50–100 hours)', () => {
-    expect(gameCompletionXp(50, null)).toBe(175)
+  it('awards 175 XP for a long game (60–100 hours)', () => {
+    expect(gameCompletionXp(59.9, null)).toBe(100)
+    expect(gameCompletionXp(60, null)).toBe(175)
     expect(gameCompletionXp(100, null)).toBe(175)
   })
 
@@ -145,7 +146,7 @@ describe('gameCompletionXp', () => {
   it('adds 75 XP bonus for 100% achievement progress', () => {
     expect(gameCompletionXp(10, 100)).toBe(125)   // 50 + 75
     expect(gameCompletionXp(20, 100)).toBe(175)   // 100 + 75
-    expect(gameCompletionXp(50, 100)).toBe(250)   // 175 + 75
+    expect(gameCompletionXp(60, 100)).toBe(250)   // 175 + 75
   })
 
   it('does not add achievement bonus for less than 100%', () => {

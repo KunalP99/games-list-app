@@ -35,7 +35,7 @@ export type EmulatorAnswer =
 
 async function library(sb: Sb, userId: string): Promise<LibraryRow[]> {
   const { data } = await (sb.from('games') as any)
-    .select('id, title, status, igdb_id, rawg_id, steam_appid, start_date')
+    .select('id, title, status, igdb_id, rawg_id, steam_appid, start_date, assigned_by, tracks_hours')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
   return (data ?? []) as LibraryRow[]

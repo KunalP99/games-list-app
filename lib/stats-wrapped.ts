@@ -26,6 +26,7 @@ export type TicketBreakdown = {
 
 const EARNED_GROUPS: { key: string; label: string; reasons: (r: string) => boolean }[] = [
   { key: 'completions', label: 'Completions', reasons: r => r.startsWith('game_completed_') },
+  { key: 'hours', label: 'Hours played', reasons: r => r === 'hours_played' || r === 'hours_typed' },
   { key: 'perfect', label: '100% bonuses', reasons: r => r === 'achievement_100_percent' },
   { key: 'skips', label: 'Skipped turns', reasons: r => r === 'turn_skipped' },
 ]
